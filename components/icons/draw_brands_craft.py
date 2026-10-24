@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Draw the Craft app brand icons into brands/.
+"""Draw the Craft app brand icons into brands/ (except PhotoCraft and VectorCraft; see below).
 
-PhotoCraft (kitsune), VectorCraft (dragon) and CADCraft (set square) are line versions of
-Keith's own tiles (2026-10-23). The other Craft apps get original glyphs for what each app
+CADCraft (set square) is a line version of Keith's own tile (2026-10-23). The other Craft apps get original glyphs for what each app
 does; none of storytold's artwork is traced. Style rules: README.md.
 """
 import math
@@ -18,26 +17,9 @@ def brand(name, *elements):
 
 
 # Keith's tiles ------------------------------------------------------------------------
-brand('photocraft',
-      # sitting fox, facing right: ears, head and snout, chest down to the paws
-      path('M4.75 9.25L5.5 2.75l2.75 3.5 2.75-3l.25 5.25 2.5 2.25-.75.75-2.5-.25'
-           'c-.75 1.25-1.75 2-1.75 3.25 0 2.5 1 4.75 1.25 7.25'),
-      path('M4.75 9.25C3.75 12 3.75 16.25 5.5 21h6.75'),
-      # three tails fanning up and back
-      path('M11 18.5c2.25-4 2.75-9.5 2.5-15.25 2.5 2.75 4 6.5 3 11'),
-      path('M12.5 19.25c3.5-2.5 5.75-6.25 6.5-12.5 2 3.25 2.5 7.5.75 11'),
-      path('M12.25 21c3.75.5 7.25-.5 9-3.5'),
-      # the diamond mark on the forehead
-      '<path d="M7.75 6.75l.6 1 -.6 1-.6-1z" fill="currentColor" stroke="none"/>')
-
-brand('vectorcraft',
-      # dragon head in profile facing left: snout, brow, horn spikes
-      path('M2.5 9.25L4.75 7.5l4.5-.75 2-2.5.75 1.75 2.25-3.25.5 2.75 3-2.25-.5 3.25 2.5-.75-1.75 2.5'),
-      # jaw with teeth, then the front of the neck
-      path('M2.5 9.25l1.25 1.5 5.25.5L8 12.5l1.75-.25.5 1.25c-.75 2.5-1.25 5-.75 7.5'),
-      # back of the neck with its spines
-      path('M17.5 8.5c.5 2 1.75 3 1.25 4.5l1.75.5-.75 1.75 1.5.75-1 1.25c.5 1.75 1.25 2.75 1.75 3.75'),
-      dot(6.5, 8.5, .9))
+# PhotoCraft and VectorCraft are not drawn here: brands/photocraft.svg and
+# brands/vectorcraft.svg were traced from Keith's Lumo line-art references with
+# tools/centerline.py and finished by hand (see README.md).
 
 _cx, _cy, _r = 13.75, 11.25, 6.75
 brand('cadcraft',

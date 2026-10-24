@@ -28,9 +28,13 @@ Every icon in `src/` follows these, so the set reads as one family:
 - Tier 4 (brands), in `brands/`, drawn by `draw_brands_craft.py`:
   - All 16 Craft icons drafted 2026-10-24. CADCraft follows Keith's set-square tile; the other
     thirteen are original glyphs.
-  - PhotoCraft (kitsune) and VectorCraft (dragon) are placeholders. Keith is generating
-    line-art references with Lumo to trace from; tracing his shaded tiles directly gave
-    jagged outlines.
+  - PhotoCraft (kitsune) and VectorCraft (dragon) come from Keith's Lumo line-art
+    references, composed for icon size: the fox's face and tails, the dragon's head.
+    - The fox was traced with `tools/centerline.py`, then its diamond and eye enlarged.
+      Keith chose it over a hand-drawn version.
+    - The dragon was hand-drawn on a grid over the reference, with its mouth curved and
+      shortened at Keith's request.
+    - The references stay in Keith's own machine repository, not here.
   - AniCraft needs a redesign: it reads as a chain link.
   - Third-party logos only after their owner's logo policy has been checked.
 
