@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agent-web</title>
+<style>
+  :root {
+    --bg: #1e1e1e; --surface: #262626; --hover: #343434; --text: #eeeeee;
+    --secondary: #bdbdbd; --muted: #888888; --border: #343434;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.55 "Open Sans", sans-serif;
+  }
+  main { width: min(560px, calc(100% - 48px)); padding: 40px 0; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 6px; }
+  p { margin: 0 0 14px; color: var(--secondary); }
+  .agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; margin: 22px 0 26px; }
+  .agents a {
+    display: block; padding: 11px 14px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface); color: var(--text); text-decoration: none;
+  }
+  .agents a:hover, .agents a:focus { background: var(--hover); outline: none; border-color: var(--muted); }
+  .agents small { display: block; color: var(--muted); font-size: 12px; }
+  h2 { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 24px 0 8px; }
+  code {
+    font: 13px/1.5 monospace; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 6px; color: var(--text);
+  }
+  ul { margin: 0; padding-left: 18px; color: var(--secondary); }
+  li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>This window is for your web agent</h1>
+  <p>Pick the AI assistant you use on the web and sign in the way it asks. This window
+     remembers it: from now on it opens straight on your agent, stays signed in, and keeps
+     its place at the left of the panel.</p>
+
+  <nav class="agents" aria-label="Web agents">
+    <a href="https://claude.ai/">Claude<small>claude.ai</small></a>
+    <a href="https://chatgpt.com/">ChatGPT<small>chatgpt.com</small></a>
+    <a href="https://gemini.google.com/">Gemini<small>gemini.google.com</small></a>
+    <a href="https://copilot.microsoft.com/">Copilot<small>copilot.microsoft.com</small></a>
+    <a href="https://chat.mistral.ai/">Le Chat<small>chat.mistral.ai</small></a>
+    <a href="https://www.perplexity.ai/">Perplexity<small>perplexity.ai</small></a>
+  </nav>
+
+  <h2>Good to know</h2>
+  <ul>
+    <li>Links to other sites open in your main Firefox, so this window stays on your agent.</li>
+    <li>It reopens by itself if it closes. To close it for good, run <code>agent-web stop</code>.</li>
+    <li>Using a different agent, or a page not listed here? Run
+        <code>agent-web set-home https://…</code>, or <code>agent-web reset</code> to choose again.</li>
+  </ul>
+</main>
+</body>
+</html>

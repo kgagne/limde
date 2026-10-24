@@ -77,6 +77,8 @@ for proc in tinybar.py mako swayidle elephant 'walker --gapplication-service'; d
 done
 check "appearance rendered" on_vm 'test -f ~/.config/tinybar/style.css && elachisto-appearance --check'
 check "redundant launcher entries hidden" on_vm 'for n in footclient foot-server pcmanfm-desktop-pref; do grep -q "^NoDisplay=true" /usr/local/share/applications/$n.desktop || exit 1; done'
+check "agent-web window starts by itself" on_vm 'pgrep -f "[f]irefox --profile .*agent-web/profile --name elachisto.AgentWeb" >/dev/null'
+check "agent-web opens the welcome page" on_vm 'grep -q "learning: not set up yet" ~/.local/state/elachisto/agent-web.log'
 check "no failed units" on_vm '[ -z "$(systemctl --failed --no-legend)" ]'
 on_vm 'systemctl --failed --no-legend; cat ~/.local/state/elachisto/labwc.log' >"$out/after-reboot.log" 2>&1 || true
 "$vm" shot "$name" "$out/screen.png" >/dev/null || fail "screenshot"

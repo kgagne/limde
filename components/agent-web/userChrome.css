@@ -1,0 +1,9 @@
+/* agent-web: only the page, no tab strip, toolbars or sidebar. */
+#toolbar-menubar,
+#TabsToolbar,
+#nav-bar,
+#PersonalToolbar,
+#sidebar-main,
+#sidebar-box {
+  visibility: collapse !important;
+}

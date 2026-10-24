@@ -251,6 +251,10 @@
 "video-joined-displays" = "displays"
 "video-single-display" = "desktop"
 
+[apps]
+"elachisto.AgentWeb" = "chat"
+"elachisto.Preview" = "eye"
+
 [categories]
 "system-file-manager" = "folder-open"
 "applications-development" = "code"

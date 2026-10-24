@@ -1,0 +1,114 @@
+#!/bin/sh
+# agent-web: your web agent (Claude, ChatGPT, Gemini, ...) in its own window. A separate
+# Firefox profile, so the sign-in persists; no tabs or toolbars; links to other sites open
+# in your main Firefox; reopens by itself if closed.
+#
+#   agent-web               open the window (and keep it open)
+#   agent-web stop          close the window and stop reopening it
+#   agent-web set-home URL  open on this page from now on
+#   agent-web reset         forget the page and sign-in domains; show the welcome page again
+#   agent-web --keep-open   session autostart: reopen the window whenever it closes
+#   agent-web --window      open the window once (used by --keep-open)
+#
+# Settings: ~/.config/elachisto/agent-web.conf, lines "url=..." and "keep=domain ..."
+# (domains besides the page's own that stay in the window, for example a login domain).
+set -eu
+
+SHARE=$(dirname "$(readlink -f "$0")")/../share/elachisto/agent-web
+CONF="$HOME/.config/elachisto/agent-web.conf"
+PROFILE="$HOME/.local/share/agent-web/profile"
+FIREFOX="$HOME/.local/opt/firefox"
+LOOP="agent-web --keep-open"
+# Anchored, so other command lines that mention the profile do not count.
+WINDOW="^$FIREFOX/firefox(-bin)? --profile $PROFILE"
+
+running() {
+    pgrep -f -- "$WINDOW" >/dev/null
+}
+
+setting() {  # $1: key; prints its value from the conf file
+    [ -r "$CONF" ] || return 0
+    sed -n "s/^$1=//p" "$CONF" | tail -n 1
+}
+
+case "${1:-}" in
+"")
+    pgrep -f "[a]gent-web --keep-open" >/dev/null || setsid -f "$0" --keep-open >/dev/null 2>&1
+    exit 0
+    ;;
+stop)
+    pkill -f "[a]gent-web --keep-open" || true
+    pkill -TERM -f -- "$WINDOW" || true
+    exit 0
+    ;;
+set-home)
+    case "${2:-}" in
+    https://?*) ;;
+    *)
+        echo "usage: agent-web set-home https://..." >&2
+        exit 2
+        ;;
+    esac
+    mkdir -p "${CONF%/*}"
+    keep=$(setting keep)
+    printf 'url=%s\nkeep=%s\n' "$2" "$keep" >"$CONF"
+    echo "agent-web opens $2 from its next start (agent-web stop; agent-web)."
+    exit 0
+    ;;
+reset)
+    rm -f "$CONF"
+    echo "agent-web will show its welcome page and learn your agent again at its next start."
+    exit 0
+    ;;
+--keep-open)
+    socket="${XDG_RUNTIME_DIR:-/nonexistent}/${WAYLAND_DISPLAY:-wayland-0}"
+    while [ -S "$socket" ]; do
+        if ! running; then
+            "$0" --window >/dev/null 2>&1 &
+        fi
+        sleep 2
+    done
+    exit 0
+    ;;
+--window) ;;
+*)
+    echo "usage: agent-web [stop | set-home URL | reset]" >&2
+    exit 2
+    ;;
+esac
+
+# A second Firefox launch would add a hidden tab to the open window.
+running && exit 0
+[ -x "$FIREFOX/firefox" ] || { echo "agent-web: Firefox is not installed in $FIREFOX" >&2; exit 1; }
+
+url=$(setting url)
+case "$url" in
+https://?*) ;;
+*) url= ;;
+esac
+keep=$(setting keep | tr -cd 'a-zA-Z0-9.\- ')
+
+mkdir -p "$PROFILE/chrome" "$HOME/.local/state/elachisto"
+# A new profile opens tiny; give the first window a sensible size. Firefox remembers any
+# size you choose after that.
+[ -e "$PROFILE/xulstore.json" ] ||
+    printf '%s\n' '{"chrome://browser/content/browser.xhtml":{"main-window":{"width":"1100","height":"780","sizemode":"normal"}}}' \
+        >"$PROFILE/xulstore.json"
+{
+    cat "$SHARE/user.js"
+    printf 'user_pref("elachisto.agentweb.home", "%s");\n' "$url"
+    printf 'user_pref("elachisto.agentweb.keep", "%s");\n' "$keep"
+    printf 'user_pref("elachisto.agentweb.conf", "%s");\n' "$CONF"
+} >"$PROFILE/user.js"
+cp "$SHARE/userChrome.css" "$PROFILE/chrome/userChrome.css"
+
+# The link hand-off is Firefox autoconfig, which lives in the install folder. Put it back
+# whenever a Firefox update has replaced it.
+mkdir -p "$FIREFOX/defaults/pref" "${CONF%/*}"
+cmp -s "$SHARE/autoconfig.js" "$FIREFOX/defaults/pref/agent-web.js" ||
+    cp "$SHARE/autoconfig.js" "$FIREFOX/defaults/pref/agent-web.js"
+cmp -s "$SHARE/agent-web.cfg" "$FIREFOX/agent-web.cfg" ||
+    cp "$SHARE/agent-web.cfg" "$FIREFOX/agent-web.cfg"
+
+exec "$FIREFOX/firefox" --profile "$PROFILE" --name elachisto.AgentWeb \
+    "${url:-file://$(readlink -f "$SHARE/welcome.html")}"

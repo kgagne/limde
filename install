@@ -48,5 +48,6 @@ step_tinybar
 step_appearance
 step_helpers
 step_session_config
+step_agent_web
 step_session
 summary
