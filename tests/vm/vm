@@ -82,8 +82,8 @@ cmd_base() {
   local port; port=$(free_port)
   python3 -m http.server --bind 127.0.0.1 --directory "$work/seed" "$port" \
     >"$work/seed-server.log" 2>&1 &
-  local server=$!
-  trap 'kill $server 2>/dev/null || true' EXIT
+  seed_server=$!  # global: the EXIT trap runs after this function returns
+  trap 'kill "$seed_server" 2>/dev/null || true' EXIT
 
   rm -f "$dir/base.qcow2" "$dir/base-vars.fd"
   qemu-img create -q -f qcow2 "$work/disk.qcow2" "$disk_size"
