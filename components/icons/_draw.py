@@ -15,8 +15,8 @@ def f(*values):
     return ' '.join(n(v) for v in values)
 
 
-def write(name, *elements):
-    (SRC / f"{name}.svg").write_text(HEAD + '\n'.join(elements) + '\n</svg>\n')
+def write(name, *elements, folder=None):
+    (folder or SRC).joinpath(f"{name}.svg").write_text(HEAD + '\n'.join(elements) + '\n</svg>\n')
 
 
 def path(d):

@@ -25,7 +25,13 @@ Every icon in `src/` follows these, so the set reads as one family:
   Against GNOME's Adwaita symbolic set (498 names, excluding legacy and right-to-left), 355
   are covered. The rest are skipped on purpose: emoji faces, weather, presence states,
   screen orientation, cellular generations, and Apple-specific devices.
-- Tier 4 (brands): to do. Craft apps first; third-party logos only after their owner's logo
-  policy has been checked.
+- Tier 4 (brands), in `brands/`, drawn by `draw_brands_craft.py`:
+  - All 16 Craft icons drafted 2026-10-24. CADCraft follows Keith's set-square tile; the other
+    thirteen are original glyphs.
+  - PhotoCraft (kitsune) and VectorCraft (dragon) are placeholders. Keith is generating
+    line-art references with Lumo to trace from; tracing his shaded tiles directly gave
+    jagged outlines.
+  - AniCraft needs a redesign: it reads as a chain link.
+  - Third-party logos only after their owner's logo policy has been checked.
 
 Generators: `_draw.py` (shared helpers and outlines), `draw_tier1.py`, `draw_tier2.py`.
