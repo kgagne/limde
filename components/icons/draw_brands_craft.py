@@ -30,7 +30,9 @@ brand('cadcraft',
       dot(_cx, _cy, 1), dot(_cx + _r, _cy + 1.5, 1.1))
 
 # Original glyphs for the rest of the suite ---------------------------------------------
-brand('anicraft', circle(5.75, 16.75, 2.75), circle(11.25, 12.75, 3.5), circle(17.25, 8, 4.25))
+# A ball with two fading onion-skin outlines trailing behind it.
+brand('anicraft', circle(16.25, 8.25, 5),
+      path('M10 9.75a3.75 3.75 0 0 0 0 7.5'), path('M4.5 15.75a2.75 2.75 0 0 0 0 5.5'))
 brand('deckcraft', rect(2.25, 3.25, 19.5, 12.5), path('M12 15.75v2.5M8 21.25l4-3 4 3'),
       path('M7 12.25v-2M10.5 12.25V7.75M14 12.25v-3M17.5 12.25V6.5'))
 brand('designcraft', rect(4.25, 2.25, 15.5, 19.5), rect(7.25, 5.25, 9.5, 5.5, 1),
