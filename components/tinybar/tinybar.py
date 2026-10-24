@@ -1,0 +1,2634 @@
+#!/usr/bin/env python3
+
+import datetime
+import json
+import os
+import re
+import subprocess
+import time
+import tomllib
+from collections import OrderedDict, deque
+from pathlib import Path
+
+import gi
+from tinybar_icons import (
+    IconLibrary,
+    StatusIndicator,
+    brightness_glyph,
+    glyph_widget,
+    layered_glyph,
+    set_layered_glyph,
+    signal_glyph,
+    volume_glyph,
+)
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gtk4LayerShell", "1.0")
+gi.require_version("GioUnix", "2.0")
+
+from gi.repository import Gtk, GLib, Gio, GioUnix, Gtk4LayerShell, Pango
+
+
+def first_device(pattern, fallback):
+    """The first matching sysfs device, so the panel works on any laptop or desktop."""
+    found = sorted(Path("/sys/class").glob(pattern))
+    return found[0] if found else Path("/sys/class") / fallback
+
+
+BATTERY = first_device("power_supply/BAT*", "power_supply/BAT0")
+BACKLIGHT = first_device("backlight/*", "backlight/none")
+
+RUNTIME_DIR = Path(
+    f"/run/user/{os.getuid()}/tinybar"
+)
+
+VOLUME_STATE = RUNTIME_DIR / "volume"
+
+CONFIG_DIR = Path.home() / ".config/tinybar"
+STYLE_FILE = CONFIG_DIR / "style.css"
+# The window-list helper is installed beside this file.
+TOPLEVEL_HELPER = Path(__file__).resolve().with_name("toplevel-helper")
+
+STATE_DIR = Path.home() / ".local/state/tinybar"
+HISTORY_FILE = STATE_DIR / "history.jsonl"
+OLD_HISTORY_FILE = STATE_DIR / "history.json"
+
+BATTERY_SAMPLE_SECONDS = 5
+USAGE_SAMPLE_SECONDS = 2
+TEMP_SAMPLE_SECONDS = 30
+NOTIFICATION_SAMPLE_SECONDS = 2
+
+# CPU and RAM readouts are off until they show something more useful. The
+# sampling code stays; with this off it is never scheduled, so those two
+# metrics also stop being added to the history file.
+SHOW_USAGE = False
+TINYBAR_APP_IDS = {
+    "elachisto.Tinybar",
+    "tinybar",
+}
+
+
+def load_settings():
+    """Optional ~/.config/tinybar/settings.toml; missing or broken means defaults."""
+    try:
+        return tomllib.loads((CONFIG_DIR / "settings.toml").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+# This app's button always sits leftmost, ahead of every other app, however
+# often its window closes and reopens, and shows only its icon. Defaults to
+# elachisto's agent-web window; set first_app_id in settings.toml to change it.
+FIRST_APP_ID = load_settings().get("first_app_id", "elachisto.AgentWeb")
+
+HISTORY_BUCKET_SECONDS = 300
+HISTORY_WINDOW_SECONDS = 3 * 60 * 60
+HISTORY_RETENTION_SECONDS = 7 * 24 * 60 * 60
+HISTORY_PRUNE_SECONDS = 24 * 60 * 60
+
+MAKO_NAME = "org.freedesktop.Notifications"
+MAKO_PATH = "/fr/emersion/Mako"
+MAKO_INTERFACE = "fr.emersion.Mako"
+
+# Mako answers immediately; a short ceiling keeps a wedged daemon from
+# stalling the panel's main loop on every poll.
+MAKO_TIMEOUT_MS = 500
+
+NOTIFICATION_SUMMARY_CHARS = 44
+NOTIFICATION_BODY_CHARS = 60
+NOTIFICATION_LIST_HEIGHT = 320
+
+# Space between the panel's bottom edge and a popover's top edge.
+POPOVER_GAP = 4
+
+NM_NAME = "org.freedesktop.NetworkManager"
+NM_PATH = "/org/freedesktop/NetworkManager"
+NM_DEVICE = "org.freedesktop.NetworkManager.Device"
+NM_WIRELESS = "org.freedesktop.NetworkManager.Device.Wireless"
+NM_ACCESS_POINT = "org.freedesktop.NetworkManager.AccessPoint"
+NM_IP4_CONFIG = "org.freedesktop.NetworkManager.IP4Config"
+NM_DEVICE_TYPE_ETHERNET = 1
+NM_DEVICE_TYPE_WIFI = 2
+NM_DEVICE_STATE_ACTIVATED = 100
+NM_AP_FLAGS_PRIVACY = 0x1
+NM_TIMEOUT_MS = 1000
+
+NETWORK_LIST_HEIGHT = 320
+
+# How long the brightness/volume readout stays up after the last change.
+LEVEL_OVERLAY_MS = 1500
+LEVEL_OVERLAY_MARGIN = 96
+
+# Smoothed discharge watts at which the battery icon changes colour. Tuned on a
+# 15-inch laptop that idles around 6-8 W, where 12 W, 20 W and 30 W meant roughly
+# 7 h, 4 h and under 3 h of battery.
+BATTERY_LOAD_LEVELS = (
+    (30.0, "load-severe"),
+    (20.0, "load-high"),
+    (12.0, "load-moderate"),
+)
+
+METRIC_INTERVALS = {
+    "power_w": BATTERY_SAMPLE_SECONDS,
+    "cpu_percent": USAGE_SAMPLE_SECONDS,
+    "memory_used_gib": USAGE_SAMPLE_SECONDS,
+    "temperature_c": TEMP_SAMPLE_SECONDS,
+}
+
+
+def read_path(path):
+    try:
+        return Path(path).read_text().strip()
+    except OSError:
+        return None
+
+
+def read_battery_text(name):
+    return read_path(BATTERY / name)
+
+
+def read_battery_int(name):
+    value = read_battery_text(name)
+
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def format_runtime(hours):
+    if hours is None or hours <= 0 or hours > 100:
+        return None
+
+    total_minutes = int(hours * 60)
+    h, m = divmod(total_minutes, 60)
+
+    if h:
+        return f"{h}h {m:02d}m"
+
+    return f"{m}m"
+
+
+def format_hours(hours):
+    """Remaining time for the panel: decimal hours, 3h 30m -> "3.5h"."""
+
+    if hours is None or hours <= 0 or hours > 100:
+        return None
+
+    return f"{hours:.1f}h"
+
+
+def battery_load(watts):
+    """CSS class for a discharge rate, or None while it is in the normal range."""
+
+    if watts is None:
+        return None
+
+    for threshold, name in BATTERY_LOAD_LEVELS:
+        if watts >= threshold:
+            return name
+
+    return None
+
+
+def format_coverage(seconds):
+    total_minutes = int(seconds / 60)
+
+    if total_minutes < 1:
+        return "<1m"
+
+    h, m = divmod(total_minutes, 60)
+
+    if h:
+        return f"{h}h {m:02d}m"
+
+    return f"{m}m"
+
+
+def get_cpu_temperature():
+    for hwmon in Path("/sys/class/hwmon").glob("hwmon*"):
+        name = read_path(hwmon / "name")
+
+        if name != "coretemp":
+            continue
+
+        for label_path in hwmon.glob("temp*_label"):
+            label = read_path(label_path)
+
+            if label and label.lower().startswith("package"):
+                input_path = Path(
+                    str(label_path).replace(
+                        "_label",
+                        "_input"
+                    )
+                )
+
+                value = read_path(input_path)
+
+                try:
+                    return int(value) / 1000
+                except (TypeError, ValueError):
+                    pass
+
+        for input_path in hwmon.glob("temp*_input"):
+            value = read_path(input_path)
+
+            try:
+                return int(value) / 1000
+            except (TypeError, ValueError):
+                pass
+
+    return None
+
+
+def read_cpu_counters():
+    try:
+        first = Path("/proc/stat").read_text().splitlines()[0]
+    except OSError:
+        return None
+
+    fields = first.split()
+
+    if not fields or fields[0] != "cpu":
+        return None
+
+    try:
+        values = [int(value) for value in fields[1:]]
+    except ValueError:
+        return None
+
+    if len(values) < 5:
+        return None
+
+    idle = values[3]
+
+    if len(values) > 4:
+        idle += values[4]
+
+    total = sum(values)
+
+    return total, idle
+
+
+def get_memory_usage():
+    values = {}
+
+    try:
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            if ":" not in line:
+                continue
+
+            key, value = line.split(":", 1)
+
+            if key not in ("MemTotal", "MemAvailable"):
+                continue
+
+            parts = value.strip().split()
+
+            if parts:
+                values[key] = int(parts[0]) * 1024
+
+    except (OSError, ValueError):
+        return None
+
+    total = values.get("MemTotal")
+    available = values.get("MemAvailable")
+
+    if total is None or available is None:
+        return None
+
+    used = total - available
+    gib = 1024 ** 3
+
+    return used / gib, total / gib
+
+
+class HistoryStore:
+    def __init__(self):
+        STATE_DIR.mkdir(
+            parents=True,
+            exist_ok=True
+        )
+
+        self.records = deque()
+        self.current_start = None
+
+        self.current = {
+            metric: []
+            for metric in METRIC_INTERVALS
+        }
+
+        self.last_prune = time.time()
+
+        self.load()
+
+    def load(self):
+        cutoff = (
+            time.time()
+            - HISTORY_RETENTION_SECONDS
+        )
+
+        if HISTORY_FILE.exists():
+            try:
+                for line in HISTORY_FILE.read_text().splitlines():
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+
+                    if record.get("schema_version") != 1:
+                        continue
+
+                    if record.get("start_epoch", 0) >= cutoff:
+                        self.records.append(record)
+
+            except OSError:
+                pass
+
+            return
+
+        # One-time migration of v0.4 power history.
+        if OLD_HISTORY_FILE.exists():
+            try:
+                old = json.loads(
+                    OLD_HISTORY_FILE.read_text()
+                )
+
+                if old.get("version") == 1:
+                    for bucket in old.get(
+                        "power",
+                        {}
+                    ).get("buckets", []):
+                        start_epoch = bucket.get(
+                            "start_epoch",
+                            0
+                        )
+
+                        if start_epoch < cutoff:
+                            continue
+
+                        metric = {
+                            "sample_count": bucket.get(
+                                "samples",
+                                0
+                            ),
+                            "coverage_seconds": bucket.get(
+                                "coverage_seconds",
+                                0
+                            ),
+                            "avg": bucket.get(
+                                "avg_w"
+                            ),
+                            "min": bucket.get(
+                                "min_w"
+                            ),
+                            "max": bucket.get(
+                                "max_w"
+                            ),
+                        }
+
+                        record = {
+                            "schema_version": 1,
+                            "start": bucket.get(
+                                "start"
+                            ),
+                            "start_epoch": start_epoch,
+                            "duration_seconds":
+                                HISTORY_BUCKET_SECONDS,
+                            "metrics": {
+                                "power_w": metric
+                            }
+                        }
+
+                        self.records.append(record)
+
+            except (
+                OSError,
+                json.JSONDecodeError
+            ):
+                pass
+
+        self.rewrite()
+
+    def ensure_bucket(self, now):
+        bucket_start = (
+            int(now)
+            // HISTORY_BUCKET_SECONDS
+            * HISTORY_BUCKET_SECONDS
+        )
+
+        if self.current_start is None:
+            self.current_start = bucket_start
+            return
+
+        if bucket_start != self.current_start:
+            self.flush()
+            self.current_start = bucket_start
+
+    def add_sample(self, metric, value, now=None):
+        if metric not in self.current:
+            return
+
+        if now is None:
+            now = time.time()
+
+        self.ensure_bucket(now)
+
+        self.current[metric].append(
+            float(value)
+        )
+
+    def flush(self):
+        if self.current_start is None:
+            return
+
+        metrics = {}
+
+        for metric, samples in self.current.items():
+            if not samples:
+                continue
+
+            interval = METRIC_INTERVALS[metric]
+
+            coverage = min(
+                len(samples) * interval,
+                HISTORY_BUCKET_SECONDS
+            )
+
+            metrics[metric] = {
+                "sample_count": len(samples),
+                "coverage_seconds": coverage,
+                "avg": round(
+                    sum(samples) / len(samples),
+                    3
+                ),
+                "min": round(
+                    min(samples),
+                    3
+                ),
+                "max": round(
+                    max(samples),
+                    3
+                ),
+            }
+
+        if metrics:
+            start_datetime = (
+                datetime.datetime
+                .fromtimestamp(self.current_start)
+                .astimezone()
+            )
+
+            record = {
+                "schema_version": 1,
+                "start": start_datetime.isoformat(
+                    timespec="seconds"
+                ),
+                "start_epoch": self.current_start,
+                "duration_seconds":
+                    HISTORY_BUCKET_SECONDS,
+                "metrics": metrics,
+            }
+
+            self.records.append(record)
+
+            try:
+                with HISTORY_FILE.open("a") as file:
+                    file.write(
+                        json.dumps(
+                            record,
+                            separators=(",", ":")
+                        )
+                        + "\n"
+                    )
+            except OSError:
+                pass
+
+        self.current = {
+            metric: []
+            for metric in METRIC_INTERVALS
+        }
+
+        self.prune_if_needed()
+
+    def prune_if_needed(self):
+        now = time.time()
+
+        if (
+            now - self.last_prune
+            < HISTORY_PRUNE_SECONDS
+        ):
+            return
+
+        cutoff = (
+            now
+            - HISTORY_RETENTION_SECONDS
+        )
+
+        self.records = deque(
+            record
+            for record in self.records
+            if record.get(
+                "start_epoch",
+                0
+            ) >= cutoff
+        )
+
+        self.rewrite()
+
+        self.last_prune = now
+
+    def rewrite(self):
+        temp = HISTORY_FILE.with_suffix(
+            ".jsonl.tmp"
+        )
+
+        try:
+            with temp.open("w") as file:
+                for record in self.records:
+                    file.write(
+                        json.dumps(
+                            record,
+                            separators=(",", ":")
+                        )
+                        + "\n"
+                    )
+
+            os.replace(
+                temp,
+                HISTORY_FILE
+            )
+
+        except OSError:
+            try:
+                temp.unlink()
+            except OSError:
+                pass
+
+    def trailing_average(
+        self,
+        metric,
+        now=None,
+        window=HISTORY_WINDOW_SECONDS
+    ):
+        if now is None:
+            now = time.time()
+
+        cutoff = now - window
+
+        weighted_sum = 0.0
+        coverage_total = 0.0
+
+        for record in self.records:
+            start = record.get(
+                "start_epoch"
+            )
+
+            if start is None:
+                continue
+
+            end = (
+                start
+                + record.get(
+                    "duration_seconds",
+                    HISTORY_BUCKET_SECONDS
+                )
+            )
+
+            overlap = max(
+                0,
+                min(now, end)
+                - max(cutoff, start)
+            )
+
+            if overlap <= 0:
+                continue
+
+            data = record.get(
+                "metrics",
+                {}
+            ).get(metric)
+
+            if not data:
+                continue
+
+            avg = data.get("avg")
+            coverage = data.get(
+                "coverage_seconds",
+                0
+            )
+
+            if avg is None or coverage <= 0:
+                continue
+
+            effective_coverage = min(
+                float(coverage),
+                float(overlap)
+            )
+
+            weighted_sum += (
+                float(avg)
+                * effective_coverage
+            )
+
+            coverage_total += (
+                effective_coverage
+            )
+
+        samples = self.current.get(
+            metric,
+            []
+        )
+
+        if (
+            samples
+            and self.current_start is not None
+        ):
+            interval = METRIC_INTERVALS[metric]
+
+            overlap = max(
+                0,
+                now
+                - max(
+                    cutoff,
+                    self.current_start
+                )
+            )
+
+            coverage = min(
+                len(samples) * interval,
+                overlap,
+                HISTORY_BUCKET_SECONDS
+            )
+
+            if coverage > 0:
+                avg = (
+                    sum(samples)
+                    / len(samples)
+                )
+
+                weighted_sum += (
+                    avg
+                    * coverage
+                )
+
+                coverage_total += coverage
+
+        if coverage_total <= 0:
+            return None, 0
+
+        return (
+            weighted_sum / coverage_total,
+            coverage_total
+        )
+
+
+def shorten(text, limit):
+    text = " ".join(text.split())
+
+    if len(text) <= limit:
+        return text
+
+    return text[:limit - 1].rstrip() + "\u2026"
+
+
+def open_below_panel(button):
+    """Open a panel button's popover without an arrow, clear of the panel.
+
+    GTK anchors a popover to the button itself, so by default its arrow and top
+    edge sit over the lower part of the bar. The offset is measured when the
+    popover opens, so it follows font and margin changes.
+    """
+
+    popover = button.get_popover()
+    popover.set_has_arrow(False)
+
+    def on_show(_popover):
+        root = button.get_root()
+        found, bounds = button.compute_bounds(root)
+
+        if not found:
+            return
+
+        below = root.get_height() - (
+            bounds.get_y() + bounds.get_height()
+        )
+
+        popover.set_offset(0, round(below) + POPOVER_GAP)
+
+    popover.connect("show", on_show)
+
+
+def panel_row(library, glyph, title, detail=None, trailing=None):
+    """A popover row: glyph, a title over an optional detail line, a trailing glyph."""
+
+    row = Gtk.Box(
+        orientation=Gtk.Orientation.HORIZONTAL,
+        spacing=8
+    )
+
+    row.add_css_class("panel-row")
+
+    holder, icon, backdrop = layered_glyph("panel-row-icon")
+    set_layered_glyph(library, icon, backdrop, glyph)
+    row.append(holder)
+
+    text = Gtk.Box(
+        orientation=Gtk.Orientation.VERTICAL,
+        spacing=1
+    )
+
+    text.set_hexpand(True)
+    text.set_valign(Gtk.Align.CENTER)
+
+    summary = Gtk.Label(label=title)
+    summary.set_xalign(0)
+    summary.set_ellipsize(Pango.EllipsizeMode.END)
+    summary.add_css_class("notification-summary")
+    text.append(summary)
+
+    if detail:
+        body = Gtk.Label(label=detail)
+        body.set_xalign(0)
+        body.add_css_class("notification-body")
+        text.append(body)
+
+    row.append(text)
+
+    if trailing:
+        mark = glyph_widget("panel-row-mark")
+
+        if library.set_glyph(mark, trailing):
+            row.append(mark)
+
+    return row
+
+
+class NotificationCenter(Gtk.MenuButton):
+    """Bell, unread count, and the per-notification close control Mako lacks.
+
+    Mako renders a banner as a single layout with no per-region hit testing, so
+    a close button cannot live on the banner itself. The same notifications are
+    listed here instead, each with its own dismiss control.
+
+    Mako keeps retired banners in a history buffer it offers no way to clear, so
+    a row that is closed here is recorded as acknowledged and filtered out. The
+    acknowledged set is pruned against what Mako still reports, so it stays the
+    size of the history buffer rather than growing for the session's lifetime.
+    """
+
+    def __init__(self, library):
+        super().__init__()
+
+        self.library = library
+        self.proxy = None
+        self.entries = []
+        self.acknowledged = set()
+        self.last_count = None
+
+        self.set_has_frame(False)
+        self.add_css_class("notification-button")
+        self.add_css_class("panel-menu")
+
+        face = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=4
+        )
+
+        self.icon = glyph_widget("status-icon")
+
+        # Hidden while zero: an empty label still takes the box spacing and
+        # leaves a gap to the right of the bell.
+        self.count = Gtk.Label()
+        self.count.set_visible(False)
+
+        face.append(self.icon)
+        face.append(self.count)
+
+        self.set_child(face)
+
+        self.list = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=4
+        )
+
+        scroller = Gtk.ScrolledWindow()
+
+        scroller.set_policy(
+            Gtk.PolicyType.NEVER,
+            Gtk.PolicyType.AUTOMATIC
+        )
+
+        scroller.set_propagate_natural_height(True)
+        scroller.set_max_content_height(NOTIFICATION_LIST_HEIGHT)
+        scroller.set_child(self.list)
+
+        # Hidden when empty; otherwise it keeps a scrollbar's minimum height.
+        self.scroller = scroller
+
+        self.empty = Gtk.Label(label="No notifications")
+        self.empty.add_css_class("notification-empty")
+
+        self.clear = Gtk.Button(label="Clear all")
+        self.clear.add_css_class("notification-clear")
+        self.clear.connect("clicked", self.on_clear_clicked)
+
+        content = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=6
+        )
+
+        content.add_css_class("notification-popover")
+        content.append(self.empty)
+        content.append(scroller)
+        content.append(self.clear)
+
+        popover = Gtk.Popover()
+        popover.set_child(content)
+        popover.connect("show", self.on_popover_shown)
+
+        self.set_popover(popover)
+        open_below_panel(self)
+
+        if self.library.set_glyph(self.icon, "bell"):
+            self.icon.add_css_class("icon-only")
+
+    # ---------- Mako ----------
+
+    def call(self, method, parameters=None):
+        if self.proxy is None:
+            self.proxy = Gio.DBusProxy.new_for_bus_sync(
+                Gio.BusType.SESSION,
+                Gio.DBusProxyFlags.DO_NOT_AUTO_START,
+                None,
+                MAKO_NAME,
+                MAKO_PATH,
+                MAKO_INTERFACE,
+                None
+            )
+
+        return self.proxy.call_sync(
+            method,
+            parameters,
+            Gio.DBusCallFlags.NONE,
+            MAKO_TIMEOUT_MS,
+            None
+        )
+
+    def read_notifications(self):
+        found = OrderedDict()
+
+        for method in ("ListNotifications", "ListHistory"):
+            for record in self.call(method).unpack()[0]:
+                identifier = record.get("id")
+
+                if identifier is None or identifier in found:
+                    continue
+
+                found[identifier] = {
+                    "id": identifier,
+                    "live": method == "ListNotifications",
+                    "app": record.get("app-name", ""),
+                    "summary": record.get("summary", ""),
+                    "body": record.get("body", "")
+                }
+
+        return sorted(
+            found.values(),
+            key=lambda entry: entry["id"],
+            reverse=True
+        )
+
+    def dismiss(self, entry):
+        # History rows no longer exist for Mako; acknowledging is the whole job.
+        if not entry["live"]:
+            return
+
+        self.call(
+            "DismissNotifications",
+            GLib.Variant(
+                "(a{sv})",
+                ({"id": GLib.Variant("u", entry["id"])},)
+            )
+        )
+
+    # ---------- panel ----------
+
+    def refresh(self):
+        try:
+            found = self.read_notifications()
+
+        except GLib.Error:
+            # Mako may be absent or restarting; keep the last known count.
+            return True
+
+        known = {entry["id"] for entry in found}
+        self.acknowledged &= known
+
+        self.entries = [
+            entry for entry in found
+            if entry["id"] not in self.acknowledged
+        ]
+
+        count = len(self.entries)
+
+        if count != self.last_count:
+            self.last_count = count
+            self.count.set_text(str(count) if count else "")
+            self.count.set_visible(bool(count))
+
+            if count:
+                self.icon.remove_css_class("icon-only")
+            else:
+                self.icon.add_css_class("icon-only")
+
+            label = (
+                f"{count} notifications" if count != 1
+                else "1 notification"
+            )
+
+            self.set_tooltip_text(label)
+
+            self.update_property(
+                [Gtk.AccessibleProperty.LABEL],
+                [label]
+            )
+
+        if self.get_popover().get_visible():
+            self.rebuild_list()
+
+        return True
+
+    def rebuild_list(self):
+        child = self.list.get_first_child()
+
+        while child is not None:
+            following = child.get_next_sibling()
+            self.list.remove(child)
+            child = following
+
+        for entry in self.entries:
+            self.list.append(self.build_row(entry))
+
+        self.empty.set_visible(not self.entries)
+        self.scroller.set_visible(bool(self.entries))
+        self.clear.set_visible(bool(self.entries))
+
+    def build_row(self, entry):
+        row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=8
+        )
+
+        row.add_css_class("notification-row")
+
+        text = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=1
+        )
+
+        text.set_hexpand(True)
+
+        summary = Gtk.Label(
+            label=shorten(
+                entry["summary"] or entry["app"] or "Notification",
+                NOTIFICATION_SUMMARY_CHARS
+            )
+        )
+
+        summary.set_xalign(0)
+        summary.add_css_class("notification-summary")
+        text.append(summary)
+
+        if entry["body"]:
+            body = Gtk.Label(
+                label=shorten(
+                    entry["body"],
+                    NOTIFICATION_BODY_CHARS
+                )
+            )
+
+            body.set_xalign(0)
+            body.add_css_class("notification-body")
+            text.append(body)
+
+        close = Gtk.Button()
+        close.set_has_frame(False)
+        close.add_css_class("notification-close")
+        close.set_valign(Gtk.Align.START)
+        close.set_tooltip_text("Dismiss this notification")
+
+        glyph = glyph_widget()
+
+        if not self.library.set_glyph(glyph, "xmark"):
+            glyph = Gtk.Label()
+            glyph.set_text("\u00d7")
+            glyph.set_visible(True)
+
+        close.set_child(glyph)
+
+        close.connect(
+            "clicked",
+            self.on_close_clicked,
+            entry
+        )
+
+        row.append(text)
+        row.append(close)
+
+        return row
+
+    def on_popover_shown(self, _popover):
+        self.refresh()
+        self.rebuild_list()
+
+    def on_close_clicked(self, _button, entry):
+        try:
+            self.dismiss(entry)
+
+        except GLib.Error:
+            pass  # Already gone; acknowledging still clears it from the list.
+
+        self.acknowledged.add(entry["id"])
+        self.refresh()
+        self.rebuild_list()
+
+    def on_clear_clicked(self, _button):
+        try:
+            self.call(
+                "DismissNotifications",
+                GLib.Variant(
+                    "(a{sv})",
+                    ({"all": GLib.Variant("b", True)},)
+                )
+            )
+
+        except GLib.Error:
+            pass  # History-only rows still clear through the acknowledged set.
+
+        self.acknowledged |= {
+            entry["id"] for entry in self.entries
+        }
+
+        self.refresh()
+        self.rebuild_list()
+        self.get_popover().popdown()
+
+
+def decode_ssid(raw):
+    try:
+        return bytes(raw).decode("utf-8", errors="replace")
+    except (TypeError, ValueError):
+        return ""
+
+
+def describe_frequency(mhz):
+    if not mhz:
+        return None
+
+    if mhz >= 5925:
+        return "6 GHz"
+
+    if mhz >= 5000:
+        return "5 GHz"
+
+    return "2.4 GHz"
+
+
+def visible_networks(access_points, current_ssid=None):
+    """One entry per SSID, strongest first, without hidden or current networks.
+
+    Access points sharing an SSID are one network to the user; the strongest
+    one stands for it, and it counts as secured if any of them is.
+    """
+
+    networks = {}
+
+    for point in access_points:
+        ssid = point["ssid"]
+
+        if not ssid or ssid == current_ssid:
+            continue
+
+        known = networks.get(ssid)
+
+        if known is None:
+            networks[ssid] = dict(point)
+            continue
+
+        known["secured"] = known["secured"] or point["secured"]
+
+        if point["strength"] > known["strength"]:
+            known["strength"] = point["strength"]
+            known["frequency"] = point["frequency"]
+
+    return sorted(
+        networks.values(),
+        key=lambda network: (-network["strength"], network["ssid"].casefold())
+    )
+
+
+class NetworkMenu(Gtk.MenuButton):
+    """Wi-Fi glyph whose popover shows the current and nearby networks.
+
+    Display only: rows do nothing when clicked. NetworkManager pushes property
+    changes over D-Bus, so nothing polls. Opening the popover asks for a fresh
+    scan, and the list updates when NetworkManager reports the new results.
+    """
+
+    def __init__(self, library):
+        super().__init__()
+
+        self.library = library
+        self.bus = None
+        self.signal_ids = []
+        self.refresh_source = None
+        self.active_access_point = None
+        self.wireless_paths = []
+
+        self.set_has_frame(False)
+        self.add_css_class("panel-menu")
+
+        self.indicator = StatusIndicator(
+            library,
+            "wifi",
+            show_value=False,
+            layered=True
+        )
+
+        self.set_child(self.indicator)
+
+        self.current = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=4
+        )
+
+        heading = Gtk.Label(label="Available networks")
+        heading.set_xalign(0)
+        heading.add_css_class("panel-heading")
+
+        self.available = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=2
+        )
+
+        scroller = Gtk.ScrolledWindow()
+
+        scroller.set_policy(
+            Gtk.PolicyType.NEVER,
+            Gtk.PolicyType.AUTOMATIC
+        )
+
+        scroller.set_propagate_natural_height(True)
+        scroller.set_max_content_height(NETWORK_LIST_HEIGHT)
+        scroller.set_child(self.available)
+        self.scroller = scroller
+
+        self.none = Gtk.Label(label="No other networks found")
+        self.none.add_css_class("notification-empty")
+
+        content = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=6
+        )
+
+        content.add_css_class("notification-popover")
+        content.append(self.current)
+        content.append(heading)
+        content.append(self.none)
+        content.append(scroller)
+
+        popover = Gtk.Popover()
+        popover.set_child(content)
+        popover.connect("show", self.on_popover_shown)
+
+        self.set_popover(popover)
+        open_below_panel(self)
+
+    # ---------- NetworkManager ----------
+
+    def setup(self):
+        try:
+            self.bus = Gio.bus_get_sync(
+                Gio.BusType.SYSTEM,
+                None
+            )
+
+        except GLib.Error:
+            self.indicator.set_text("WIFI ?")
+            return
+
+        # Access points report strength changes; those matter only for the
+        # connected one, or while the list is open (filtered in on_signal).
+        for interface in (
+            NM_NAME,
+            NM_DEVICE,
+            NM_WIRELESS,
+            NM_ACCESS_POINT
+        ):
+            self.signal_ids.append(
+                self.bus.signal_subscribe(
+                    NM_NAME,
+                    "org.freedesktop.DBus.Properties",
+                    "PropertiesChanged",
+                    None,
+                    interface,
+                    Gio.DBusSignalFlags.NONE,
+                    self.on_signal
+                )
+            )
+
+        self.refresh()
+
+    def on_signal(self, _bus, _sender, path, _interface, _signal, parameters):
+        changed = parameters.get_child_value(0).get_string()
+
+        if (
+            changed == NM_ACCESS_POINT
+            and path != self.active_access_point
+            and not self.get_popover().get_visible()
+        ):
+            return
+
+        # NetworkManager sends bursts of changes; coalesce them.
+        if self.refresh_source is None:
+            self.refresh_source = GLib.timeout_add(
+                100,
+                self.refresh_after_event
+            )
+
+    def refresh_after_event(self):
+        self.refresh_source = None
+        self.refresh()
+
+        return False
+
+    def properties(self, path, interface):
+        result = self.bus.call_sync(
+            NM_NAME,
+            path,
+            "org.freedesktop.DBus.Properties",
+            "GetAll",
+            GLib.Variant("(s)", (interface,)),
+            GLib.VariantType.new("(a{sv})"),
+            Gio.DBusCallFlags.NONE,
+            NM_TIMEOUT_MS,
+            None
+        )
+
+        return result.unpack()[0]
+
+    def access_point(self, path):
+        values = self.properties(path, NM_ACCESS_POINT)
+
+        return {
+            "ssid": decode_ssid(values.get("Ssid", b"")),
+            "strength": int(values.get("Strength", 0)),
+            "frequency": int(values.get("Frequency", 0)),
+            "secured": bool(
+                values.get("Flags", 0) & NM_AP_FLAGS_PRIVACY
+                or values.get("WpaFlags", 0)
+                or values.get("RsnFlags", 0)
+            ),
+        }
+
+    def address(self, device):
+        path = device.get("Ip4Config", "/")
+
+        if path == "/":
+            return None
+
+        try:
+            data = self.properties(path, NM_IP4_CONFIG).get("AddressData", [])
+
+        except GLib.Error:
+            return None
+
+        for entry in data:
+            if entry.get("address"):
+                return entry["address"]
+
+        return None
+
+    def read_state(self, with_nearby):
+        devices = self.bus.call_sync(
+            NM_NAME,
+            NM_PATH,
+            NM_NAME,
+            "GetDevices",
+            None,
+            GLib.VariantType.new("(ao)"),
+            Gio.DBusCallFlags.NONE,
+            NM_TIMEOUT_MS,
+            None
+        ).unpack()[0]
+
+        state = {
+            "wifi_device": False,
+            "wifi": None,
+            "wifi_connected": False,
+            "wired": None,
+            "nearby": [],
+        }
+
+        wireless_paths = []
+        active_access_point = None
+
+        for path in devices:
+            device = self.properties(path, NM_DEVICE)
+            kind = device.get("DeviceType")
+            activated = device.get("State") == NM_DEVICE_STATE_ACTIVATED
+
+            if kind == NM_DEVICE_TYPE_ETHERNET and activated:
+                state["wired"] = {"address": self.address(device)}
+                continue
+
+            if kind != NM_DEVICE_TYPE_WIFI:
+                continue
+
+            state["wifi_device"] = True
+            wireless_paths.append(path)
+            wireless = self.properties(path, NM_WIRELESS)
+
+            if activated and state["wifi"] is None:
+                state["wifi_connected"] = True
+                point_path = wireless.get("ActiveAccessPoint", "/")
+
+                if point_path != "/":
+                    try:
+                        point = self.access_point(point_path)
+
+                    except GLib.Error:
+                        point = None  # Vanished between the two calls.
+
+                    if point is not None:
+                        point["address"] = self.address(device)
+                        state["wifi"] = point
+                        active_access_point = point_path
+
+            if not with_nearby:
+                continue
+
+            for point_path in wireless.get("AccessPoints", []):
+                try:
+                    state["nearby"].append(self.access_point(point_path))
+
+                except GLib.Error:
+                    pass  # Access points come and go with every scan.
+
+        self.wireless_paths = wireless_paths
+        self.active_access_point = active_access_point
+
+        return state
+
+    def request_scan(self):
+        for path in self.wireless_paths:
+            self.bus.call(
+                NM_NAME,
+                path,
+                NM_WIRELESS,
+                "RequestScan",
+                GLib.Variant("(a{sv})", ({},)),
+                None,
+                Gio.DBusCallFlags.NONE,
+                -1,
+                None,
+                self.on_scan_requested
+            )
+
+    def on_scan_requested(self, bus, result):
+        try:
+            bus.call_finish(result)
+
+        except GLib.Error:
+            pass  # Refused while a scan is running or too recent; the list stays current.
+
+    # ---------- panel ----------
+
+    def refresh(self):
+        if self.bus is None:
+            return
+
+        listing = self.get_popover().get_visible()
+
+        try:
+            state = self.read_state(listing)
+
+        except GLib.Error:
+            self.indicator.set_text("WIFI ?")
+            return
+
+        wifi = state["wifi"]
+
+        if wifi and wifi["ssid"]:
+            self.indicator.set_text(
+                f"WIFI {wifi['ssid']}",
+                icon=signal_glyph(wifi["strength"])
+            )
+
+        elif state["wifi_connected"]:
+            self.indicator.set_text("WIFI ON")
+
+        else:
+            self.indicator.set_text("WIFI OFF")
+
+        if listing:
+            self.rebuild(state)
+
+    def rebuild(self, state):
+        for box in (self.current, self.available):
+            child = box.get_first_child()
+
+            while child is not None:
+                following = child.get_next_sibling()
+                box.remove(child)
+                child = following
+
+        wifi = state["wifi"]
+
+        if wifi:
+            detail = ["Connected", f"{wifi['strength']}%"]
+            band = describe_frequency(wifi["frequency"])
+
+            if band:
+                detail.append(band)
+
+            if wifi["address"]:
+                detail.append(wifi["address"])
+
+            self.current.append(
+                panel_row(
+                    self.library,
+                    signal_glyph(wifi["strength"]),
+                    wifi["ssid"] or "Hidden network",
+                    " · ".join(detail),
+                    "lock" if wifi["secured"] else None
+                )
+            )
+
+        elif state["wifi_connected"]:
+            self.current.append(
+                panel_row(self.library, "wifi", "Wi-Fi", "Connected")
+            )
+
+        elif state["wifi_device"]:
+            self.current.append(
+                panel_row(self.library, "wifi-slash", "Wi-Fi", "Not connected")
+            )
+
+        else:
+            self.current.append(
+                panel_row(self.library, "wifi-slash", "Wi-Fi", "No Wi-Fi device")
+            )
+
+        if state["wired"]:
+            detail = "Connected"
+
+            if state["wired"]["address"]:
+                detail += f" · {state['wired']['address']}"
+
+            self.current.append(
+                panel_row(self.library, "network-wired", "Wired", detail)
+            )
+
+        networks = visible_networks(
+            state["nearby"],
+            wifi["ssid"] if wifi else None
+        )
+
+        for network in networks:
+            detail = [f"{network['strength']}%"]
+            band = describe_frequency(network["frequency"])
+
+            if band:
+                detail.append(band)
+
+            self.available.append(
+                panel_row(
+                    self.library,
+                    signal_glyph(network["strength"]),
+                    network["ssid"],
+                    " · ".join(detail),
+                    "lock" if network["secured"] else None
+                )
+            )
+
+        self.none.set_visible(not networks)
+        self.scroller.set_visible(bool(networks))
+
+    def on_popover_shown(self, _popover):
+        self.refresh()
+        self.request_scan()
+
+
+class LevelOverlay(Gtk.Window):
+    """Brief brightness or volume readout near the bottom of the screen.
+
+    The panel shows these as a glyph only; this shows the value for a moment
+    after it changes. It takes no keyboard focus and hides itself again.
+    """
+
+    def __init__(self, application, library):
+        super().__init__(application=application)
+
+        self.library = library
+        self.hide_source = None
+
+        self.set_title("tinybar-level")
+        self.set_decorated(False)
+        self.add_css_class("level-window")
+
+        Gtk4LayerShell.init_for_window(self)
+        Gtk4LayerShell.set_namespace(self, "tinybar-level")
+
+        Gtk4LayerShell.set_layer(
+            self,
+            Gtk4LayerShell.Layer.OVERLAY
+        )
+
+        Gtk4LayerShell.set_anchor(
+            self,
+            Gtk4LayerShell.Edge.BOTTOM,
+            True
+        )
+
+        Gtk4LayerShell.set_margin(
+            self,
+            Gtk4LayerShell.Edge.BOTTOM,
+            LEVEL_OVERLAY_MARGIN
+        )
+
+        Gtk4LayerShell.set_keyboard_mode(
+            self,
+            Gtk4LayerShell.KeyboardMode.NONE
+        )
+
+        box = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=12
+        )
+
+        box.add_css_class("level-overlay")
+        box.set_can_target(False)
+
+        self.icon = glyph_widget("level-icon")
+
+        self.bar = Gtk.ProgressBar()
+        self.bar.add_css_class("level-bar")
+        self.bar.set_hexpand(True)
+        self.bar.set_valign(Gtk.Align.CENTER)
+
+        self.value = Gtk.Label()
+        self.value.add_css_class("level-value")
+        self.value.set_width_chars(5)
+        self.value.set_xalign(1)
+
+        box.append(self.icon)
+        box.append(self.bar)
+        box.append(self.value)
+
+        self.set_child(box)
+
+    def show_level(self, glyph, percent, text=None, muted=False):
+        self.library.set_glyph(self.icon, glyph)
+
+        if muted:
+            self.bar.add_css_class("muted")
+        else:
+            self.bar.remove_css_class("muted")
+
+        self.bar.set_fraction(max(0, min(percent, 100)) / 100)
+        self.value.set_text(text or f"{percent}%")
+
+        self.set_visible(True)
+
+        if self.hide_source is not None:
+            GLib.source_remove(self.hide_source)
+
+        self.hide_source = GLib.timeout_add(
+            LEVEL_OVERLAY_MS,
+            self.on_hide_timeout
+        )
+
+    def on_hide_timeout(self):
+        self.hide_source = None
+        self.set_visible(False)
+
+        return False
+
+
+class TinyBar(Gtk.Application):
+    def __init__(self):
+        super().__init__(
+            application_id="elachisto.Tinybar"
+        )
+
+        self.history = HistoryStore()
+
+        self.current_samples = deque(
+            maxlen=12
+        )
+
+        self.last_battery_status = None
+
+        self.previous_cpu = None
+
+        self.volume_monitor = None
+        self.volume_refresh_source = None
+
+        self.brightness_monitor = None
+        self.brightness_refresh_source = None
+
+        self.level_overlay = None
+
+        self.task_list = None
+        self.task_buttons = {}
+        self.toplevel_groups = OrderedDict()
+        self.active_toplevel = None
+        self.last_active_toplevel = {}
+        self.toplevel_helper = None
+        self.toplevel_helper_watch = None
+        self.toplevel_output_buffer = b""
+
+    def do_activate(self):
+        window = Gtk.ApplicationWindow(
+            application=self
+        )
+
+        window.set_title("tinybar")
+
+        Gtk4LayerShell.init_for_window(window)
+
+        Gtk4LayerShell.set_layer(
+            window,
+            Gtk4LayerShell.Layer.TOP
+        )
+
+        for edge in (
+            Gtk4LayerShell.Edge.TOP,
+            Gtk4LayerShell.Edge.LEFT,
+            Gtk4LayerShell.Edge.RIGHT
+        ):
+            Gtk4LayerShell.set_anchor(
+                window,
+                edge,
+                True
+            )
+
+        Gtk4LayerShell.auto_exclusive_zone_enable(
+            window
+        )
+
+        overlay = Gtk.Overlay()
+
+        row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=12
+        )
+
+        row.set_margin_start(12)
+        row.set_margin_end(12)
+        row.set_margin_top(5)
+        row.set_margin_bottom(5)
+
+        left = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=8
+        )
+
+        left.set_hexpand(True)
+
+        self.task_list = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=4
+        )
+
+        self.task_list.add_css_class("task-list")
+        left.append(self.task_list)
+
+        self.system_info = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=12
+        )
+
+        self.system_info.set_halign(
+            Gtk.Align.END
+        )
+
+        self.icons = IconLibrary()
+        self.notifications = NotificationCenter(self.icons)
+        self.cpu = StatusIndicator(self.icons, "cpu")
+        self.memory = StatusIndicator(self.icons, "memory")
+        self.wifi = NetworkMenu(self.icons)
+        self.brightness = StatusIndicator(
+            self.icons,
+            "brightness",
+            show_value=False
+        )
+        self.volume = StatusIndicator(
+            self.icons,
+            "volume",
+            show_value=False
+        )
+        self.battery = StatusIndicator(self.icons, "battery")
+
+        self.level_overlay = LevelOverlay(self, self.icons)
+
+        widgets = [self.notifications]
+
+        if SHOW_USAGE:
+            widgets += [self.cpu, self.memory]
+
+        widgets += [
+            self.wifi,
+            self.brightness,
+            self.volume,
+            self.battery
+        ]
+
+        for widget in widgets:
+            widget.add_css_class("system-info")
+            self.system_info.append(widget)
+
+        row.append(left)
+        row.append(self.system_info)
+
+        overlay.set_child(row)
+
+        self.clock = Gtk.Label()
+        self.clock.add_css_class("clock")
+
+        self.clock.set_halign(
+            Gtk.Align.CENTER
+        )
+
+        self.clock.set_valign(
+            Gtk.Align.CENTER
+        )
+
+        self.clock.set_can_target(False)
+
+        overlay.add_overlay(
+            self.clock
+        )
+
+        window.set_child(overlay)
+
+        css = Gtk.CssProvider()
+
+        try:
+            css.load_from_path(
+                str(STYLE_FILE)
+            )
+
+            # ~/.config/gtk-4.0/gtk.css loads at USER priority, above
+            # APPLICATION, and its generic button, .background and :checked
+            # rules would otherwise box the panel buttons and paint behind
+            # popovers. The panel's own sheet has to win inside the panel.
+            Gtk.StyleContext.add_provider_for_display(
+                window.get_display(),
+                css,
+                Gtk.STYLE_PROVIDER_PRIORITY_USER + 1
+            )
+
+        except GLib.Error as error:
+            print(
+                f"tinybar: failed to load CSS: {error}",
+                flush=True
+            )
+
+        self.setup_volume_monitor()
+        self.setup_brightness_monitor()
+        self.wifi.setup()
+
+        self.setup_toplevel_helper()
+
+        self.update_clock()
+        self.notifications.refresh()
+
+        if SHOW_USAGE:
+            self.update_usage()
+
+        self.update_battery()
+        self.update_temperature_history()
+
+        self.schedule_next_clock_update()
+
+        if SHOW_USAGE:
+            GLib.timeout_add_seconds(
+                USAGE_SAMPLE_SECONDS,
+                self.update_usage
+            )
+
+        GLib.timeout_add_seconds(
+            BATTERY_SAMPLE_SECONDS,
+            self.update_battery
+        )
+
+        GLib.timeout_add_seconds(
+            TEMP_SAMPLE_SECONDS,
+            self.update_temperature_history
+        )
+
+        GLib.timeout_add_seconds(
+            NOTIFICATION_SAMPLE_SECONDS,
+            self.notifications.refresh
+        )
+
+        window.present()
+
+    # ---------- running applications ----------
+
+    def setup_toplevel_helper(self):
+        helper_environment = os.environ.copy()
+        helper_environment.pop("LD_PRELOAD", None)
+        helper_environment.pop("GSK_RENDERER", None)
+        helper_environment.pop("GTK_A11Y", None)
+
+        try:
+            self.toplevel_helper = subprocess.Popen(
+                (str(TOPLEVEL_HELPER),),
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                bufsize=1,
+                env=helper_environment
+            )
+        except OSError as error:
+            print(
+                f"tinybar: cannot start toplevel helper: {error}",
+                flush=True
+            )
+            return
+
+        os.set_blocking(
+            self.toplevel_helper.stdout.fileno(),
+            False
+        )
+
+        self.toplevel_helper_watch = GLib.io_add_watch(
+            self.toplevel_helper.stdout,
+            GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR,
+            self.on_toplevel_helper_output
+        )
+
+    def on_toplevel_helper_output(self, stream, condition):
+        latest_snapshot = None
+
+        while True:
+            try:
+                chunk = os.read(stream.fileno(), 65536)
+            except BlockingIOError:
+                break
+            except OSError:
+                chunk = b""
+
+            if not chunk:
+                break
+
+            self.toplevel_output_buffer += chunk
+
+        lines = self.toplevel_output_buffer.split(b"\n")
+        self.toplevel_output_buffer = lines.pop()
+
+        for line in lines:
+            if not line:
+                continue
+
+            try:
+                latest_snapshot = json.loads(
+                    line.decode("utf-8")
+                )
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+
+        if latest_snapshot is not None:
+            self.apply_toplevel_snapshot(
+                latest_snapshot.get("windows", [])
+            )
+
+        if condition & (GLib.IO_HUP | GLib.IO_ERR):
+            if self.toplevel_output_buffer:
+                try:
+                    snapshot = json.loads(
+                        self.toplevel_output_buffer.decode(
+                            "utf-8"
+                        )
+                    )
+                    self.apply_toplevel_snapshot(
+                        snapshot.get("windows", [])
+                    )
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    pass
+
+            self.toplevel_output_buffer = b""
+            self.toplevel_helper_watch = None
+            return False
+
+        return True
+
+    def display_name_for_app(self, app_id):
+        candidates = (
+            app_id,
+            f"{app_id}.desktop",
+            f"{app_id.casefold()}.desktop",
+        )
+
+        for candidate in candidates:
+            try:
+                desktop = GioUnix.DesktopAppInfo.new(candidate)
+            except TypeError:
+                desktop = None
+
+            if desktop is not None:
+                name = desktop.get_display_name()
+
+                if name:
+                    return name
+
+        name = app_id.rsplit(".", 1)[-1]
+        name = name.replace("-", " ").replace("_", " ")
+
+        return name.title()
+
+    def apply_toplevel_snapshot(self, windows):
+        active = None
+        groups = OrderedDict()
+
+        for window in windows:
+            app_id = str(window.get("app_id", "")).strip()
+            title = str(window.get("title", "")).strip()
+
+            if not app_id or window.get("parent"):
+                continue
+
+            if app_id.casefold() in TINYBAR_APP_IDS:
+                continue
+
+            if title.casefold() == "tinybar":
+                continue
+
+            groups.setdefault(app_id, []).append(window)
+
+            if window.get("active"):
+                active = window
+
+        if active is not None:
+            self.last_active_toplevel[active["app_id"]] = active["id"]
+
+        self.toplevel_groups = groups
+        self.active_toplevel = active
+        self.render_task_list()
+
+    def render_task_list(self):
+        current_ids = set(self.toplevel_groups)
+
+        for app_id in tuple(self.task_buttons):
+            if app_id in current_ids:
+                continue
+
+            self.task_list.remove(
+                self.task_buttons.pop(app_id)
+            )
+
+        for position, (app_id, windows) in enumerate(
+            self.toplevel_groups.items()
+        ):
+            button = self.task_buttons.get(app_id)
+
+            if button is None:
+                button = Gtk.Button()
+                button.add_css_class("task-label")
+                button.connect(
+                    "clicked",
+                    self.on_task_clicked,
+                    app_id
+                )
+                content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+                icon = self.icons.application_widget(app_id)
+                if icon is not None:
+                    content.append(icon)
+                button.name_label = Gtk.Label()
+                # The first app shows its icon alone when it has one.
+                icon_only = app_id == FIRST_APP_ID and icon is not None
+                button.name_label.set_visible(not icon_only)
+                if icon_only:
+                    icon.add_css_class("icon-only")
+                content.append(button.name_label)
+                button.set_child(content)
+                self.task_buttons[app_id] = button
+                # A None sibling inserts at the start of the box.
+                self.task_list.insert_child_after(
+                    button,
+                    None if app_id == FIRST_APP_ID
+                    else self.task_list.get_last_child()
+                )
+
+            count = len(windows)
+            label = self.display_name_for_app(app_id)
+
+            if count > 1:
+                label = f"{label} ({count})"
+
+            button.name_label.set_text(label)
+            button.set_tooltip_text(app_id)
+
+            is_active = (
+                self.active_toplevel is not None
+                and self.active_toplevel["app_id"] == app_id
+            )
+
+            if is_active:
+                button.add_css_class("active")
+            else:
+                button.remove_css_class("active")
+
+    def on_task_clicked(self, button, app_id):
+        windows = self.toplevel_groups.get(app_id, [])
+
+        if not windows:
+            return
+
+        target_id = self.last_active_toplevel.get(app_id)
+        target = next(
+            (
+                window
+                for window in windows
+                if window["id"] == target_id
+            ),
+            windows[0]
+        )
+
+        if (
+            self.active_toplevel is not None
+            and self.active_toplevel["app_id"] == app_id
+            and len(windows) > 1
+        ):
+            try:
+                index = windows.index(self.active_toplevel)
+            except ValueError:
+                index = -1
+
+            target = windows[(index + 1) % len(windows)]
+
+        try:
+            self.toplevel_helper.stdin.write(
+                f"activate {target['id']}\n"
+            )
+            self.toplevel_helper.stdin.flush()
+        except (AttributeError, BrokenPipeError, OSError):
+            return
+
+        self.last_active_toplevel[app_id] = target["id"]
+
+    # ---------- clock ----------
+
+    def update_clock(self):
+        now = datetime.datetime.now()
+
+        self.clock.set_text(
+            now.strftime(
+                "%a %b %-d   %-I:%M %p"
+            )
+        )
+
+    def schedule_next_clock_update(self):
+        now = datetime.datetime.now()
+
+        delay_ms = int(
+            (
+                60
+                - now.second
+                - now.microsecond / 1_000_000
+            )
+            * 1000
+        )
+
+        delay_ms = max(
+            delay_ms,
+            100
+        )
+
+        GLib.timeout_add(
+            delay_ms,
+            self.on_clock_timer
+        )
+
+    def on_clock_timer(self):
+        self.update_clock()
+        self.schedule_next_clock_update()
+
+        return False
+
+    # ---------- CPU / RAM ----------
+
+    def update_usage(self):
+        now = time.time()
+
+        current_cpu = read_cpu_counters()
+
+        if (
+            current_cpu is not None
+            and self.previous_cpu is not None
+        ):
+            total_delta = (
+                current_cpu[0]
+                - self.previous_cpu[0]
+            )
+
+            idle_delta = (
+                current_cpu[1]
+                - self.previous_cpu[1]
+            )
+
+            if total_delta > 0:
+                usage = (
+                    (
+                        total_delta
+                        - idle_delta
+                    )
+                    / total_delta
+                    * 100
+                )
+
+                usage = max(
+                    0.0,
+                    min(
+                        usage,
+                        100.0
+                    )
+                )
+
+                self.cpu.set_text(
+                    f"CPU {usage:.0f}%"
+                )
+
+                self.history.add_sample(
+                    "cpu_percent",
+                    usage,
+                    now
+                )
+
+        elif current_cpu is not None:
+            self.cpu.set_text(
+                "CPU ..."
+            )
+
+        self.previous_cpu = current_cpu
+
+        memory = get_memory_usage()
+
+        if memory:
+            used, total = memory
+
+            self.memory.set_text(
+                f"RAM {used:.1f}/{total:.1f}G"
+            )
+
+            self.history.add_sample(
+                "memory_used_gib",
+                used,
+                now
+            )
+
+        else:
+            self.memory.set_text(
+                "RAM ?"
+            )
+
+        return True
+
+    # ---------- temperature history ----------
+
+    def update_temperature_history(self):
+        temperature = get_cpu_temperature()
+
+        if temperature is not None:
+            self.history.add_sample(
+                "temperature_c",
+                temperature,
+                time.time()
+            )
+
+        return True
+
+    # ---------- volume ----------
+
+    def setup_volume_monitor(self):
+        RUNTIME_DIR.mkdir(
+            parents=True,
+            exist_ok=True
+        )
+
+        try:
+            result = subprocess.run(
+                [
+                    "/usr/bin/wpctl",
+                    "get-volume",
+                    "@DEFAULT_AUDIO_SINK@"
+                ],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                env={
+                    **os.environ,
+                    "LC_ALL": "C"
+                }
+            )
+
+            if result.returncode == 0:
+                VOLUME_STATE.write_text(
+                    result.stdout.strip()
+                    + "\n"
+                )
+
+        except (
+            OSError,
+            subprocess.TimeoutExpired
+        ):
+            pass
+
+        if not VOLUME_STATE.exists():
+            VOLUME_STATE.touch()
+
+        self.update_volume_from_state()
+
+        volume_file = Gio.File.new_for_path(
+            str(VOLUME_STATE)
+        )
+
+        self.volume_monitor = (
+            volume_file.monitor_file(
+                Gio.FileMonitorFlags.NONE,
+                None
+            )
+        )
+
+        self.volume_monitor.connect(
+            "changed",
+            self.on_volume_state_changed
+        )
+
+    def on_volume_state_changed(
+        self,
+        *args
+    ):
+        if self.volume_refresh_source is None:
+            self.volume_refresh_source = (
+                GLib.timeout_add(
+                    25,
+                    self.refresh_volume_after_event
+                )
+            )
+
+    def refresh_volume_after_event(self):
+        self.volume_refresh_source = None
+        self.update_volume_from_state(announce=True)
+
+        return False
+
+    def update_volume_from_state(self, announce=False):
+        # announce: a key press changed it, so also show the level overlay.
+        output = read_path(
+            VOLUME_STATE
+        )
+
+        if not output:
+            self.volume.set_text(
+                "VOL ?"
+            )
+            return
+
+        match = re.search(
+            r"Volume:\s+([0-9.]+)",
+            output
+        )
+
+        muted = "[MUTED]" in output
+        percent = None
+
+        if match:
+            percent = round(
+                float(match.group(1))
+                * 100
+            )
+
+        if muted:
+            self.volume.set_text(
+                "VOL MUTED"
+            )
+
+        elif percent is not None:
+            self.volume.set_text(
+                f"VOL {percent}%"
+            )
+
+        else:
+            self.volume.set_text(
+                "VOL ?"
+            )
+            return
+
+        if announce:
+            self.level_overlay.show_level(
+                volume_glyph(percent or 0, muted),
+                percent or 0,
+                "Muted" if muted else None,
+                muted
+            )
+
+    # ---------- brightness ----------
+
+    def setup_brightness_monitor(self):
+        self.update_brightness()
+
+        brightness_file = Gio.File.new_for_path(
+            str(BACKLIGHT / "brightness")
+        )
+
+        try:
+            self.brightness_monitor = (
+                brightness_file.monitor_file(
+                    Gio.FileMonitorFlags.NONE,
+                    None
+                )
+            )
+
+            self.brightness_monitor.connect(
+                "changed",
+                self.on_brightness_changed
+            )
+
+        except GLib.Error:
+            self.brightness.set_text(
+                "BRI ?"
+            )
+
+    def on_brightness_changed(
+        self,
+        *args
+    ):
+        # sysfs emits several notifications for a single brightness
+        # change. Coalesce them into one UI refresh.
+        if self.brightness_refresh_source is None:
+            self.brightness_refresh_source = (
+                GLib.timeout_add(
+                    30,
+                    self.refresh_brightness_after_event
+                )
+            )
+
+    def refresh_brightness_after_event(self):
+        self.brightness_refresh_source = None
+        self.update_brightness(announce=True)
+
+        return False
+
+    def update_brightness(self, announce=False):
+        # announce: the backlight changed, so also show the level overlay.
+        current = read_path(
+            BACKLIGHT / "brightness"
+        )
+
+        maximum = read_path(
+            BACKLIGHT / "max_brightness"
+        )
+
+        try:
+            current = int(current)
+            maximum = int(maximum)
+
+            if maximum <= 0:
+                raise ValueError
+
+            percent = round(
+                current / maximum * 100
+            )
+
+            percent = max(
+                0,
+                min(
+                    percent,
+                    100
+                )
+            )
+
+            self.brightness.set_text(
+                f"BRI {percent}%"
+            )
+
+            if announce:
+                self.level_overlay.show_level(
+                    brightness_glyph(percent),
+                    percent
+                )
+
+        except (
+            TypeError,
+            ValueError
+        ):
+            self.brightness.set_text(
+                "BRI ?"
+            )
+
+
+    # ---------- battery ----------
+
+    def update_battery(self):
+        now = time.time()
+
+        capacity = (
+            read_battery_text(
+                "capacity"
+            )
+            or "?"
+        )
+
+        status = (
+            read_battery_text(
+                "status"
+            )
+            or "Unknown"
+        )
+
+        charge_now = read_battery_int(
+            "charge_now"
+        )
+
+        charge_full = read_battery_int(
+            "charge_full"
+        )
+
+        current_now = read_battery_int(
+            "current_now"
+        )
+
+        voltage_now = read_battery_int(
+            "voltage_now"
+        )
+
+        if status != self.last_battery_status:
+            self.current_samples.clear()
+            self.last_battery_status = status
+
+        if (
+            current_now is not None
+            and current_now > 0
+        ):
+            self.current_samples.append(
+                current_now
+            )
+
+        average_current = None
+
+        if self.current_samples:
+            average_current = (
+                sum(self.current_samples)
+                / len(self.current_samples)
+            )
+
+        parts = [
+            f"BAT {capacity}%"
+        ]
+        power_text = "— W"
+        smoothed_watts = None
+
+        if status == "Charging":
+            parts[0] += " +"
+
+        elif status == "Full":
+            parts[0] += " FULL"
+
+        if (
+            status == "Discharging"
+            and current_now is not None
+            and current_now > 0
+            and voltage_now is not None
+        ):
+            current_watts = (
+                current_now
+                * voltage_now
+                / 1_000_000_000_000
+            )
+
+            self.history.add_sample(
+                "power_w",
+                current_watts,
+                now
+            )
+
+        if (
+            status == "Discharging"
+            and average_current
+            and voltage_now is not None
+        ):
+            smoothed_watts = (
+                average_current
+                * voltage_now
+                / 1_000_000_000_000
+            )
+
+            power_text = f"{smoothed_watts:.1f} W"
+            parts.append(power_text)
+
+        trailing_avg, coverage = (
+            self.history.trailing_average(
+                "power_w",
+                now
+            )
+        )
+
+        if trailing_avg is not None:
+            if coverage >= (
+                HISTORY_WINDOW_SECONDS
+                - BATTERY_SAMPLE_SECONDS
+            ):
+                parts.append(
+                    f"3H {trailing_avg:.1f} W"
+                )
+
+            else:
+                parts.append(
+                    f"AVG {trailing_avg:.1f} W"
+                    f" / {format_coverage(coverage)}"
+                )
+
+        hours = None
+
+        if average_current:
+            if (
+                status == "Discharging"
+                and charge_now is not None
+            ):
+                hours = (
+                    charge_now
+                    / average_current
+                )
+
+            elif (
+                status == "Charging"
+                and charge_now is not None
+                and charge_full is not None
+            ):
+                remaining = max(
+                    charge_full - charge_now,
+                    0
+                )
+
+                hours = (
+                    remaining
+                    / average_current
+                )
+
+        runtime_text = format_runtime(
+            hours
+        )
+
+        if runtime_text:
+            if status == "Charging":
+                parts.append(
+                    f"{runtime_text} to full"
+                )
+
+            elif status == "Discharging":
+                parts.append(
+                    runtime_text
+                )
+
+        parts.append(f"Status: {status}")
+        if power_text == "— W":
+            parts.append("Battery discharge power unavailable.")
+
+        # The panel shows only the time left (to empty, or to full while
+        # charging); percentage and watts stay in the tooltip. Without an
+        # estimate yet, or when full, the icon stands alone.
+        remaining = None
+
+        if status in ("Discharging", "Charging"):
+            remaining = format_hours(hours)
+
+        self.battery.set_text(
+            "\n".join(parts),
+            display_text=f"BAT {remaining or ''}"
+        )
+
+        load = (
+            battery_load(smoothed_watts)
+            if status == "Discharging"
+            else None
+        )
+
+        for _threshold, name in BATTERY_LOAD_LEVELS:
+            if name == load:
+                self.battery.icon.add_css_class(name)
+            else:
+                self.battery.icon.remove_css_class(name)
+
+        return True
+
+
+# Guarded so the tests can import the pure helpers without starting a panel.
+if __name__ == "__main__":
+    app = TinyBar()
+    raise SystemExit(app.run())

@@ -1,0 +1,36 @@
+#!/bin/sh
+
+set -eu
+
+export LC_ALL=C
+
+WPCTL=/usr/bin/wpctl
+RUNTIME_DIR="/run/user/$(id -u)/tinybar"
+STATE_FILE="$RUNTIME_DIR/volume"
+
+mkdir -p "$RUNTIME_DIR"
+
+case "${1:-}" in
+    up)
+        "$WPCTL" set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+
+        ;;
+
+    down)
+        "$WPCTL" set-volume @DEFAULT_AUDIO_SINK@ 5%-
+        ;;
+
+    mute)
+        "$WPCTL" set-mute @DEFAULT_AUDIO_SINK@ toggle
+        ;;
+
+    sync)
+        ;;
+
+    *)
+        echo "usage: tinybar-volume {up|down|mute|sync}" >&2
+        exit 2
+        ;;
+esac
+
+output=$("$WPCTL" get-volume @DEFAULT_AUDIO_SINK@)
+printf '%s\n' "$output" > "$STATE_FILE"

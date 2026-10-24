@@ -1,0 +1,56 @@
+#!/bin/sh
+# Step the built-in screen's backlight: 10% steps from 100% down to 10%, then 1%
+# steps from 10% down to 1%. The floor is 1%, never 0%, so the panel cannot be
+# switched fully dark by a key press. Tinybar watches the sysfs file itself.
+
+set -eu
+
+export LC_ALL=C
+
+BRIGHTNESSCTL="${TINYBAR_BRIGHTNESSCTL:-/usr/bin/brightnessctl}"
+# The first backlight device, whatever the driver calls it (intel_backlight, amdgpu_bl0, ...).
+first_backlight() { for d in /sys/class/backlight/*; do [ -e "$d/brightness" ] && { echo "$d"; return; }; done; }
+DEVICE_DIR="${TINYBAR_BACKLIGHT_DIR:-$(first_backlight)}"
+[ -n "$DEVICE_DIR" ] || { echo "tinybar-brightness: no backlight device" >&2; exit 1; }
+
+current=$(cat "$DEVICE_DIR/brightness")
+maximum=$(cat "$DEVICE_DIR/max_brightness")
+
+if [ "$maximum" -le 0 ]; then
+    echo "tinybar-brightness: bad max_brightness: $maximum" >&2
+    exit 1
+fi
+
+percent=$(( (current * 100 + maximum / 2) / maximum ))
+
+case "${1:-}" in
+    up)
+        if [ "$percent" -lt 10 ]; then
+            target=$((percent + 1))
+        else
+            target=$(( (percent / 10 + 1) * 10 ))
+        fi
+        [ "$target" -le 100 ] || target=100
+        ;;
+
+    down)
+        if [ "$percent" -le 10 ]; then
+            target=$((percent - 1))
+        elif [ $((percent % 10)) -eq 0 ]; then
+            target=$((percent - 10))
+        else
+            target=$((percent / 10 * 10))
+        fi
+        [ "$target" -ge 1 ] || target=1
+        ;;
+
+    *)
+        echo "usage: tinybar-brightness {up|down}" >&2
+        exit 2
+        ;;
+esac
+
+raw=$(( (maximum * target + 50) / 100 ))
+[ "$raw" -ge 1 ] || raw=1
+
+"$BRIGHTNESSCTL" -q -d "${DEVICE_DIR##*/}" set "$raw"
