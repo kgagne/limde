@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Acceptance test for the installer, in a fresh throwaway VM.
+#   tests/vm/test-install [VM_NAME] [--keep] [-- INSTALL_ARGS...]
+# 1. copy this working tree into the VM and run ./install --yes (plus INSTALL_ARGS)
+# 2. run it again: it must report "No changes"
+# 3. reboot: labwc must start on tty1 by itself, NetworkManager must be connected,
+#    and networkd must stay off
+# Saves logs and a screenshot under local/vm/results/<VM_NAME>/. Exit 0 = all passed.
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+repo=$(cd "$here/../.." && pwd)
+vm=$here/vm
+name=itest; keep=0; install_args=()
+while (($#)); do
+  case $1 in
+    --keep) keep=1 ;;
+    --) shift; install_args=("$@"); break ;;
+    *) name=$1 ;;
+  esac
+  shift
+done
+out=$repo/local/vm/results/$name
+rm -rf "$out"; mkdir -p "$out"
+fails=0
+pass() { echo "PASS  $*" | tee -a "$out/summary.txt"; }
+fail() { echo "FAIL  $*" | tee -a "$out/summary.txt"; fails=$((fails + 1)); }
+check() { local what=$1; shift; if "$@" >>"$out/checks.log" 2>&1; then pass "$what"; else fail "$what"; fi; }
+on_vm() { "$vm" ssh "$name" "$@"; }
+
+"$vm" down "$name" >/dev/null 2>&1 || true
+"$vm" rm "$name" >/dev/null 2>&1 || true
+"$vm" up "$name"
+"$vm" copy "$name" --exclude=/local --exclude=.git "$repo/" elachisto/
+
+echo "== first run"
+if on_vm "cd elachisto && ./install --yes ${install_args[*]}" >"$out/install-1.log" 2>&1; then
+  pass "first install run exits 0"
+else
+  fail "first install run exits 0 (see install-1.log)"
+fi
+echo "== second run"
+if on_vm "cd elachisto && ./install --yes ${install_args[*]}" >"$out/install-2.log" 2>&1; then
+  pass "second install run exits 0"
+else
+  fail "second install run exits 0 (see install-2.log)"
+fi
+check "second run reports no changes" grep -q 'No changes' "$out/install-2.log"
+check "plan shows the dependency total" grep -qE 'with their dependencies, [0-9]+ new' "$out/install-1.log"
+
+echo "== reboot"
+on_vm 'sudo systemctl reboot' >/dev/null 2>&1 || true
+sleep 5
+for _ in $(seq 60); do on_vm true 2>/dev/null && break; sleep 2; done
+sleep 10   # let autologin start the session
+check "labwc runs after reboot" on_vm 'pgrep -x labwc'
+check "labwc runs on tty1" on_vm 'pid=$(pgrep -x labwc) && tty=$(ps -o tty= -p $pid) && [ "$tty" = tty1 ]'
+check "NetworkManager connected" on_vm 'nmcli -t -f STATE general | grep -q ^connected'
+check "networkd stays off" on_vm '! systemctl -q is-active systemd-networkd.service'
+check "no failed units" on_vm '[ -z "$(systemctl --failed --no-legend)" ]'
+on_vm 'systemctl --failed --no-legend; cat ~/.local/state/elachisto/labwc.log' >"$out/after-reboot.log" 2>&1 || true
+"$vm" shot "$name" "$out/screen.png" >/dev/null || fail "screenshot"
+
+((keep)) || { "$vm" down "$name" >/dev/null; "$vm" rm "$name" >/dev/null; }
+echo "== $(grep -c ^PASS "$out/summary.txt") passed, $fails failed; results in $out"
+exit $((fails > 0))

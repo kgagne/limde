@@ -10,7 +10,8 @@ fail=0
 # 1. Scrub gate: nothing personal or machine-specific in tracked files.
 patterns=$(grep -vE '^\s*(#|$)' scripts/public-patterns)
 mapfile -t files < <(git ls-files -co --exclude-standard \
-  | grep -vxE 'scripts/public-(patterns|allow)|LICENSE|REUSE.toml')
+  | grep -vxE 'scripts/public-(patterns|allow)|LICENSE|REUSE.toml' \
+  | while IFS= read -r f; do [[ -f $f ]] && echo "$f"; done)
 if ((${#files[@]})); then
   allow=$(grep -vE '^\s*(#|$)' scripts/public-allow)
   if hits=$(grep -nHiE -f <(printf '%s\n' "$patterns") -- "${files[@]}" 2>/dev/null \
@@ -23,6 +24,7 @@ fi
 
 # 2. Shell syntax for every bash/sh script.
 while IFS= read -r f; do
+  [[ -f $f ]] || continue
   head -n1 "$f" | grep -qE '^#!.*\b(ba)?sh\b' || continue
   bash -n "$f" || { echo "syntax: $f" >&2; fail=1; }
 done < <(git ls-files -co --exclude-standard)

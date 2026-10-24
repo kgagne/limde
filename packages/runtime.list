@@ -1,0 +1,42 @@
+# Runtime packages for the base desktop. One per line: name, then "# why".
+# Shown to the user before anything is installed.
+
+## Session
+labwc               # the Wayland compositor (Ubuntu's build until elachisto builds it from source)
+foot                # the default terminal
+swayidle            # runs the screen locker after inactivity
+swaylock            # the screen locker
+mako-notifier       # desktop notifications
+network-manager     # network connections (Wi-Fi, Ethernet); replaces Server's networkd
+
+## Panel and launcher
+python3-gi                  # Tinybar is written in Python with GTK
+gir1.2-gtk-4.0              # GTK 4 for Tinybar
+gir1.2-gtk4layershell-1.0   # lets Tinybar sit at the screen edge
+qalc                        # the calculator in the launcher
+
+## Files and preview
+pcmanfm             # the file manager (elachisto later builds it with Space preview)
+gvfs                # trash, mounting and other file-manager features
+gvfs-backends       # network shares and phones in the file manager
+desktop-file-utils  # keeps the application menu up to date
+fd-find             # fast file search in the launcher
+zenity              # simple file-open and question dialogs
+
+## Screenshots and clipboard
+grim                # screenshots
+slurp               # choosing a region for a screenshot
+wl-clipboard        # copy and paste from the command line
+wtype               # sends keystrokes for some keyboard shortcuts
+
+## Sound
+pipewire            # the sound server
+pipewire-pulse      # sound for apps that expect PulseAudio
+pipewire-alsa       # sound for apps that use ALSA directly
+wireplumber         # chooses and connects sound devices
+rtkit               # glitch-free sound scheduling
+
+## Login keyring and fonts
+gnome-keyring           # stores passwords and keys for apps
+libpam-gnome-keyring    # unlocks the keyring when you log in
+fonts-open-sans         # the interface font

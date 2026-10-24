@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# elachisto installer. Run as your normal user on Ubuntu Server 26.04 (x86_64).
+#
+#   ./install                 show the plan, ask about optional parts, then install
+#   ./install --plan          show the plan and stop; changes nothing
+#   ./install --yes [--with=papers,printing,laptop]
+#                             no questions; optional parts only when named
+#
+# Safe to run again: every step checks first and only changes what is missing.
+set -euo pipefail
+
+ELACHISTO_ROOT=$(cd "$(dirname "$0")" && pwd)
+export ELACHISTO_ROOT
+# shellcheck source=lib/install/common.sh
+. "$ELACHISTO_ROOT/lib/install/common.sh"
+
+ASSUME_YES=0
+PLAN_ONLY=0
+WITH=()
+for arg in "$@"; do
+  case $arg in
+    --yes|-y) ASSUME_YES=1 ;;
+    --plan) PLAN_ONLY=1 ;;
+    --with=*) IFS=, read -ra extra <<< "${arg#--with=}"; WITH+=("${extra[@]}") ;;
+    -h|--help) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) die "unknown option: $arg (see ./install --help)" ;;
+  esac
+done
+export ASSUME_YES PLAN_ONLY
+
+for step in "$ELACHISTO_ROOT"/lib/install/[0-9][0-9]-*.sh; do
+  # shellcheck source=/dev/null
+  . "$step"
+done
+
+step_preflight
+step_plan "${WITH[@]}"
+((PLAN_ONLY)) && exit 0
+sudo_keepalive
+step_packages
+step_network
+step_session
+summary

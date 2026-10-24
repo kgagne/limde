@@ -1,0 +1,2 @@
+# Laptop extras: screen brightness keys.
+brightnessctl       # changes screen brightness without root

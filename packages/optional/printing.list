@@ -1,0 +1,4 @@
+# Printing, including finding network printers automatically.
+cups                # the print system
+avahi-daemon        # finds printers on the local network
+libnss-mdns         # lets the system resolve those printers' names
