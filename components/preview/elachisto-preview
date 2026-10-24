@@ -1,0 +1,624 @@
+#!/usr/bin/python3 -I
+"""Quick-look files in a small window; PCManFM's Space hook runs it.
+
+    elachisto-preview FILE [FILE...]
+
+PDFs show their pages (rendered with pdftoppm, the first one straight away),
+images and SVGs are scaled to fit, text files show their first megabyte in a
+monospace font, and anything else shows its icon, type and size. Images open
+at their own width (narrowed only to fit the screen) and scroll down. Ctrl+scroll
+or +/- zoom around the pointer (PDFs and SVGs re-render sharp), 0 goes back, and
+Z or a double-click toggles the whole page or image in the window. The name floats at the top
+(with "page n of m" for a PDF, the item count for a folder) and fades until the mouse moves or
+the view scrolls. Space or Escape closes the window
+and Enter opens the file in its default application.
+
+Up/Left and Down/Right step to the previous and next item: through the files
+given, or with a single file through its folder in PCManFM's sort order
+(pcmanfm.conf, and libfm's per-folder settings when a folder has its own).
+
+One window at a time: running it again with the same files closes the preview
+(Space pressed again in the file manager), and running it with other files
+shows those instead. Nothing keeps running after the window closes.
+"""
+
+import configparser
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+# GTK's Vulkan renderer would otherwise wake the NVIDIA GPU (docs/PREVIEW.md).
+os.environ.setdefault("VK_DRIVER_FILES", "/usr/share/vulkan/icd.d/intel_icd.json")
+# This desktop runs no accessibility bus; skip GTK's lookup and its warning.
+os.environ.setdefault("GTK_A11Y", "none")
+
+APP_ID = "elachisto.Preview"
+TEXT_LIMIT = 1 << 20
+PDF_PAGES = 50
+PDF_DPI = 110
+PAGE_GAP = 12
+ZOOM_STEP = 1.25
+ZOOM_LIMITS = (0.02, 8.0)
+TEXT_TYPES = ("application/json", "application/xml", "application/javascript",
+              "application/x-shellscript", "application/toml", "application/x-yaml")
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+
+
+def classify(path, content_type):
+    """One of 'pdf', 'svg', 'image', 'text' or 'other' for a file and its MIME type."""
+    if not path.is_file():
+        return "other"
+    if content_type == "application/pdf":
+        return "pdf"
+    if content_type == "image/svg+xml":
+        return "svg"
+    if content_type.startswith("image/"):
+        return "image"
+    if content_type.startswith("text/") or content_type in TEXT_TYPES:
+        return "text"
+    if content_type in ("application/octet-stream", "application/x-zerosize"):
+        # Unknown extension: treat it as text when the start decodes as UTF-8.
+        with open(path, "rb") as f:
+            head = f.read(4096)
+        try:
+            head.decode("utf-8")
+        except UnicodeDecodeError as e:
+            return "text" if e.start > len(head) - 4 else "other"
+        return "text" if b"\0" not in head else "other"
+    return "other"
+
+
+def read_text(path, limit=TEXT_LIMIT):
+    with open(path, "rb") as f:
+        data = f.read(limit + 1)
+    text = data[:limit].decode("utf-8", errors="replace")
+    return text + ("\n\n[… preview stops at 1 MB]" if len(data) > limit else "")
+
+
+def pdf_command(path, out_prefix, first, last, dpi=PDF_DPI):
+    return ["pdftoppm", "-png", "-r", str(dpi), "-f", str(first), "-l", str(last),
+            str(path), str(out_prefix)]
+
+
+def human_size(n):
+    for unit in ("bytes", "KB", "MB", "GB"):
+        if n < 1000 or unit == "GB":
+            return f"{n:,} {unit}" if unit == "bytes" else f"{n:.1f} {unit}"
+        n /= 1000
+
+
+def pdf_page_sizes(pdfinfo_output):
+    """[(width, height)] in points from `pdfinfo -f 1 -l N` output."""
+    sizes = []
+    for line in pdfinfo_output.splitlines():
+        if line.startswith("Page") and " size:" in line:
+            dims = line.split("size:", 1)[1].split("pts")[0].split("x")
+            sizes.append((float(dims[0]), float(dims[1])))
+    return sizes
+
+
+def pdf_page_count(pdfinfo_output):
+    """The document's page count from pdfinfo output, which can exceed the pages shown."""
+    for line in pdfinfo_output.splitlines():
+        if line.startswith("Pages:"):
+            return int(line.split(":", 1)[1])
+    return 0
+
+
+def page_at(tops, value, page_size):
+    """1-based number of the page that holds the middle of the view, given each page's top."""
+    middle = value + page_size / 2
+    return max(sum(1 for top in tops if top <= middle), 1)
+
+
+def zoom_scroll(value, pointer, ratio):
+    """Scroll offset that keeps the content under the pointer still when zooming by ratio."""
+    return max((value + pointer) * ratio - pointer, 0)
+
+
+def fit(width, height, area_width, area_height, share=0.8):
+    """Scale (width, height) down to fit within share of the area; never up."""
+    scale = min(1.0, area_width * share / max(width, 1), area_height * share / max(height, 1))
+    return max(int(width * scale), 1), max(int(height * scale), 1)
+
+
+def read_ini(path):
+    parser = configparser.ConfigParser(interpolation=None, strict=False)
+    parser.optionxform = str
+    try:
+        parser.read(path, encoding="utf-8")
+    except (configparser.Error, UnicodeDecodeError):
+        pass
+    return parser
+
+
+def folder_settings(folder, config=CONFIG):
+    """PCManFM's sort column, flags and hidden-file setting for one folder."""
+    main = read_ini(config / "pcmanfm/default/pcmanfm.conf")
+    sort = main.get("ui", "sort", fallback="name;ascending;")
+    hidden = main.get("ui", "show_hidden", fallback="0")
+    # libfm keeps per-folder choices in groups named by path.
+    own = read_ini(config / "libfm/dir-settings.conf")
+    if own.has_section(str(folder)):
+        sort = own.get(str(folder), "Sort", fallback=sort)
+        hidden = own.get(str(folder), "ShowHidden", fallback=hidden)
+    words = [w for w in sort.split(";") if w]
+    column = words[0] if words else "name"
+    return column, set(words[1:]), hidden.strip().lower() in ("1", "true")
+
+
+def folder_order(path, config=CONFIG, collate=None):
+    """The items of path's folder in the order PCManFM shows them."""
+    folder = path.parent
+    column, flags, show_hidden = folder_settings(folder, config)
+    if collate is None:
+        from gi.repository import GLib
+        collate = lambda s: GLib.utf8_collate_key_for_filename(s, -1)
+    case = "case" in flags
+
+    def name_key(p):
+        return collate(p.name if case else p.name.casefold())
+
+    items = [p for p in folder.iterdir() if show_hidden or not p.name.startswith(".") or p == path]
+
+    def stat(p, field):
+        try:
+            return getattr(p.stat(), field)
+        except OSError:
+            return 0
+
+    if column == "mtime":
+        key = lambda p: (stat(p, "st_mtime"), name_key(p))
+    elif column == "size":
+        key = lambda p: (0 if p.is_dir() else stat(p, "st_size"), name_key(p))
+    elif column == "desc":
+        key = lambda p: ("" if p.is_dir() else p.suffix.lower(), name_key(p))
+    else:
+        key = name_key
+    reverse = "descending" in flags
+    if "mingle" in flags:
+        return sorted(items, key=key, reverse=reverse)
+    dirs = sorted((p for p in items if p.is_dir()), key=key, reverse=reverse)
+    files = sorted((p for p in items if not p.is_dir()), key=key, reverse=reverse)
+    return dirs + files
+
+
+class RenderJob:
+    """pdftoppm processes watched from worker threads; finished pages go to a callback."""
+
+    def __init__(self):
+        self.cancelled = False
+        self.processes = []
+
+    def start(self, command, prefix, first, page_done):
+        import threading
+        process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.processes.append(process)
+        threading.Thread(target=self.watch, args=(process, prefix, first, page_done), daemon=True).start()
+
+    def watch(self, process, prefix, first, page_done):
+        done = 0
+        while not self.cancelled:
+            exited = process.poll() is not None
+            pngs = sorted(prefix.parent.glob("page-*.png"))
+            # A page is complete once the next one exists, or once pdftoppm has exited.
+            for png in (pngs if exited else pngs[:-1])[done:]:
+                page_done(first + done, str(png))
+                done += 1
+            if exited:
+                return
+            time.sleep(0.05)
+
+    def cancel(self):
+        self.cancelled = True
+        for process in self.processes:
+            if process.poll() is None:
+                process.kill()
+
+
+def main(argv):
+    import gi
+    gi.require_version("Gdk", "4.0")
+    gi.require_version("Gtk", "4.0")
+    from gi.repository import Gdk, Gio, GLib, Gtk
+
+    css = Gtk.CssProvider()
+    css.load_from_string("""
+        .elachisto-preview-pill { background-color: @theme_bg_color; color: @theme_fg_color;
+                           border: 1px solid @borders; border-radius: 999px; padding: 4px 14px; }
+        .elachisto-preview-page { background-color: alpha(@theme_fg_color, 0.06); }
+    """)
+    Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css,
+                                              Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+    class Preview(Gtk.Application):
+        def __init__(self):
+            super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.HANDLES_OPEN)
+            self.window = None
+            self.request = None
+            self.items, self.index = [], 0
+            self.zoom, self.zoomable, self.pointer = 1.0, None, (0, 0)
+            self.pdf_cache = {}
+            self.tmp = None
+            self.jobs = []
+            self.pill = None
+            self.pill_timer = 0
+            self.pill_detail = None
+
+        def do_open(self, files, n_files, hint):
+            paths = [Path(f.get_path() or "") for f in files]
+            if self.window and tuple(paths) == self.request:
+                self.close()  # the same files again: toggle off
+                return
+            self.request = tuple(paths)
+            if len(paths) == 1:
+                try:
+                    self.items = folder_order(paths[0])
+                except OSError:
+                    self.items = []
+                if paths[0] not in self.items:
+                    self.items = paths
+                self.index = self.items.index(paths[0])
+            else:
+                self.items, self.index = paths, 0
+            self.show()
+
+        def do_activate(self):
+            if not self.window:
+                self.quit()
+
+        def do_startup(self):
+            Gtk.Application.do_startup(self)
+            # Only one preview runs at a time, so any render folder left now is from one that was killed.
+            for stale in Path(tempfile.gettempdir()).glob("elachisto-preview-*"):
+                shutil.rmtree(stale, ignore_errors=True)
+            from gi.repository import GLibUnix
+            GLibUnix.signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, lambda: self.close() or False)
+
+        def stop_jobs(self):
+            for job in self.jobs:
+                job.cancel()
+            self.jobs = []
+
+        def close(self):
+            self.stop_jobs()
+            if self.window:
+                self.window.destroy()
+                self.window = None
+            if self.tmp:
+                shutil.rmtree(self.tmp, ignore_errors=True)
+            self.quit()
+
+        def area(self):
+            monitor = Gdk.Display.get_default().get_monitors().get_item(0)
+            geometry = monitor.get_geometry()
+            return geometry.width, geometry.height
+
+        def show(self):
+            self.stop_jobs()
+            path = self.items[self.index]
+            # A fresh toplevel lets the compositor place and size it for this file;
+            # the old one stays up until the new one has drawn, so nothing blinks.
+            old = self.window
+            window = self.window = Gtk.ApplicationWindow(application=self, decorated=False)
+            keys = Gtk.EventControllerKey()
+            keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+            keys.connect("key-pressed", self.on_key)
+            window.add_controller(keys)
+            motion = Gtk.EventControllerMotion()
+            motion.connect("motion", self.on_motion)
+            # A window opening under a still pointer gets only an enter, which carries the position.
+            motion.connect("enter", self.on_motion)
+            window.add_controller(motion)
+            wheel = Gtk.EventControllerScroll(flags=Gtk.EventControllerScrollFlags.VERTICAL)
+            wheel.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+            wheel.connect("scroll", self.on_wheel)
+            window.add_controller(wheel)
+            clicks = Gtk.GestureClick()
+            clicks.connect("pressed", lambda g, n, x, y: n == 2 and self.toggle_overview())
+            window.add_controller(clicks)
+            self.zoom, self.zoomable, self.pointer = 1.0, None, (0, 0)
+            window.connect("close-request", lambda w: self.close() or True)
+            window.set_title(path.name)
+            self.pill_detail = None
+            try:
+                content_type = Gio.content_type_guess(str(path), None)[0] if path.is_file() else ""
+                kind = classify(path, Gio.content_type_get_mime_type(content_type) or "")
+                body, size = getattr(self, f"show_{kind}")(path, content_type)
+            except (OSError, subprocess.SubprocessError, GLib.Error) as e:
+                body, size = self.message(path, f"Cannot preview: {e}")
+            if path.is_dir():
+                try:
+                    count = sum(1 for p in path.iterdir() if not p.name.startswith("."))
+                except OSError:
+                    count = None
+                if count is not None:
+                    text = f"{count} item" + ("" if count == 1 else "s")
+                    self.pill_detail = lambda: text
+            overlay = Gtk.Overlay(child=body)
+            pill = Gtk.Label(ellipsize=3, max_width_chars=60)
+            self.pill_label = lambda: pill.set_label(
+                path.name + (f"   {self.pill_detail()}" if self.pill_detail else ""))
+            self.pill_label()
+            pill.add_css_class("elachisto-preview-pill")
+            # Sits one pill height lower than a plain 10 px inset.
+            pill_height = pill.measure(Gtk.Orientation.VERTICAL, -1)[1]
+            self.pill = Gtk.Revealer(child=pill, reveal_child=True, transition_duration=200,
+                                     transition_type=Gtk.RevealerTransitionType.CROSSFADE,
+                                     halign=Gtk.Align.CENTER, valign=Gtk.Align.START,
+                                     margin_top=10 + pill_height, can_target=False)
+            overlay.add_overlay(self.pill)
+            window.set_child(overlay)
+            window.set_default_size(max(size[0], 320), max(size[1], 200))
+            if old:
+                clock_id = [0]
+
+                def drawn(clock):
+                    clock.disconnect(clock_id[0])
+                    old.destroy()
+                window.connect("map", lambda w: clock_id.__setitem__(
+                    0, w.get_frame_clock().connect("after-paint", drawn)))
+            window.present()
+            self.flash_pill()
+
+        def flash_pill(self):
+            """Show the title, then fade it out after a pause without movement."""
+            if not self.pill:
+                return
+            self.pill_label()
+            self.pill.set_reveal_child(True)
+            if self.pill_timer:
+                GLib.source_remove(self.pill_timer)
+            self.pill_timer = GLib.timeout_add(1500, self.hide_pill)
+
+        def hide_pill(self):
+            self.pill_timer = 0
+            if self.pill:
+                self.pill.set_reveal_child(False)
+            return False
+
+        def show_image(self, path, content_type):
+            texture = Gdk.Texture.new_from_filename(str(path))
+            return self.picture(texture.get_width(), texture.get_height(), lambda w, h: texture)
+
+        def show_svg(self, path, content_type):
+            # Vector: rendered at the size shown (small icons a little larger), again after a zoom.
+            from gi.repository import GdkPixbuf
+            info, w, h = GdkPixbuf.Pixbuf.get_file_info(str(path))
+            area_w, area_h = self.area()
+            want = max(w, h, 1)
+            grow = min(max(want, 512), area_w * 0.9, area_h * 0.9) / want
+
+            def render(width, height):
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(path), max(width, 1), max(height, 1), True)
+                return Gdk.MemoryTexture.new(
+                    pixbuf.get_width(), pixbuf.get_height(),
+                    Gdk.MemoryFormat.R8G8B8A8 if pixbuf.get_has_alpha() else Gdk.MemoryFormat.R8G8B8,
+                    pixbuf.read_pixel_bytes(), pixbuf.get_rowstride())
+            return self.picture(max(int(w * grow), 1), max(int(h * grow), 1), render, vector=True)
+
+        def picture(self, width, height, texture_for, vector=False):
+            """Fit to width and scroll down; zoom keys and Ctrl+scroll scale from there."""
+            area_w, area_h = self.area()
+            max_w, max_h = int(area_w * 0.9), int(area_h * 0.9)
+            scale = min(1.0, max_w / max(width, 1))
+            base_w, base_h = max(int(width * scale), 1), max(int(height * scale), 1)
+            picture = Gtk.Picture.new_for_paintable(texture_for(base_w, base_h))
+            picture.set_content_fit(Gtk.ContentFit.FILL)
+            picture.set_can_shrink(False)
+            picture.set_halign(Gtk.Align.CENTER)
+            picture.set_valign(Gtk.Align.CENTER)
+            scroll = self.scrolled(picture)
+            view_w, view_h = min(base_w, max_w), min(base_h, max_h)
+
+            def resize(zoom, sharpen):
+                picture.set_size_request(max(int(base_w * zoom), 1), max(int(base_h * zoom), 1))
+                if sharpen and vector:
+                    picture.set_paintable(texture_for(int(base_w * zoom), int(base_h * zoom)))
+            resize(1.0, False)
+            # Z: the whole image if it scrolls, else actual pixels if it was narrowed, else twice the size.
+            whole = min(1.0, view_h / base_h, view_w / base_w)
+            alternate = whole if whole < 1.0 else (1 / scale if scale < 1.0 else 2.0)
+            self.zoomable = {"scroll": scroll, "resize": resize, "alternate": alternate}
+            return scroll, (view_w, view_h)
+
+        def show_text(self, path, content_type):
+            view = Gtk.TextView(editable=False, monospace=True, cursor_visible=False,
+                                left_margin=12, right_margin=12, top_margin=40, bottom_margin=8)
+            view.get_buffer().set_text(read_text(path))
+            return self.scrolled(view), (900, 700)
+
+        def show_pdf(self, path, content_type):
+            # Sizes come from pdfinfo at once, so the window and every page frame appear before
+            # anything is rendered, and pages fill in without re-flowing.
+            info = subprocess.run(["pdfinfo", "-f", "1", "-l", str(PDF_PAGES), str(path)],
+                                  capture_output=True, text=True, timeout=10, check=True).stdout
+            sizes = pdf_page_sizes(info)
+            if not sizes:
+                raise OSError("no pages")
+            count = max(pdf_page_count(info), len(sizes))
+            area_w, area_h = self.area()
+            dots = PDF_DPI / 72
+            base_w, first_h = fit(sizes[0][0] * dots, sizes[0][1] * dots, area_w, area_h)
+            pages = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=PAGE_GAP, margin_top=PAGE_GAP,
+                            margin_bottom=PAGE_GAP, margin_start=PAGE_GAP, margin_end=PAGE_GAP)
+            frames = []
+            for w, h in sizes:
+                frame = Gtk.Picture(can_shrink=True, content_fit=Gtk.ContentFit.FILL, halign=Gtk.Align.CENTER)
+                frame.add_css_class("elachisto-preview-page")
+                frame.ratio = h / w
+                pages.append(frame)
+                frames.append(frame)
+            scroll = self.scrolled(pages)
+            state = {"width": 0, "timer": 0}
+
+            def page():
+                tops, top = [], PAGE_GAP
+                for frame in frames:
+                    tops.append(top)
+                    top += frame.get_size_request()[1] + PAGE_GAP
+                vadj = scroll.get_vadjustment()
+                return f"page {page_at(tops, vadj.get_value(), vadj.get_page_size())} of {count}"
+            self.pill_detail = page
+
+            def resize(zoom, sharpen):
+                width = max(int(base_w * zoom), 1)
+                for frame in frames:
+                    frame.set_size_request(width, round(width * frame.ratio))
+                if sharpen and width != state["width"]:
+                    state["width"] = width
+                    self.render_pages(path, frames, width)
+            resize(1.0, True)
+            # Z: 100%, a point at 96 dpi as in Papers; double that if the page already fits at 100%.
+            actual = sizes[0][0] * 96 / 72 / base_w
+            self.zoomable = {"scroll": scroll, "resize": resize, "alternate": actual if actual > 1.2 else 2.0}
+            return scroll, (base_w + 2 * PAGE_GAP, first_h + 2 * PAGE_GAP)
+
+        def render_pages(self, path, frames, width):
+            """Render at the shown width: page 1 on its own so it appears first, the rest in a
+            parallel pdftoppm pass whose pages appear as soon as each is written."""
+            self.stop_jobs()
+            key = (str(path), path.stat().st_mtime_ns, width)
+            cached = self.pdf_cache.get(key)
+            if cached and len(cached) == len(frames):
+                for frame, png in zip(frames, cached):
+                    frame.set_paintable(Gdk.Texture.new_from_filename(png))
+                return
+            if not self.tmp or not Path(self.tmp).is_dir():
+                self.tmp = tempfile.mkdtemp(prefix="elachisto-preview-")
+            scale = self.window.get_scale_factor() if self.window else 1
+            results = [None] * len(frames)
+            job = RenderJob()
+            self.jobs.append(job)
+
+            def store(index, png):
+                # Runs on the GTK thread.
+                if job.cancelled:
+                    return False
+                frames[index].set_paintable(Gdk.Texture.new_from_filename(png))
+                results[index] = png
+                if all(results):
+                    self.pdf_cache[key] = list(results)
+                return False
+
+            ranges = [(0, 1)] + ([(1, len(frames))] if len(frames) > 1 else [])
+            for first, last in ranges:
+                prefix = Path(tempfile.mkdtemp(dir=self.tmp)) / "page"
+                command = ["pdftoppm", "-png", "-scale-to-x", str(width * scale), "-scale-to-y", "-1",
+                           "-f", str(first + 1), "-l", str(last), str(path), str(prefix)]
+                job.start(command, prefix, first, lambda i, png: GLib.idle_add(store, i, png))
+
+        def set_zoom(self, zoom, anchor=None):
+            view = self.zoomable
+            if not view:
+                return
+            zoom = min(max(zoom, ZOOM_LIMITS[0]), ZOOM_LIMITS[1])
+            ratio = zoom / self.zoom
+            if ratio == 1:
+                return
+            self.zoom = zoom
+            hadj, vadj = view["scroll"].get_hadjustment(), view["scroll"].get_vadjustment()
+            px, py = anchor if anchor else (hadj.get_page_size() / 2, vadj.get_page_size() / 2)
+            targets = zoom_scroll(hadj.get_value(), px, ratio), zoom_scroll(vadj.get_value(), py, ratio)
+            view["resize"](zoom, False)
+
+            def settle():
+                # Apply the scroll once the new size is laid out.
+                hadj.set_value(targets[0])
+                vadj.set_value(targets[1])
+                return False
+            GLib.idle_add(settle)
+            if view.get("timer"):
+                GLib.source_remove(view["timer"])
+            view["timer"] = GLib.timeout_add(250, lambda: (view.update(timer=0), view["resize"](self.zoom, True), False)[2])
+            self.flash_pill()
+
+        def toggle_overview(self):
+            if self.zoomable:
+                self.set_zoom(1.0 if self.zoom != 1.0 else self.zoomable["alternate"])
+
+        def on_motion(self, controller, x, y):
+            # GTK repeats the last position after a relayout (the pill fading out is one), which
+            # would bring the pill straight back; only a real move should.
+            if (x, y) == self.pointer:
+                return
+            self.pointer = (x, y)
+            self.flash_pill()
+
+        def on_wheel(self, controller, dx, dy):
+            if controller.get_current_event_state() & Gdk.ModifierType.CONTROL_MASK:
+                self.set_zoom(self.zoom * (ZOOM_STEP if dy < 0 else 1 / ZOOM_STEP), self.pointer)
+                return True
+            return False
+
+        def show_other(self, path, content_type):
+            return self.message(path, None, content_type)
+
+        def message(self, path, text, content_type=""):
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, valign=Gtk.Align.CENTER,
+                          margin_top=40, margin_bottom=24, margin_start=24, margin_end=24)
+            if path.is_dir():
+                box.append(Gtk.Image(icon_name="folder", pixel_size=96))
+            elif content_type:
+                box.append(Gtk.Image(gicon=Gio.content_type_get_icon(content_type), pixel_size=96))
+            else:
+                box.append(Gtk.Image(icon_name="text-x-generic", pixel_size=96))
+            if text is None:
+                if path.is_dir():
+                    text = "Folder"
+                else:
+                    text = f"{Gio.content_type_get_description(content_type) if content_type else ''}\n{human_size(path.stat().st_size)}"
+            box.append(Gtk.Label(label=text.strip(), justify=Gtk.Justification.CENTER, wrap=True))
+            return box, (420, 300)
+
+        def scrolled(self, child):
+            scroll = Gtk.ScrolledWindow(vexpand=True, hexpand=True)
+            scroll.set_child(child)
+            for adjustment in (scroll.get_vadjustment(), scroll.get_hadjustment()):
+                adjustment.connect("value-changed", lambda *a: self.flash_pill())
+            return scroll
+
+        def step(self, delta):
+            index = self.index + delta
+            if 0 <= index < len(self.items):
+                self.index = index
+                self.show()
+
+        def on_key(self, controller, keyval, keycode, state):
+            if state & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.ALT_MASK):
+                return False
+            if keyval in (Gdk.KEY_space, Gdk.KEY_Escape):
+                self.close()
+            elif keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+                uri = Gio.File.new_for_path(str(self.items[self.index])).get_uri()
+                Gio.AppInfo.launch_default_for_uri(uri, None)
+                self.close()
+            elif keyval in (Gdk.KEY_Up, Gdk.KEY_Left):
+                self.step(-1)
+            elif keyval in (Gdk.KEY_Down, Gdk.KEY_Right):
+                self.step(1)
+            elif keyval in (Gdk.KEY_z, Gdk.KEY_Z):
+                self.toggle_overview()
+            elif keyval in (Gdk.KEY_plus, Gdk.KEY_equal, Gdk.KEY_KP_Add):
+                self.set_zoom(self.zoom * ZOOM_STEP)
+            elif keyval in (Gdk.KEY_minus, Gdk.KEY_KP_Subtract):
+                self.set_zoom(self.zoom / ZOOM_STEP)
+            elif keyval in (Gdk.KEY_0, Gdk.KEY_KP_0):
+                self.set_zoom(1.0)
+            else:
+                return False
+            return True
+
+    if not argv:
+        print(__doc__.strip().split("\n\n")[1], file=sys.stderr)
+        return 2
+    return Preview().run([sys.argv[0], *argv])
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

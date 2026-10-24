@@ -1,0 +1,52 @@
+#!/bin/sh
+# Capture the screen with grim/slurp and put the result on the Wayland clipboard.
+#   region  drag a rectangle; save a PNG and copy it
+#   screen  every output; save a PNG and copy it
+#   clip    drag a rectangle; copy only, nothing is written to disk
+# Escape or a click-away in the selector cancels quietly.
+
+set -eu
+
+GRIM="${ELACHISTO_SCREENSHOT_GRIM:-/usr/bin/grim}"
+SLURP="${ELACHISTO_SCREENSHOT_SLURP:-/usr/bin/slurp}"
+WLCOPY="${ELACHISTO_SCREENSHOT_WLCOPY:-/usr/bin/wl-copy}"
+DIR="${ELACHISTO_SCREENSHOT_DIR:-$HOME/Pictures/Screenshots}"
+
+notify() {
+    # Best effort through whatever owns org.freedesktop.Notifications (Mako).
+    [ -z "${ELACHISTO_SCREENSHOT_NO_NOTIFY:-}" ] || return 0
+    gdbus call --session --dest org.freedesktop.Notifications \
+        --object-path /org/freedesktop/Notifications \
+        --method org.freedesktop.Notifications.Notify \
+        elachisto-screenshot 0 '' "$1" "$2" '[]' '{}' 3000 >/dev/null 2>&1 || true
+}
+
+mode="${1:-}"
+stamp=$(date +%Y%m%d-%H%M%S)
+
+case "$mode" in
+    region)
+        geometry=$("$SLURP" 2>/dev/null) || exit 0
+        mkdir -p "$DIR"
+        file="$DIR/screenshot-$stamp.png"
+        "$GRIM" -g "$geometry" "$file"
+        "$WLCOPY" --type image/png < "$file"
+        notify "Screenshot saved" "$file"
+        ;;
+    screen)
+        mkdir -p "$DIR"
+        file="$DIR/screenshot-$stamp.png"
+        "$GRIM" "$file"
+        "$WLCOPY" --type image/png < "$file"
+        notify "Screenshot saved" "$file"
+        ;;
+    clip)
+        geometry=$("$SLURP" 2>/dev/null) || exit 0
+        "$GRIM" -g "$geometry" - | "$WLCOPY" --type image/png
+        notify "Screenshot copied" "Clipboard only; nothing saved"
+        ;;
+    *)
+        echo "usage: elachisto-screenshot region|screen|clip" >&2
+        exit 2
+        ;;
+esac

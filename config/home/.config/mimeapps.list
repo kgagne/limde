@@ -1,0 +1,15 @@
+[Default Applications]
+x-scheme-handler/http=firefox.desktop
+x-scheme-handler/https=firefox.desktop
+text/html=firefox.desktop
+application/xhtml+xml=firefox.desktop
+inode/directory=pcmanfm.desktop
+application/pdf=org.gnome.Papers.desktop
+image/vnd.djvu=org.gnome.Papers.desktop
+image/tiff=org.gnome.Papers.desktop
+
+[Added Associations]
+x-scheme-handler/http=firefox.desktop;
+x-scheme-handler/https=firefox.desktop;
+text/html=firefox.desktop;
+application/xhtml+xml=firefox.desktop;

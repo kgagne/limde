@@ -11,7 +11,7 @@ profile_block() {
 # Start the desktop on tty1. Managed by elachisto's installer; edit outside this block.
 if [ -z "${WAYLAND_DISPLAY:-}" ] && [ "$(tty)" = /dev/tty1 ] && command -v labwc >/dev/null; then
   mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/elachisto"
-  exec labwc >"${XDG_STATE_HOME:-$HOME/.local/state}/elachisto/labwc.log" 2>&1
+  exec labwc --merge-config >"${XDG_STATE_HOME:-$HOME/.local/state}/elachisto/labwc.log" 2>&1
 fi
 # <<< elachisto session <<<
 EOF

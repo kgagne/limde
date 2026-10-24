@@ -55,7 +55,7 @@ echo "== reboot"
 on_vm 'sudo systemctl reboot' >/dev/null 2>&1 || true
 sleep 5
 for _ in $(seq 60); do on_vm true 2>/dev/null && break; sleep 2; done
-sleep 10   # let autologin start the session
+sleep 25   # let autologin start the session and its autostart pieces
 check "labwc runs after reboot" on_vm 'pgrep -x labwc'
 check "running labwc is the elachisto build" on_vm 'pid=$(pgrep -x labwc) && [ "$(readlink /proc/$pid/exe)" = /usr/local/bin/labwc ] && grep -qx "$(. elachisto/pins/labwc; echo "$LABWC_COMMIT $WLROOTS_COMMIT")" /usr/local/share/elachisto/labwc.commit'
 check "labwc runs on tty1" on_vm 'pid=$(pgrep -x labwc) && tty=$(ps -o tty= -p $pid) && [ "$tty" = tty1 ]'
@@ -71,6 +71,11 @@ check "firefox has all its libraries" on_vm 'test -x ~/.local/opt/firefox/firefo
 check "firefox AppArmor profile loaded" on_vm 'sudo aa-status 2>/dev/null | grep -qx "   elachisto-firefox"'
 check "firefox renders a page headless" on_vm 'rm -f /tmp/ff.png; timeout 90 ~/.local/opt/firefox/firefox --headless --screenshot /tmp/ff.png "data:text/html,<h1>elachisto</h1>" >/tmp/ff.log 2>&1; test -s /tmp/ff.png'
 check "icon theme installed and resolves names" on_vm 'test -L /usr/local/share/icons/elachisto/scalable/user-home.svg && test -f /usr/local/share/icons/elachisto/symbolic/folder-symbolic.svg && test -f /usr/local/share/icons/elachisto/index.theme'
+check "labwc merges config" on_vm 'tr "\0" " " < /proc/$(pgrep -x labwc)/cmdline | grep -q -- --merge-config'
+for proc in tinybar.py mako swayidle elephant 'walker --gapplication-service'; do
+  check "session runs $proc" on_vm "pgrep -f '$proc' >/dev/null"
+done
+check "appearance rendered" on_vm 'test -f ~/.config/tinybar/style.css && elachisto-appearance --check'
 check "no failed units" on_vm '[ -z "$(systemctl --failed --no-legend)" ]'
 on_vm 'systemctl --failed --no-legend; cat ~/.local/state/elachisto/labwc.log' >"$out/after-reboot.log" 2>&1 || true
 "$vm" shot "$name" "$out/screen.png" >/dev/null || fail "screenshot"

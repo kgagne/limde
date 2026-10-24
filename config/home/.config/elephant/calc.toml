@@ -1,0 +1,8 @@
+# Native Elephant calculator; run only for queries containing a number.
+require_number = true
+min_chars = 3
+async = true
+autosave = false
+max_items = 100
+# Pass the result through stdin, preserving quotes and special characters.
+command = "wl-copy -n"

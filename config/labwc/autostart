@@ -1,0 +1,16 @@
+# elachisto session start, installed to /etc/xdg/labwc/autostart.
+# Runs every piece in /usr/local/share/elachisto/autostart.d, then your own in
+# ~/.config/elachisto/autostart.d. A file of yours with the same name as one of
+# elachisto's replaces it; an empty one turns that piece off.
+system=/usr/local/share/elachisto/autostart.d
+mine="$HOME/.config/elachisto/autostart.d"
+mkdir -p "$HOME/.local/state/elachisto"
+for piece in "$system"/*.sh; do
+    [ -e "$piece" ] || continue
+    name=${piece##*/}
+    [ -e "$mine/$name" ] && continue
+    . "$piece"
+done
+for piece in "$mine"/*.sh; do
+    [ -e "$piece" ] && . "$piece"
+done

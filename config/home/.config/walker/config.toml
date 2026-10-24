@@ -1,0 +1,18 @@
+# Appearance comes from elachisto-appearance (theme "elachisto").
+theme = "elachisto"
+
+# Apps and files are searchable directly with Super+Space.
+[providers]
+default = ["desktopapplications", "files", "calc", "providerlist"]
+empty = ["desktopapplications"]
+# Avoid starting file-preview work while browsing results.
+ignore_preview = ["files"]
+max_results = 50
+
+[placeholders]
+default = { input = "Search apps, files and calculations (= calculator, / files)", list = "No results" }
+files = { input = "Search files (Ctrl+R refreshes index)", list = "No files found. Ctrl+R refreshes the index." }
+
+[keybinds]
+# Reserve Ctrl+R for the files provider's refresh action.
+resume_last_query = []

@@ -1,0 +1,20 @@
+# Search filenames and paths in home and readable system configuration.
+search_dirs = ["@HOME@", "/etc"]
+
+# No background file watching. Refresh manually with Ctrl+R in file search.
+watch = false
+watch_dirs = []
+
+# Include dotfiles such as .config/labwc/rc.xml; prune costly trees before indexing.
+# Respect .gitignore so ignored build products do not fill the search index.
+fd_flags = [
+  "--hidden", "--type", "file", "--type", "directory", "--type", "symlink",
+  "--color", "never", "--threads", "2",
+  "--exclude", ".git", "--exclude", ".cache",
+  "--exclude", ".ssh", "--exclude", ".nv", "--exclude", "node_modules",
+  "--exclude", ".venv", "--exclude", "venv", "--exclude", "__pycache__",
+  "--exclude", "build", "--exclude", "target",
+  "--exclude", ".local/opt", "--exclude", ".local/share", "--exclude", ".local/state",
+  "--exclude", ".config/mozilla",
+  "--exclude", ".config/elephant/providers",
+]
