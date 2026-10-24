@@ -1,0 +1,7 @@
+# Firefox comes from Mozilla, not Ubuntu (Ubuntu's is a snap). The installer fetches the
+# current release once; after that Firefox's own updater keeps it current.
+# Downloads are trusted only if Mozilla's release key matches this primary fingerprint
+# and its signature on SHA256SUMS verifies (the key's signing subkeys rotate over time).
+MOZILLA_RELEASE_KEY_FPR=14F26682D0916CDD81E37B6D61B7B526D98F0353
+FIREFOX_VERSIONS_URL=https://product-details.mozilla.org/1.0/firefox_versions.json
+FIREFOX_RELEASES_URL=https://archive.mozilla.org/pub/firefox/releases

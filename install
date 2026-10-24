@@ -42,5 +42,6 @@ step_network
 step_labwc
 step_pcmanfm
 step_launcher
+step_firefox
 step_session
 summary

@@ -25,6 +25,11 @@ desktop-file-utils  # keeps the application menu up to date
 fd-find             # fast file search in the launcher
 zenity              # simple file-open and question dialogs
 
+## Firefox (Mozilla's build; needed by agent-web)
+libgtk-3-0t64       # GTK 3, which Firefox uses
+libasound2t64       # sound in Firefox
+libx11-xcb1         # Firefox's X11 compatibility
+
 ## Screenshots and clipboard
 grim                # screenshots
 slurp               # choosing a region for a screenshot

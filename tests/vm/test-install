@@ -67,6 +67,9 @@ check "PCManFM appears once in the app menu" on_vm '[ "$(ls /usr/share/applicati
 check "walker and elephant have all their libraries" on_vm 'for f in /usr/local/bin/walker /usr/local/bin/elephant /usr/local/lib/elephant/{calc,desktopapplications,files,providerlist}.so; do [ -f "$f" ] || exit 1; done; ! ldd /usr/local/bin/walker /usr/local/bin/elephant /usr/local/lib/elephant/*.so 2>&1 | grep -q "not found"'
 check "walker runs" on_vm '/usr/local/bin/walker --version'
 check "elephant loads all four providers" on_vm 'out=$(timeout 20 /usr/local/bin/elephant listproviders 2>&1); for p in calc desktopapplications files providerlist; do echo "$out" | grep -qi "$p" || exit 1; done'
+check "firefox has all its libraries" on_vm 'test -x ~/.local/opt/firefox/firefox && ! LD_LIBRARY_PATH=$HOME/.local/opt/firefox ldd ~/.local/opt/firefox/libxul.so ~/.local/opt/firefox/firefox-bin | grep -q "not found"'
+check "firefox AppArmor profile loaded" on_vm 'sudo aa-status 2>/dev/null | grep -qx "   elachisto-firefox"'
+check "firefox renders a page headless" on_vm 'rm -f /tmp/ff.png; timeout 90 ~/.local/opt/firefox/firefox --headless --screenshot /tmp/ff.png "data:text/html,<h1>elachisto</h1>" >/tmp/ff.log 2>&1; test -s /tmp/ff.png'
 check "no failed units" on_vm '[ -z "$(systemctl --failed --no-legend)" ]'
 on_vm 'systemctl --failed --no-legend; cat ~/.local/state/elachisto/labwc.log' >"$out/after-reboot.log" 2>&1 || true
 "$vm" shot "$name" "$out/screen.png" >/dev/null || fail "screenshot"
