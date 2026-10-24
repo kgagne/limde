@@ -13,6 +13,14 @@ KVM access and `qemu-system-x86 qemu-utils ovmf`, and never needs root. Run
 - `vm shot NAME FILE.png` captures the guest screen through QMP (`qmp.py`). It works
   for the text console and for labwc.
 
+- `vm view NAME` opens the VM's screen in a window through QEMU's built-in VNC server,
+  which listens on the loopback interface only (`127.0.0.1`, display 10 and up). Nothing
+  is installed in the guest. The viewer is `gvncviewer` on the host.
+- `vm du` shows the space used. `vm clean` deletes every VM and the base image but keeps
+  the ISO; `vm clean --all` also deletes the ISO. Everything needed to rebuild (ISO URL and
+  checksum, install answers, scripts) is in this folder, so `vm base` brings it all back
+  in about 10 minutes.
+
 The base image is for testing only: user `tester` (password `tester`, key login only
 over SSH), passwordless sudo and autologin on tty1. elachisto never sets these up.
 
