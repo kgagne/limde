@@ -19,4 +19,5 @@ Every icon in `src/` follows these, so the set reads as one family:
 
 ## Status
 
-Style samples (10 icons, 2026-10-24), awaiting review before the rest of the set is drawn.
+- Tier 1, the panel set (75 icons): drawn 2026-10-24 by `draw_tier1.py`; Keith approved the style from 10 samples.
+- Tier 2 (freedesktop names), tier 3 (text editing), tier 4 (brands): to do.
