@@ -70,7 +70,7 @@ check "elephant loads all four providers" on_vm 'out=$(timeout 20 /usr/local/bin
 check "firefox has all its libraries" on_vm 'test -x ~/.local/opt/firefox/firefox && ! LD_LIBRARY_PATH=$HOME/.local/opt/firefox ldd ~/.local/opt/firefox/libxul.so ~/.local/opt/firefox/firefox-bin | grep -q "not found"'
 check "firefox AppArmor profile loaded" on_vm 'sudo aa-status 2>/dev/null | grep -qx "   elachisto-firefox"'
 check "firefox renders a page headless" on_vm 'rm -f /tmp/ff.png; timeout 90 ~/.local/opt/firefox/firefox --headless --screenshot /tmp/ff.png "data:text/html,<h1>elachisto</h1>" >/tmp/ff.log 2>&1; test -s /tmp/ff.png'
-check "icon theme installed and resolves names" on_vm 'test -L /usr/local/share/icons/elachisto/scalable/user-home.svg && test -f /usr/local/share/icons/elachisto/symbolic/folder-symbolic.svg && test -f /usr/local/share/icons/elachisto/index.theme'
+check "icon theme installed and resolves names" on_vm 'test -L /usr/local/share/icons/elachisto/24x24/icons/user-home.svg && test -f /usr/local/share/icons/elachisto/symbolic/icons/folder-symbolic.svg && test -f /usr/local/share/icons/elachisto/index.theme'
 check "labwc merges config" on_vm 'tr "\0" " " < /proc/$(pgrep -x labwc)/cmdline | grep -q -- --merge-config'
 for proc in tinybar.py mako swayidle elephant 'walker --gapplication-service'; do
   check "session runs $proc" on_vm "pgrep -f '$proc' >/dev/null"

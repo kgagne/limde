@@ -13,7 +13,7 @@ margin=10
 max-icon-size=24
 icon-border-radius=${shape_control_radius}
 # Mako does not read icon-theme inheritance; list the fallback explicitly.
-icon-path=/usr/local/share/icons/${icons_theme}/scalable:/usr/share/icons/Adwaita
+icon-path=/usr/local/share/icons/${icons_theme}:/usr/share/icons/Adwaita
 # Banners retire themselves the way a phone's do. Mako's own default is 0,
 # which never expires; that is why notifications used to pile up unbounded.
 default-timeout=6000

@@ -4,8 +4,8 @@
 usage: build_theme.py OUTPUT_DIR [--color '#eeeeee']
 
 Writes OUTPUT_DIR/elachisto/ with:
-  symbolic/NAME-symbolic.svg  for every icon and alias. GTK recolours these itself.
-  scalable/NAME.svg           the same shapes with --color baked in, for programs that
+  symbolic/icons/NAME-symbolic.svg  for every icon and alias. GTK recolours these itself.
+  24x24/icons/NAME.svg              the same shapes with --color baked in, for programs that
                               do not recolour (and for app icons in launchers and panels).
 Aliases (aliases.toml) and brand names (brands.toml) are relative symlinks to the drawn
 files. The theme inherits Adwaita and hicolor, so anything elachisto does not draw falls
@@ -25,16 +25,16 @@ INDEX = """[Icon Theme]
 Name=elachisto
 Comment=elachisto's own line icons and brand icons
 Inherits=Adwaita,hicolor
-Directories=symbolic,scalable
+Directories=symbolic/icons,24x24/icons
 
-[symbolic]
+[symbolic/icons]
 Context=Actions
 Size=16
 MinSize=8
 MaxSize=512
 Type=Scalable
 
-[scalable]
+[24x24/icons]
 Context=Applications
 Size=48
 MinSize=8
@@ -46,16 +46,19 @@ Type=Scalable
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('output')
-    ap.add_argument('--color', default='#888888', help='colour baked into the scalable/ copies')
+    ap.add_argument('--color', default='#888888', help='colour baked into the plain (24x24/) copies')
     args = ap.parse_args()
     if not HEX.match(args.color):
         ap.error('--color must look like #rrggbb')
 
     theme = Path(args.output) / 'elachisto'
     shutil.rmtree(theme, ignore_errors=True)
-    sym, sca = theme / 'symbolic', theme / 'scalable'
+    # A category level below each size folder, and the plain icons under a size-named
+    # folder: Mako only finds icons in <size>/<category>/ ("scalable" is skipped). The
+    # folder is still declared Scalable, so GTK draws the SVGs at any size.
+    sym, sca = theme / 'symbolic' / 'icons', theme / '24x24' / 'icons'
     sym.mkdir(parents=True)
-    sca.mkdir()
+    sca.mkdir(parents=True)
     (theme / 'index.theme').write_text(INDEX)
 
     drawn = {}  # icon name -> outlined file
