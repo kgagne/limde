@@ -7,83 +7,8 @@ stay identical apart from what distinguishes them. Re-running it overwrites tier
 Style rules: README.md.
 """
 import math
-from pathlib import Path
 
-SRC = Path(__file__).resolve().parent / 'src'
-HEAD = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" '
-        'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">\n')
-
-
-def n(v):
-    return f'{v:.2f}'.rstrip('0').rstrip('.')
-
-
-def f(*values):
-    return ' '.join(n(v) for v in values)
-
-
-def write(name, *elements):
-    (SRC / f'{name}.svg').write_text(HEAD + '\n'.join(elements) + '\n</svg>\n')
-
-
-def path(d):
-    return f'<path d="{d}"/>'
-
-
-def dot(x, y, r=1.1):
-    return f'<circle cx="{n(x)}" cy="{n(y)}" r="{n(r)}" fill="currentColor" stroke="none"/>'
-
-
-def circle(x, y, r):
-    return f'<circle cx="{n(x)}" cy="{n(y)}" r="{n(r)}"/>'
-
-
-def rect(x, y, w, h, rx=2.25, filled=False):
-    extra = ' fill="currentColor" stroke="none"' if filled else ''
-    return f'<rect x="{n(x)}" y="{n(y)}" width="{n(w)}" height="{n(h)}" rx="{n(rx)}"{extra}/>'
-
-
-def polar(cx, cy, r, degrees):
-    a = math.radians(degrees)
-    return cx + r * math.cos(a), cy + r * math.sin(a)
-
-
-def gear(cx, cy, ro, ri, hole, teeth=8, half=0.16, root=0.29):
-    """Gear outline with evenly spaced flat-topped teeth, plus its centre hole."""
-    pts = []
-    for i in range(teeth):
-        a = 2 * math.pi * i / teeth - math.pi / 2
-        for da, r in ((-root, ri), (-half, ro), (half, ro), (root, ri)):
-            pts.append((cx + r * math.cos(a + da), cy + r * math.sin(a + da)))
-    return path('M' + ' L'.join(f(x, y) for x, y in pts) + 'Z'), circle(cx, cy, hole)
-
-
-def arc_arrow(cx, cy, r, start, end, head=4.75):
-    """Arc from angle `start` to `end` (degrees, screen orientation), arrowhead at the end."""
-    sweep = 1 if end > start else 0
-    large = 1 if abs(end - start) > 180 else 0
-    x0, y0 = polar(cx, cy, r, start)
-    x1, y1 = polar(cx, cy, r, end)
-    # Direction of travel at the end point.
-    a = math.radians(end)
-    tx, ty = (-math.sin(a), math.cos(a)) if sweep else (math.sin(a), -math.cos(a))
-    heads = []
-    for turn in (140, -140):
-        t = math.radians(turn)
-        hx = tx * math.cos(t) - ty * math.sin(t)
-        hy = tx * math.sin(t) + ty * math.cos(t)
-        heads.append((x1 + head * hx, y1 + head * hy))
-    return (path(f'M{f(x0, y0)}A{f(r, r)} 0 {large} {sweep} {f(x1, y1)}'),
-            path(f'M{f(*heads[0])}L{f(x1, y1)}L{f(*heads[1])}'))
-
-
-def straight_arrow(name, angle):
-    """Arrow pointing at `angle` degrees (0 = right, 90 = down), centred."""
-    tip = polar(12, 12, 8, angle)
-    tail = polar(12, 12, 8, angle + 180)
-    wings = [polar(*tip, 6.5, angle + 180 + s) for s in (45, -45)]
-    write(name, path(f'M{f(*tail)}L{f(*tip)}'),
-          path(f'M{f(*wings[0])}L{f(*tip)}L{f(*wings[1])}'))
+from _draw import (FILE, FOLDER, SRC, arc_arrow, circle, dot, f, gear, n, path, polar, rect, straight_arrow, write)
 
 
 # --- arrows -------------------------------------------------------------------------
@@ -143,9 +68,6 @@ write('sun', *sun(False, 6.5, 9))
 write('sun-bright', *sun(True, 6.5, 10))
 
 # --- files --------------------------------------------------------------------------
-FILE = [path('M14.5 2H6a1.75 1.75 0 0 0-1.75 1.75v16.5A1.75 1.75 0 0 0 6 22h12'
-             'a1.75 1.75 0 0 0 1.75-1.75V7.25z'),
-        path('M14.5 2v4.25a1 1 0 0 0 1 1h4.25')]
 write('file', *FILE)
 write('file-lines', *FILE, path('M8 12h8M8 15h8M8 18h5'))
 write('file-code', *FILE, path('M10.25 12.5L7.75 15l2.5 2.5M13.75 12.5l2.5 2.5-2.5 2.5'))
@@ -158,8 +80,6 @@ write('file-zipper', *FILE, path('M10.5 3.5h1.5M12 5.5h1.5M10.5 7.5h1.5M12 9.5h1
       rect(10.25, 11.5, 3.5, 4.5, 1))
 
 # --- folders ------------------------------------------------------------------------
-FOLDER = path('M1.75 6A1.75 1.75 0 0 1 3.5 4.25h5.25l2.25 2.25h9.5a1.75 1.75 0 0 1 1.75 1.75v10'
-              'a1.75 1.75 0 0 1-1.75 1.75h-17a1.75 1.75 0 0 1-1.75-1.75z')
 write('folder', FOLDER)
 write('folder-plus', FOLDER, path('M12 10.5v6M9 13.5h6'))
 write('folder-arrow-down', FOLDER, path('M12 10v6.25M9.25 13.5L12 16.25l2.75-2.75'))
