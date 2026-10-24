@@ -1,0 +1,39 @@
+# Match the desktop palette, quiet borders and compact controls.
+font=Sans 10
+background-color=${colors_background}
+text-color=${colors_text}
+border-color=${colors_border}
+border-size=${shape_border_width}
+border-radius=${shape_popup_radius}
+progress-color=over ${colors_hover}
+width=340
+height=160
+padding=12
+margin=10
+max-icon-size=24
+icon-border-radius=${shape_control_radius}
+# Mako does not read icon-theme inheritance; list the fallback explicitly.
+icon-path=/usr/local/share/icons/${icons_theme}/scalable:/usr/share/icons/Adwaita
+# Banners retire themselves the way a phone's do. Mako's own default is 0,
+# which never expires; that is why notifications used to pile up unbounded.
+default-timeout=6000
+# Override per-application expire hints so nothing can opt back into staying
+# on screen forever. Critical alerts get their exemption below instead.
+ignore-timeout=1
+# Retired banners stay readable in the Tinybar bell and via makoctl restore.
+max-history=50
+# Mako draws each banner as one layout with no per-region hit testing, so it
+# cannot carry a close button; the whole banner is the target instead. The
+# Tinybar bell popover provides the per-notification close control.
+on-button-left=dismiss
+on-button-middle=invoke-default-action
+on-button-right=dismiss-all
+
+[urgency=low]
+text-color=${colors_secondary}
+default-timeout=4000
+
+[urgency=critical]
+border-color=${colors_error_background}
+# Critical alerts persist until acted on, as they do on a phone.
+default-timeout=0

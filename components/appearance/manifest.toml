@@ -1,0 +1,53 @@
+# Template -> file in your home folder, rendered by elachisto-appearance.
+
+[[files]]
+template = "tinybar.css.in"
+destination = ".config/tinybar/style.css"
+
+[[files]]
+template = "walker.css.in"
+destination = ".config/walker/themes/elachisto/style.css"
+
+[[files]]
+template = "pcmanfm.css.in"
+destination = ".local/share/themes/Elachisto-Panel/gtk-3.0/gtk.css"
+
+[[files]]
+template = "labwc.themerc.in"
+destination = ".local/share/themes/elachisto/labwc/themerc"
+
+[[files]]
+template = "labwc-override.in"
+destination = ".config/labwc/themerc-override"
+
+[[files]]
+template = "gtk3-settings.ini.in"
+destination = ".config/gtk-3.0/settings.ini"
+
+[[files]]
+template = "gtk4-settings.ini.in"
+destination = ".config/gtk-4.0/settings.ini"
+
+[[files]]
+template = "mako.conf.in"
+destination = ".config/mako/config"
+
+[[files]]
+template = "gtk3-desktop.css.in"
+destination = ".local/share/themes/Elachisto/gtk-3.0/gtk.css"
+
+[[files]]
+template = "gtk4-desktop.css.in"
+destination = ".local/share/themes/Elachisto/gtk-4.0/gtk.css"
+
+[[files]]
+template = "gtk4-user.css.in"
+destination = ".config/gtk-4.0/gtk.css"
+
+[[files]]
+template = "gtk-dark.css.in"
+destination = ".local/share/themes/Elachisto/gtk-3.0/gtk-dark.css"
+
+[[files]]
+template = "gtk-dark.css.in"
+destination = ".local/share/themes/Elachisto/gtk-4.0/gtk-dark.css"

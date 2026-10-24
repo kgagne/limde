@@ -45,5 +45,6 @@ step_launcher
 step_firefox
 step_icons
 step_tinybar
+step_appearance
 step_session
 summary

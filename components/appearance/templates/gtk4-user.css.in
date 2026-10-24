@@ -1,0 +1,125 @@
+/* libadwaita apps (zenity file dialogs, GNOME-style apps) ignore the theme directory and
+   read only this user file. The colour and widget rules below must stay in step with
+   gtk4-desktop.css.in, which is the same set over GTK's own default theme; this copy must
+   not import that theme. The libadwaita-only colours and the button rules at the end are
+   specific to this file (they make the file chooser match the GTK3 dialogs). */
+
+@define-color theme_bg_color ${colors_background};
+@define-color theme_fg_color ${colors_text};
+@define-color theme_base_color ${colors_background};
+@define-color theme_text_color ${colors_text};
+@define-color theme_selected_bg_color ${colors_selection};
+@define-color theme_selected_fg_color ${colors_selection_text};
+@define-color insensitive_bg_color ${colors_surface};
+@define-color insensitive_fg_color ${colors_muted};
+@define-color borders ${colors_border};
+@define-color unfocused_borders ${colors_border_inactive};
+@define-color window_bg_color ${colors_background};
+@define-color window_fg_color ${colors_text};
+@define-color view_bg_color ${colors_background};
+@define-color view_fg_color ${colors_text};
+@define-color accent_bg_color ${colors_selection};
+@define-color accent_fg_color ${colors_selection_text};
+
+window, dialog, .background, filechooser, filechooserwidget,
+.view, textview > text, list, listview, gridview, columnview,
+scrolledwindow, viewport, .sidebar, placessidebar, .navigation-sidebar {
+  background-color: ${colors_background};
+  color: ${colors_text};
+}
+
+headerbar, toolbar, menubar, popover menubar, statusbar {
+  background-image: none;
+  background-color: ${colors_background};
+  color: ${colors_text};
+  box-shadow: none;
+}
+
+button, entry, spinbutton, dropdown > button, searchentry {
+  background-image: none;
+  background-color: ${colors_surface};
+  color: ${colors_text};
+  border-color: ${colors_border};
+  border-radius: ${shape_control_radius}px;
+  box-shadow: none;
+}
+
+button:hover, row:hover:not(:selected), listview > row:hover:not(:selected) {
+  background-image: none;
+  background-color: ${colors_hover};
+  color: ${colors_text};
+}
+
+button:checked, button:active, button.suggested-action,
+button.suggested-action:hover, row:selected, row:selected:hover,
+listview > row:selected, gridview > child:selected,
+.view:selected, selection, textview > text > selection,
+check:checked, radio:checked, switch:checked {
+  background-image: none;
+  background-color: ${colors_selection};
+  color: ${colors_selection_text};
+}
+
+row:selected label, row:selected image,
+gridview > child:selected label, gridview > child:selected image {
+  color: ${colors_selection_text};
+}
+
+button:disabled, button:disabled label, button:disabled image,
+entry:disabled, label:disabled { color: ${colors_muted}; }
+
+entry:focus-within, searchentry:focus-within, spinbutton:focus-within {
+  border-color: ${colors_focus};
+  box-shadow: inset 0 0 0 ${shape_border_width}px ${colors_focus};
+}
+
+popover > contents, tooltip {
+  background-color: ${colors_surface};
+  color: ${colors_text};
+  border: ${shape_border_width}px solid ${colors_border};
+  border-radius: ${shape_popup_radius}px;
+}
+
+modelbutton:hover {
+  background-color: ${colors_selection};
+  color: ${colors_selection_text};
+}
+
+separator, paned > separator {
+  background-image: none;
+  background-color: ${colors_border};
+}
+
+scrollbar, scrollbar trough { background-color: ${colors_background}; }
+scrollbar slider { background-color: ${colors_border_hover}; }
+scrollbar slider:hover { background-color: ${colors_muted}; }
+progressbar progress, scale highlight {
+  background-color: ${colors_selection};
+  border-color: ${colors_selection};
+}
+
+columnview > header button, treeview.view header button {
+  background-image: none;
+  background-color: ${colors_surface};
+  color: ${colors_secondary};
+  border-radius: 0;
+  border-color: ${colors_border};
+  box-shadow: none;
+}
+
+/* libadwaita runs in its light scheme (it ignores gtk-application-prefer-dark-theme), so
+   every named colour not set above, such as the file chooser footer, stays white. */
+@define-color headerbar_bg_color ${colors_background};
+@define-color headerbar_fg_color ${colors_text};
+@define-color headerbar_border_color ${colors_border};
+@define-color dialog_bg_color ${colors_background};
+@define-color dialog_fg_color ${colors_text};
+@define-color sidebar_bg_color ${colors_background};
+@define-color sidebar_fg_color ${colors_text};
+
+/* The GTK3 theme uses regular-weight, thinly bordered buttons. */
+button, dropdown > button, entry, searchentry {
+  font-weight: 400;
+  border: ${shape_border_width}px solid ${colors_border};
+}
+button.suggested-action, button.suggested-action:hover { border-color: ${colors_selection}; }

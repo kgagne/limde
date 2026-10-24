@@ -1,0 +1,13 @@
+osd.bg.color: ${colors_background}
+osd.border.color: ${colors_surface}
+osd.border.width: ${shape_border_width}
+osd.label.text.color: ${colors_text}
+
+osd.window-switcher.style-classic.width: 44%
+osd.window-switcher.style-classic.padding: 6
+
+osd.window-switcher.style-classic.item.padding.x: 10
+osd.window-switcher.style-classic.item.padding.y: 5
+
+osd.window-switcher.style-classic.item.active.border.width: 0
+osd.window-switcher.style-classic.item.active.bg.color: ${colors_surface}

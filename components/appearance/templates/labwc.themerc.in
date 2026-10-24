@@ -1,0 +1,55 @@
+border.width: ${shape_border_width}
+
+window.titlebar.padding.width: 5
+window.titlebar.padding.height: 2
+
+window.active.border.color: ${colors_background}
+window.inactive.border.color: ${colors_surface}
+
+window.active.title.bg: Solid
+window.active.title.bg.color: ${colors_background}
+
+window.inactive.title.bg: Solid
+window.inactive.title.bg.color: ${colors_surface}
+
+window.active.label.text.color: ${colors_text}
+window.inactive.label.text.color: ${colors_muted}
+window.label.text.justify: center
+
+window.button.width: 22
+window.button.height: 22
+window.button.spacing: 0
+
+window.button.hover.bg.color: #00000000
+window.button.hover.bg.corner-radius: 11
+
+window.active.button.close.unpressed.image.color: #ff5f57
+window.active.button.iconify.unpressed.image.color: #febc2e
+window.active.button.max.unpressed.image.color: #28c840
+
+window.inactive.button.close.unpressed.image.color: #666666
+window.inactive.button.iconify.unpressed.image.color: #666666
+window.inactive.button.max.unpressed.image.color: #666666
+
+window.active.shadow.size: 24
+window.active.shadow.color: #00000050
+window.inactive.shadow.size: 16
+window.inactive.shadow.color: #00000030
+
+# Window/root menus are compositor-owned and do not inherit GTK colors.
+menu.border.width: ${shape_border_width}
+menu.border.color: ${colors_border}
+menu.items.bg.color: ${colors_background}
+menu.items.text.color: ${colors_text}
+menu.items.active.bg.color: ${colors_selection}
+menu.items.active.text.color: ${colors_selection_text}
+menu.separator.color: ${colors_border}
+menu.title.bg.color: ${colors_surface}
+menu.title.text.color: ${colors_secondary}
+
+# Keep transient previews and snap overlays in the same neutral palette.
+osd.window-switcher.preview.border.color: ${colors_border_hover},${colors_background},${colors_border_hover}
+snapping.overlay.region.bg.color: ${colors_hover}80
+snapping.overlay.edge.bg.color: ${colors_hover}80
+snapping.overlay.region.border.color: ${colors_border_hover},${colors_background},${colors_border_hover}
+snapping.overlay.edge.border.color: ${colors_border_hover},${colors_background},${colors_border_hover}

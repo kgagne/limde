@@ -1,0 +1,52 @@
+# elachisto's default appearance: colours, shapes, icon sizes and fonts for the desktop,
+# the panel (Tinybar), the launcher (Walker), notifications (Mako), PCManFM and labwc.
+#
+# Don't edit this file. Put your own values in ~/.config/elachisto/appearance.toml; it
+# only needs the keys you change, and updates never overwrite it. Then run:
+#     elachisto-appearance --apply
+# Layout and padding live in the templates, not here.
+
+[colors]
+background = "#1e1e1e"
+surface = "#262626"
+hover = "#343434"
+text = "#eeeeee"
+secondary = "#bdbdbd"
+muted = "#888888"
+border = "#343434"
+border_inactive = "#303030"
+border_hover = "#555555"
+focus = "#aaaaaa"
+selection = "#eeeeee"
+selection_text = "#1e1e1e"
+selection_secondary = "#555555"
+selection_inactive = "#bdbdbd"
+error_background = "#C34043"
+error_text = "#DCD7BA"
+shadow = "#00000033"
+# Tinybar battery icon by discharge rate: moderate, high, severe.
+load_moderate = "#E6C384"
+load_high = "#FFA066"
+load_severe = "#E46876"
+
+[shape]
+control_radius = 4
+popup_radius = 6
+border_width = 1
+
+# Font Awesome fonts and the native-fallback icon theme.
+[icons]
+theme = "elachisto"
+# Icon sizes in pixels for each place. The panel size is the reference the others follow.
+panel_size = 16
+small_size = 13
+menu_size = 16
+launcher_size = 32
+
+[desktop]
+gtk_theme = "Elachisto"
+color_scheme = "prefer-dark"
+
+[fonts]
+interface = "Open Sans 11"
+document = "Open Sans 12"

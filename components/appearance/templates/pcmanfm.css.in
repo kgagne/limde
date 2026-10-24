@@ -1,0 +1,218 @@
+/* KG Tinybar: use the installed GTK theme as the widget foundation. */
+@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");
+
+@define-color theme_bg_color ${colors_background};
+@define-color theme_fg_color ${colors_text};
+@define-color theme_base_color ${colors_background};
+@define-color theme_text_color ${colors_text};
+@define-color theme_selected_bg_color ${colors_selection};
+@define-color theme_selected_fg_color ${colors_selection_text};
+@define-color insensitive_bg_color ${colors_surface};
+@define-color insensitive_fg_color ${colors_muted};
+@define-color borders ${colors_border};
+@define-color unfocused_borders ${colors_border_inactive};
+@define-color kg_surface ${colors_surface};
+@define-color kg_hover ${colors_hover};
+
+* {
+  text-shadow: none;
+  -gtk-icon-shadow: none;
+  transition: none;
+}
+
+/* Eight pixels at each side of list/sidebar cells, plus vertical breathing room. */
+treeview.view {
+  -GtkTreeView-horizontal-separator: 16;
+  -GtkTreeView-vertical-separator: 4;
+}
+
+/* Match Tinybar's added four-pixel margins for ordinary image widgets. */
+toolbar image, menuitem image, notebook tab image, button image {
+  margin-left: 4px;
+  margin-right: 4px;
+}
+
+window, dialog, .background {
+  background-color: @theme_bg_color;
+  color: @theme_fg_color;
+}
+
+.view, treeview.view, iconview, textview text,
+scrolledwindow, viewport, .sidebar, .sidebar .view,
+.sidebar row, .sidebar list {
+  background-color: @theme_base_color;
+  color: @theme_text_color;
+}
+
+menubar, toolbar, .primary-toolbar, headerbar, statusbar {
+  background-image: none;
+  background-color: @theme_bg_color;
+  color: @theme_fg_color;
+  box-shadow: none;
+}
+
+menubar {
+  border-bottom: ${shape_border_width}px solid @borders;
+}
+
+button, entry, spinbutton, combobox button {
+  border-radius: ${shape_control_radius}px;
+  background-image: none;
+  background-color: @kg_surface;
+  color: @theme_fg_color;
+  border-color: @borders;
+  box-shadow: none;
+}
+
+button:hover, combobox button:hover, toolbar button:hover {
+  background-image: none;
+  background-color: @kg_hover;
+  border-color: ${colors_border_hover};
+  color: @theme_fg_color;
+}
+
+button:active, button:checked, button.suggested-action,
+button.suggested-action:hover {
+  background-image: none;
+  background-color: @theme_selected_bg_color;
+  color: @theme_selected_fg_color;
+  border-color: @theme_selected_bg_color;
+}
+
+button:disabled, button:disabled label, button:disabled image {
+  color: @insensitive_fg_color;
+  background-image: none;
+}
+
+entry:focus, spinbutton:focus {
+  border-color: ${colors_focus};
+  box-shadow: inset 0 0 0 ${shape_border_width}px ${colors_focus};
+}
+
+entry selection, textview text selection, treeview.view:selected,
+treeview.view:selected:focus, iconview:selected, iconview:selected:focus,
+.view:selected, .view:selected:focus,
+.sidebar row:selected, .sidebar .view:selected {
+  background-color: @theme_selected_bg_color;
+  color: @theme_selected_fg_color;
+}
+
+treeview.view:selected:backdrop, .sidebar .view:selected:backdrop,
+iconview:selected:backdrop, iconview:selected:focus:backdrop {
+  background-color: ${colors_selection_inactive};
+  color: ${colors_selection_text};
+}
+
+treeview.view header button {
+  background-image: none;
+  background-color: @kg_surface;
+  color: ${colors_secondary};
+  border: 0;
+  border-bottom: ${shape_border_width}px solid @borders;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+treeview.view header button:hover {
+  background-color: @kg_hover;
+  color: @theme_fg_color;
+}
+
+notebook > header {
+  background-color: @theme_bg_color;
+  border-color: @borders;
+}
+
+notebook > header > tabs > tab {
+  margin: 3px 2px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: ${shape_control_radius}px;
+  background-color: transparent;
+  color: ${colors_secondary};
+  box-shadow: none;
+}
+
+notebook > header > tabs > tab:hover {
+  background-color: @kg_hover;
+  color: @theme_fg_color;
+}
+
+notebook > header.top > tabs > tab,
+notebook > header.top > tabs > tab:hover {
+  box-shadow: none;
+}
+
+notebook > header.top > tabs > tab:checked,
+notebook > header.top > tabs > tab:checked.reorderable-page,
+notebook > header.top > tabs > tab:checked.reorderable-page:hover,
+notebook > header.top > tabs > tab:checked.reorderable-page:backdrop {
+  background-image: none;
+  background-color: @theme_selected_bg_color;
+  color: @theme_selected_fg_color;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+notebook > header.top > tabs > tab:checked label {
+  color: @theme_selected_fg_color;
+}
+
+notebook > header > tabs > tab:checked button,
+notebook > header > tabs > tab:checked button image {
+  background-color: transparent;
+  color: @theme_selected_fg_color;
+  border-color: transparent;
+}
+
+menu, .menu, popover > contents {
+  background-color: @kg_surface;
+  color: @theme_fg_color;
+  border: ${shape_border_width}px solid @borders;
+  border-radius: ${shape_popup_radius}px;
+}
+
+menuitem {
+  border-radius: ${shape_control_radius}px;
+  padding: 4px 8px;
+  color: @theme_fg_color;
+}
+
+menu menuitem:hover, .menu menuitem:hover, .context-menu menuitem:hover,
+menubar > menuitem:hover, .menubar > menuitem:hover {
+  background-image: none;
+  background-color: @theme_selected_bg_color;
+  color: @theme_selected_fg_color;
+  box-shadow: none;
+}
+
+menuitem:disabled { color: @insensitive_fg_color; }
+
+separator, paned > separator {
+  background-color: @borders;
+  background-image: none;
+  min-width: 1px;
+  min-height: 1px;
+}
+
+scrollbar, scrollbar trough {
+  background-color: @theme_bg_color;
+  border: 0;
+}
+
+scrollbar slider {
+  background-color: ${colors_border_hover};
+  border: 0;
+  border-radius: ${shape_control_radius}px;
+  min-width: 6px;
+  min-height: 6px;
+}
+
+scrollbar slider:hover, scrollbar slider:active { background-color: ${colors_muted}; }
+
+tooltip {
+  background-color: @kg_surface;
+  color: @theme_fg_color;
+  border: ${shape_border_width}px solid @borders;
+  border-radius: ${shape_popup_radius}px;
+}

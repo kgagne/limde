@@ -1,0 +1,238 @@
+window {
+    background: ${colors_background};
+    color: ${colors_text};
+}
+
+/* Base size for icons, date/time, menus, and hover tooltips. */
+* {
+    font-size: 16px;
+    -gtk-icon-size: ${icons_panel_size}px;
+}
+
+/* Smaller app names and metric values; icon glyphs retain the base size. */
+.task-label label:not(.task-icon),
+.system-info label:not(.status-icon) {
+    font-size: 13px;
+}
+
+/* Add to the existing 4 px box spacing for an 8 px icon/text gap. */
+.task-icon, .status-icon {
+    margin-right: 4px;
+}
+
+/* An icon shown without its value (brightness, volume, Wi-Fi, an empty bell)
+   or an app icon without its name (the first app, agent-web by default). */
+.status-icon.icon-only,
+.task-icon.icon-only {
+    margin-right: 0;
+}
+
+/* Battery icon colour by smoothed discharge rate; normal keeps the text colour. */
+.status-icon.load-moderate {
+    color: ${colors_load_moderate};
+}
+
+.status-icon.load-high {
+    color: ${colors_load_high};
+}
+
+.status-icon.load-severe {
+    color: ${colors_load_severe};
+}
+
+/* Another theme's app icon is usually drawn edge to edge; shrink it so its margin
+   matches elachisto's icons and it doesn't look oversized in the panel. */
+.task-icon-foreign {
+    -gtk-icon-size: ${icons_panel_foreign_size}px;
+    margin: ${icons_panel_foreign_margin}px;
+}
+
+/* Full-signal outline behind a weaker Wi-Fi icon, so the level reads as a fraction. */
+.icon-backdrop {
+    opacity: 0.3;
+}
+
+.task-label {
+    min-height: 0;
+    padding: 1px 7px;
+    border: 0;
+    border-radius: ${shape_control_radius}px;
+    background: transparent;
+    color: ${colors_text};
+    box-shadow: none;
+    transition: none;
+}
+
+.task-label:hover {
+    background: ${colors_hover};
+}
+
+.task-label.active {
+    background: ${colors_selection};
+    color: ${colors_selection_text};
+}
+
+/* Icons share the clock size and inherit text/active-task highlight colors. */
+
+/* Bell and Wi-Fi: flat panel controls, not framed buttons. */
+/* No side padding, so these sit at the same spacing as the plain indicators. */
+.panel-menu,
+.panel-menu > button {
+    min-height: 0;
+    min-width: 0;
+    padding: 1px 0;
+    border: 0;
+    border-radius: ${shape_control_radius}px;
+    background: transparent;
+    color: ${colors_text};
+    box-shadow: none;
+    transition: none;
+}
+
+.panel-menu > button:hover,
+.panel-menu > button:checked {
+    background: ${colors_hover};
+    color: ${colors_text};
+}
+
+/* Only the rounded card is drawn; the popup surface around it stays clear. */
+popover.background {
+    background: transparent;
+    box-shadow: none;
+}
+
+/* The popover is the only place a notification can carry a close control. */
+popover > contents {
+    padding: 0;
+    border: ${shape_border_width}px solid ${colors_border};
+    border-radius: ${shape_popup_radius}px;
+    background: ${colors_surface};
+    color: ${colors_text};
+    box-shadow: 0 2px 6px ${colors_shadow};
+}
+
+.notification-popover {
+    padding: 8px;
+    min-width: 300px;
+}
+
+/* Rows carry their own background; the list behind them stays clear. */
+.notification-popover scrolledwindow,
+.notification-popover viewport {
+    background: transparent;
+}
+
+.notification-row {
+    padding: 6px 4px 6px 8px;
+    border-radius: ${shape_control_radius}px;
+    background: ${colors_background};
+}
+
+.notification-summary {
+    font-size: 13px;
+    color: ${colors_text};
+}
+
+.notification-body {
+    font-size: 12px;
+    color: ${colors_secondary};
+}
+
+.notification-close,
+.notification-clear {
+    min-height: 0;
+    min-width: 0;
+    border: 0;
+    border-radius: ${shape_control_radius}px;
+    background: transparent;
+    color: ${colors_muted};
+    box-shadow: none;
+    transition: none;
+}
+
+.notification-close {
+    padding: 2px 6px;
+}
+
+.notification-close:hover {
+    background: ${colors_hover};
+    color: ${colors_text};
+}
+
+.notification-clear {
+    padding: 4px 8px;
+    font-size: 12px;
+    color: ${colors_secondary};
+}
+
+.notification-clear:hover {
+    background: ${colors_hover};
+    color: ${colors_text};
+}
+
+.notification-empty {
+    padding: 10px 8px;
+    font-size: 13px;
+    color: ${colors_muted};
+}
+
+/* Network popover rows: display only, no hover state. */
+.panel-row {
+    padding: 6px 8px;
+    border-radius: ${shape_control_radius}px;
+    background: ${colors_background};
+}
+
+.panel-row-icon {
+    min-width: 20px;
+}
+
+.panel-row-mark {
+    -gtk-icon-size: ${icons_small_size}px;
+    color: ${colors_muted};
+}
+
+.panel-heading {
+    padding: 4px 4px 0;
+    font-size: 12px;
+    color: ${colors_secondary};
+}
+
+/* Brightness/volume readout shown briefly after a change. */
+window.level-window {
+    background: transparent;
+}
+
+.level-overlay {
+    min-width: 240px;
+    padding: 12px 16px;
+    border: ${shape_border_width}px solid ${colors_border};
+    border-radius: ${shape_popup_radius}px;
+    background: ${colors_surface};
+    color: ${colors_text};
+}
+
+.level-icon {
+    min-width: 20px;
+}
+
+.level-value {
+    font-size: 13px;
+    color: ${colors_secondary};
+}
+
+.level-bar trough {
+    min-height: 6px;
+    border-radius: 3px;
+    background: ${colors_hover};
+}
+
+.level-bar progress {
+    min-height: 6px;
+    border-radius: 3px;
+    background: ${colors_text};
+}
+
+.level-bar.muted progress {
+    background: ${colors_muted};
+}

@@ -1,0 +1,249 @@
+@define-color window_bg_color ${colors_background};
+@define-color accent_bg_color ${colors_selection};
+@define-color theme_fg_color ${colors_text};
+@define-color error_bg_color ${colors_error_background};
+@define-color error_fg_color ${colors_error_text};
+
+* {
+  all: unset;
+}
+
+popover {
+  background: ${colors_surface};
+  border: ${shape_border_width}px solid ${colors_border};
+  border-radius: ${shape_popup_radius}px;
+  padding: 10px;
+}
+
+.normal-icons {
+  -gtk-icon-size: ${icons_menu_size}px;
+}
+
+.large-icons {
+  -gtk-icon-size: ${icons_launcher_size}px;
+}
+
+scrollbar {
+  opacity: 0;
+}
+
+.box-wrapper {
+  box-shadow: 0 4px 12px ${colors_shadow};
+  background: @window_bg_color;
+  padding: 20px;
+  border-radius: ${shape_popup_radius}px;
+  border: ${shape_border_width}px solid ${colors_border};
+}
+
+.preview-box,
+.elephant-hint,
+.placeholder {
+  color: @theme_fg_color;
+}
+
+.box {
+}
+
+.search-container {
+  border-radius: ${shape_control_radius}px;
+}
+
+.input placeholder {
+  opacity: 0.5;
+}
+
+.input selection {
+  background: ${colors_selection};
+  color: ${colors_selection_text};
+}
+
+.input {
+  caret-color: @theme_fg_color;
+  background: ${colors_surface};
+  padding: 10px;
+  color: @theme_fg_color;
+}
+
+.input:focus,
+.input:active {
+}
+
+.content-container {
+}
+
+.placeholder {
+}
+
+.scroll {
+}
+
+.list {
+  color: @theme_fg_color;
+}
+
+child {
+}
+
+.item-box {
+  border-radius: ${shape_control_radius}px;
+  padding: 10px;
+}
+
+.item-quick-activation {
+  background: ${colors_surface};
+  border-radius: ${shape_control_radius}px;
+  padding: 10px;
+}
+
+/* child:hover .item-box, */
+child:selected .item-box,
+row:selected .item-box {
+  background: ${colors_selection};
+  color: ${colors_selection_text};
+}
+
+.item-text-box {
+}
+
+.item-subtext {
+  font-size: 12px;
+  opacity: 0.5;
+}
+
+.providerlist .item-subtext {
+  font-size: unset;
+  opacity: 0.75;
+}
+
+.item-image-text {
+  font-size: 28px;
+}
+
+.preview {
+  border: ${shape_border_width}px solid ${colors_border};
+  /* padding: 10px; */
+  border-radius: ${shape_control_radius}px;
+  color: @theme_fg_color;
+}
+
+.calc .item-text {
+  font-size: 24px;
+}
+
+.calc .item-subtext {
+}
+
+.symbols .item-image {
+  font-size: 24px;
+}
+
+.todo.done .item-text-box {
+  opacity: 0.25;
+}
+
+.todo.urgent {
+  font-size: 24px;
+}
+
+.todo.active {
+  font-weight: bold;
+}
+
+.bluetooth.disconnected {
+  opacity: 0.5;
+}
+
+.preview .large-icons {
+  -gtk-icon-size: 64px;
+}
+
+.keybinds {
+  padding-top: 10px;
+  border-top: ${shape_border_width}px solid ${colors_border};
+  font-size: 12px;
+  color: @theme_fg_color;
+}
+
+.global-keybinds {
+}
+
+.item-keybinds {
+}
+
+.keybind {
+}
+
+.keybind-button {
+  opacity: 0.5;
+}
+
+.keybind-button:hover {
+  opacity: 0.75;
+}
+
+.keybind-bind {
+  text-transform: lowercase;
+  opacity: 0.35;
+}
+
+.keybind-label {
+  padding: 2px 4px;
+  border-radius: ${shape_control_radius}px;
+  border: ${shape_border_width}px solid ${colors_border};
+}
+
+.error {
+  padding: 10px;
+  background: @error_bg_color;
+  color: @error_fg_color;
+}
+
+:not(.calc).current {
+  font-style: italic;
+}
+
+.preview-content.archlinuxpkgs,
+.preview-content.dnfpackages,
+.preview-content.aptpackages {
+  font-family: monospace;
+}
+
+
+/* Appearance-only states; the default layout, spacing and font sizes remain. */
+.input:focus,
+.input:focus-within {
+  box-shadow: inset 0 0 0 ${shape_border_width}px ${colors_focus};
+}
+
+child:hover:not(:selected) .item-box,
+row:hover:not(:selected) .item-box {
+  background: ${colors_hover};
+}
+
+.item-subtext {
+  color: ${colors_secondary};
+  opacity: 1;
+}
+
+child:selected .item-text,
+row:selected .item-text,
+child:selected .item-image,
+row:selected .item-image {
+  color: ${colors_selection_text};
+}
+
+child:selected .item-subtext,
+row:selected .item-subtext {
+  color: ${colors_selection_secondary};
+  opacity: 1;
+}
+
+child:selected .item-quick-activation,
+row:selected .item-quick-activation {
+  background: ${colors_selection_inactive};
+  color: ${colors_selection_text};
+}
+
+.keybind-button { opacity: 0.8; }
+.keybind-button:hover { opacity: 1; }
+.keybind-bind { opacity: 0.7; }
