@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# Headless QEMU test VMs for elachisto. No root needed; KVM access is enough.
+#
+#   tests/vm/vm base             install Ubuntu Server into the base image (unattended)
+#   tests/vm/vm up NAME          start a throwaway VM on a copy-on-write overlay of base
+#   tests/vm/vm ssh NAME [CMD]   run a command (or a shell) in it as `tester`
+#   tests/vm/vm copy NAME SRC... DEST   rsync files into it (DEST is a guest path)
+#   tests/vm/vm shot NAME FILE   save a PNG of its screen
+#   tests/vm/vm down NAME        power it off (forced after 60 s)
+#   tests/vm/vm rm NAME          delete its overlay
+#   tests/vm/vm list             show VMs and whether they run
+#
+# Everything lives in $ELACHISTO_VM_DIR (default: <repo>/local/vm, ignored by Git).
+# The base image is for testing only: it has passwordless sudo for `tester` and
+# autologin on tty1. elachisto itself never sets up either.
+set -euo pipefail
+
+here=$(cd "$(dirname "$0")" && pwd)
+repo=$(cd "$here/../.." && pwd)
+dir=${ELACHISTO_VM_DIR:-$repo/local/vm}
+iso_name=ubuntu-26.04.1-live-server-amd64.iso
+iso_sha256=cc8a95cde20f6ced61a322420de00f10cc3c90ced545daa46cb9c1a117f1d927
+iso_url=https://releases.ubuntu.com/26.04/$iso_name
+ovmf_code=/usr/share/OVMF/OVMF_CODE_4M.fd
+ovmf_vars=/usr/share/OVMF/OVMF_VARS_4M.fd
+mem=${ELACHISTO_VM_MEM:-4096}
+cpus=${ELACHISTO_VM_CPUS:-4}
+disk_size=20G
+# The user-mode network's address for the host, as seen from the guest.
+host_from_guest=10.0.2.2
+
+die() { echo "vm: $*" >&2; exit 1; }
+need() { command -v "$1" >/dev/null || die "missing $1 (${2:-install it})"; }
+
+name_ok() { [[ ${1:-} =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "VM name must be lowercase letters, digits, dashes"; }
+vmdir() { echo "$dir/$1"; }
+running() { [[ -S $(vmdir "$1")/qmp.sock ]] && "$here/qmp.py" "$(vmdir "$1")/qmp.sock" query-status >/dev/null 2>&1; }
+port_of() { cat "$(vmdir "$1")/ssh-port"; }
+
+ssh_opts() {
+  echo -i "$dir/id_ed25519" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -o LogLevel=ERROR -o ConnectTimeout=5 -o BatchMode=yes -p "$(port_of "$1")"
+}
+
+qemu_common() {  # $1: disk, $2: vars file, $3: qmp socket
+  echo -machine q35,accel=kvm -cpu host -m "$mem" -smp "$cpus" \
+    -drive "if=pflash,format=raw,readonly=on,file=$ovmf_code" \
+    -drive "if=pflash,format=raw,file=$2" \
+    -drive "if=virtio,format=qcow2,file=$1" \
+    -device virtio-vga -display none \
+    -qmp "unix:$3,server=on,wait=off"
+}
+
+free_port() {
+  python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])'
+}
+
+cmd_base() {
+  need qemu-system-x86_64 "sudo apt install qemu-system-x86"; need qemu-img; need curl
+  [[ -r $ovmf_code ]] || die "missing $ovmf_code (sudo apt install ovmf)"
+  mkdir -p "$dir"
+  local iso=$dir/$iso_name
+  if [[ ! -s $iso ]]; then
+    echo "Downloading $iso_name"
+    curl -fL --retry 3 -o "$iso.part" "$iso_url" && mv "$iso.part" "$iso"
+  fi
+  echo "$iso_sha256  $iso" | sha256sum -c --quiet - || die "$iso_name checksum mismatch"
+
+  local work=$dir/base-build
+  rm -rf "$work"; mkdir -p "$work/seed"
+  "$here/iso-extract.py" "$iso" casper/vmlinuz "$work/vmlinuz"
+  "$here/iso-extract.py" "$iso" casper/initrd "$work/initrd"
+
+  [[ -f $dir/id_ed25519 ]] || ssh-keygen -q -t ed25519 -N '' -C elachisto-test -f "$dir/id_ed25519"
+  local hash
+  hash=$(openssl passwd -6 tester)
+  sed -e "s|@PASSWORD_HASH@|$hash|" -e "s|@SSH_KEY@|$(cat "$dir/id_ed25519.pub")|" \
+    "$here/autoinstall.yaml" > "$work/seed/user-data"
+  echo "instance-id: elachisto-base" > "$work/seed/meta-data"
+  : > "$work/seed/vendor-data"
+
+  local port; port=$(free_port)
+  python3 -m http.server --bind 127.0.0.1 --directory "$work/seed" "$port" \
+    >"$work/seed-server.log" 2>&1 &
+  local server=$!
+  trap 'kill $server 2>/dev/null || true' EXIT
+
+  rm -f "$dir/base.qcow2" "$dir/base-vars.fd"
+  qemu-img create -q -f qcow2 "$work/disk.qcow2" "$disk_size"
+  cp "$ovmf_vars" "$work/vars.fd"
+  echo "Installing Ubuntu Server into the base image (serial log: $work/serial.log)"
+  # shellcheck disable=SC2046
+  timeout 60m qemu-system-x86_64 $(qemu_common "$work/disk.qcow2" "$work/vars.fd" "$work/qmp.sock") \
+    -drive "media=cdrom,readonly=on,file=$iso" \
+    -kernel "$work/vmlinuz" -initrd "$work/initrd" \
+    -append "autoinstall ds=nocloud;s=http://$host_from_guest:$port/ console=ttyS0,115200 ---" \
+    -nic user,model=virtio-net-pci -serial "file:$work/serial.log" \
+    || die "install did not finish (exit $?); see $work/serial.log"
+  grep -q 'GET /user-data' "$work/seed-server.log" || die "the installer never fetched its answers"
+
+  mv "$work/disk.qcow2" "$dir/base.qcow2"
+  mv "$work/vars.fd" "$dir/base-vars.fd"
+  chmod a-w "$dir/base.qcow2" "$dir/base-vars.fd"
+  echo "Base image ready: $dir/base.qcow2"
+}
+
+cmd_up() {
+  name_ok "${1:-}"; local d; d=$(vmdir "$1")
+  [[ -f $dir/base.qcow2 ]] || die "no base image; run: tests/vm/vm base"
+  running "$1" && { echo "$1 is already running (ssh port $(port_of "$1"))"; return; }
+  mkdir -p "$d"
+  [[ -f $d/disk.qcow2 ]] || qemu-img create -q -f qcow2 -F qcow2 -b "$dir/base.qcow2" "$d/disk.qcow2"
+  [[ -f $d/vars.fd ]] || cp "$dir/base-vars.fd" "$d/vars.fd" && chmod u+w "$d/vars.fd"
+  local port; port=$(free_port); echo "$port" > "$d/ssh-port"
+  rm -f "$d/qmp.sock"
+  # shellcheck disable=SC2046
+  qemu-system-x86_64 $(qemu_common "$d/disk.qcow2" "$d/vars.fd" "$d/qmp.sock") \
+    -nic "user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:$port-:22" \
+    -serial "file:$d/serial.log" -daemonize -pidfile "$d/qemu.pid"
+  echo -n "Waiting for $1 to accept SSH on port $port "
+  for _ in $(seq 120); do
+    # shellcheck disable=SC2046
+    if ssh $(ssh_opts "$1") tester@127.0.0.1 true 2>/dev/null; then echo " up"; return; fi
+    echo -n .; sleep 2
+  done
+  die "$1 did not answer SSH within 4 minutes; see $d/serial.log"
+}
+
+cmd_ssh() {
+  name_ok "${1:-}"; running "$1" || die "$1 is not running"
+  local name=$1; shift
+  # shellcheck disable=SC2046
+  ssh $(ssh_opts "$name") ${1:+-T} tester@127.0.0.1 "$@"
+}
+
+cmd_copy() {
+  name_ok "${1:-}"; running "$1" || die "$1 is not running"; (($# >= 3)) || die "usage: copy NAME SRC... DEST"
+  local name=$1; shift; local dest=${!#}; set -- "${@:1:$#-1}"
+  rsync -a --delete -e "ssh $(ssh_opts "$name")" "$@" "tester@127.0.0.1:$dest"
+}
+
+cmd_shot() {
+  name_ok "${1:-}"; running "$1" || die "$1 is not running"; [[ -n ${2:-} ]] || die "usage: shot NAME FILE.png"
+  local out; out=$(realpath -m "$2")
+  "$here/qmp.py" "$(vmdir "$1")/qmp.sock" screendump "{\"filename\": \"$out\", \"format\": \"png\"}" >/dev/null
+  echo "$out"
+}
+
+cmd_down() {
+  name_ok "${1:-}"; running "$1" || { echo "$1 is not running"; return; }
+  local d; d=$(vmdir "$1")
+  "$here/qmp.py" "$d/qmp.sock" system_powerdown >/dev/null || true
+  for _ in $(seq 60); do running "$1" || { echo "$1 stopped"; return; }; sleep 1; done
+  "$here/qmp.py" "$d/qmp.sock" quit >/dev/null 2>&1 || true
+  echo "$1 forced off"
+}
+
+cmd_rm() {
+  name_ok "${1:-}"; running "$1" && die "$1 is running; stop it first"
+  rm -rf "$(vmdir "$1")"; echo "$1 removed"
+}
+
+cmd_list() {
+  [[ -f $dir/base.qcow2 ]] && echo "base: $dir/base.qcow2" || echo "base: not built"
+  local d
+  for d in "$dir"/*/; do
+    d=${d%/}; local n=${d##*/}
+    [[ -f $d/disk.qcow2 ]] || continue
+    if running "$n"; then echo "$n: running (ssh port $(port_of "$n"))"; else echo "$n: stopped"; fi
+  done
+}
+
+sub=${1:-}; shift || true
+case $sub in
+  base|up|ssh|copy|shot|down|rm|list) "cmd_$sub" "$@" ;;
+  *) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

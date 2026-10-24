@@ -10,9 +10,11 @@ fail=0
 # 1. Scrub gate: nothing personal or machine-specific in tracked files.
 patterns=$(grep -vE '^\s*(#|$)' scripts/public-patterns)
 mapfile -t files < <(git ls-files -co --exclude-standard \
-  | grep -vxE 'scripts/public-patterns|LICENSE|REUSE.toml')
+  | grep -vxE 'scripts/public-(patterns|allow)|LICENSE|REUSE.toml')
 if ((${#files[@]})); then
-  if hits=$(grep -nHiE -f <(printf '%s\n' "$patterns") -- "${files[@]}" 2>/dev/null); then
+  allow=$(grep -vE '^\s*(#|$)' scripts/public-allow)
+  if hits=$(grep -nHiE -f <(printf '%s\n' "$patterns") -- "${files[@]}" 2>/dev/null \
+      | grep -viE -f <(printf '%s\n' "$allow")); then
     echo "scrub: personal or machine-specific text found:" >&2
     printf '%s\n' "$hits" >&2
     fail=1

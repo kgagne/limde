@@ -1,0 +1,28 @@
+#cloud-config
+# Unattended Ubuntu Server install for the TEST base image only (tests/vm/vm base).
+# @PASSWORD_HASH@ and @SSH_KEY@ are filled in by the script. The test user gets
+# passwordless sudo and tty1 autologin so VMs run without a person at the screen;
+# elachisto's installer does neither.
+autoinstall:
+  version: 1
+  refresh-installer:
+    update: false
+  identity:
+    hostname: elachisto-test
+    username: tester
+    realname: Test User
+    password: "@PASSWORD_HASH@"
+  ssh:
+    install-server: true
+    allow-pw: false
+    authorized-keys:
+      - "@SSH_KEY@"
+  storage:
+    layout:
+      name: direct
+  late-commands:
+    - echo 'tester ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/90-tester-test-only
+    - chmod 0440 /target/etc/sudoers.d/90-tester-test-only
+    - mkdir -p /target/etc/systemd/system/getty@tty1.service.d
+    - printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin tester --noclear %%I $TERM\n' > /target/etc/systemd/system/getty@tty1.service.d/autologin-test-only.conf
+  shutdown: poweroff
