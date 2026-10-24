@@ -29,7 +29,25 @@ while IFS= read -r f; do
   bash -n "$f" || { echo "syntax: $f" >&2; fail=1; }
 done < <(git ls-files -co --exclude-standard)
 
-# 3. Fresh-clone self-test: the same checks must pass on a clone (file modes, ignored files).
+# 3. Icons: outlined/ must match its sources, and the icon theme must build.
+if ! python3 - "$root/components/icons" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+icons = Path(sys.argv[1])
+record = json.loads((icons / 'outlined' / 'SOURCES.json').read_text())
+sources = {str(p.relative_to(icons)) for d in ('src', 'brands') for p in (icons / d).rglob('*.svg')}
+stale = [s for s in sorted(sources) if record.get(s) != hashlib.sha256((icons / s).read_bytes()).hexdigest()]
+gone = sorted(set(record) - sources)
+for s in stale: print(f'icons: {s} changed or is new; run tools/outline.py', file=sys.stderr)
+for s in gone: print(f'icons: {s} was removed; run tools/outline.py', file=sys.stderr)
+sys.exit(1 if stale or gone else 0)
+PY
+then fail=1; fi
+tmp_theme=$(mktemp -d)
+python3 "$root/components/icons/build_theme.py" "$tmp_theme" >/dev/null || { echo "icons: the theme does not build" >&2; fail=1; }
+rm -rf "$tmp_theme"
+
+# 4. Fresh-clone self-test: the same checks must pass on a clone (file modes, ignored files).
 if [[ ${1:-} == --clone ]]; then
   tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
   git clone -q --no-local . "$tmp/elachisto"

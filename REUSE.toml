@@ -14,25 +14,25 @@ SPDX-FileCopyrightText = "2026 Keith Gagne"
 SPDX-License-Identifier = "GPL-2.0-or-later"
 
 [[annotations]]
-path = ["components/icons/brands/blender.svg", "components/icons/brands/krita.svg", "components/icons/brands/libreoffice-startcenter.svg", "components/icons/brands/vlc.svg", "components/icons/brands/mpv.svg", "components/icons/brands/audacity.svg", "components/icons/brands/kdenlive.svg", "components/icons/brands/obs.svg", "components/icons/brands/keepassxc.svg", "components/icons/brands/transmission.svg", "components/icons/brands/vscodium.svg", "components/icons/brands/htop.svg"]
+path = ["components/icons/brands/blender.svg", "components/icons/outlined/brands/blender.svg", "components/icons/brands/krita.svg", "components/icons/outlined/brands/krita.svg", "components/icons/brands/libreoffice-startcenter.svg", "components/icons/outlined/brands/libreoffice-startcenter.svg", "components/icons/brands/vlc.svg", "components/icons/outlined/brands/vlc.svg", "components/icons/brands/mpv.svg", "components/icons/outlined/brands/mpv.svg", "components/icons/brands/audacity.svg", "components/icons/outlined/brands/audacity.svg", "components/icons/brands/kdenlive.svg", "components/icons/outlined/brands/kdenlive.svg", "components/icons/brands/obs.svg", "components/icons/outlined/brands/obs.svg", "components/icons/brands/keepassxc.svg", "components/icons/outlined/brands/keepassxc.svg", "components/icons/brands/transmission.svg", "components/icons/outlined/brands/transmission.svg", "components/icons/brands/vscodium.svg", "components/icons/outlined/brands/vscodium.svg", "components/icons/brands/htop.svg", "components/icons/outlined/brands/htop.svg"]
 precedence = "override"
 SPDX-FileCopyrightText = "Simple Icons contributors"
 SPDX-License-Identifier = "CC0-1.0"
 
 [[annotations]]
-path = ["components/icons/brands/cc-by-sa/gimp.svg", "components/icons/brands/cc-by-sa/foot.svg", "components/icons/brands/cc-by-sa/papers.svg"]
+path = ["components/icons/brands/cc-by-sa/gimp.svg", "components/icons/outlined/brands/cc-by-sa/gimp.svg", "components/icons/brands/cc-by-sa/foot.svg", "components/icons/outlined/brands/cc-by-sa/foot.svg", "components/icons/brands/cc-by-sa/papers.svg", "components/icons/outlined/brands/cc-by-sa/papers.svg"]
 precedence = "override"
 SPDX-FileCopyrightText = "See components/icons/brands/cc-by-sa/CREDITS.md"
 SPDX-License-Identifier = "CC-BY-SA-4.0"
 
 [[annotations]]
-path = ["components/icons/brands/cc-by-sa/inkscape.svg", "components/icons/brands/cc-by-sa/nvim.svg"]
+path = ["components/icons/brands/cc-by-sa/inkscape.svg", "components/icons/outlined/brands/cc-by-sa/inkscape.svg", "components/icons/brands/cc-by-sa/nvim.svg", "components/icons/outlined/brands/cc-by-sa/nvim.svg"]
 precedence = "override"
 SPDX-FileCopyrightText = "See components/icons/brands/cc-by-sa/CREDITS.md"
 SPDX-License-Identifier = "CC-BY-SA-3.0"
 
 [[annotations]]
-path = "components/icons/brands/mpl-2.0/**"
+path = ["components/icons/brands/mpl-2.0/**", "components/icons/outlined/brands/mpl-2.0/**"]
 precedence = "override"
 SPDX-FileCopyrightText = "The Document Foundation, via Simple Icons"
 SPDX-License-Identifier = "MPL-2.0"
