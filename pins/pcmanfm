@@ -1,0 +1,5 @@
+# PCManFM is built from a pinned upstream tag plus elachisto's Space-preview patch
+# (components/preview/pcmanfm-space-preview.patch, GPL-2.0-or-later like PCManFM).
+PCMANFM_URL=https://github.com/lxde/pcmanfm.git
+PCMANFM_TAG=1.4.0
+PCMANFM_COMMIT=50aa9435c49551993fcd3c20d18615795c8daedf

@@ -26,6 +26,10 @@ step_plan() {
   echo "  Runtime packages (needed for the desktop):"
   show_list "$ELACHISTO_ROOT/packages/runtime.list"
 
+  echo
+  echo "  Build packages (for the parts built from source; they stay installed):"
+  show_list "$ELACHISTO_ROOT/packages/build.list"
+
   heading "Optional parts"
   for group in $(optional_groups); do
     echo "  $group: $(group_title "$group")"
@@ -41,6 +45,7 @@ step_plan() {
   done
 
   mapfile -t PACKAGES < <(list_packages "$ELACHISTO_ROOT/packages/runtime.list"
+    list_packages "$ELACHISTO_ROOT/packages/build.list"
     for group in "${chosen[@]}"; do list_packages "$OPTIONAL_DIR/$group.list"; done)
 
   # Count what apt would actually add, dependencies included (a simulation; no root).

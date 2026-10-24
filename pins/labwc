@@ -1,0 +1,8 @@
+# labwc is built from a pinned upstream commit. Moving the pin is a commit to this file.
+# Why build from source: newer pointer-acceleration and scrolling work often reaches
+# labwc's master branch well before a release or Ubuntu's package (see README).
+LABWC_URL=https://github.com/labwc/labwc.git
+LABWC_COMMIT=1e0396c7d9bea6030207ffca090c3ed6c3c9f18b
+# wlroots 0.20.2, built into labwc as a static subproject.
+WLROOTS_URL=https://gitlab.freedesktop.org/wlroots/wlroots.git
+WLROOTS_COMMIT=d783533489e1f75d6886c2ab5c5960090ef268f8

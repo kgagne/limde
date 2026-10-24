@@ -6,7 +6,7 @@
 # 3. reboot: labwc must start on tty1 by itself, NetworkManager must be connected,
 #    and networkd must stay off
 # Saves logs and a screenshot under local/vm/results/<VM_NAME>/. Exit 0 = all passed.
-set -euo pipefail
+set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
 vm=$here/vm
@@ -33,13 +33,17 @@ on_vm() { "$vm" ssh "$name" "$@"; }
 "$vm" copy "$name" --exclude=/local --exclude=.git "$repo/" elachisto/
 
 echo "== first run"
-if on_vm "cd elachisto && ./install --yes ${install_args[*]}" >"$out/install-1.log" 2>&1; then
+on_vm "cd elachisto && ./install --yes ${install_args[*]}" >"$out/install-1.log" 2>&1; rc=$?
+echo "exit code $rc" >>"$out/install-1.log"
+if ((rc == 0)); then
   pass "first install run exits 0"
 else
   fail "first install run exits 0 (see install-1.log)"
 fi
 echo "== second run"
-if on_vm "cd elachisto && ./install --yes ${install_args[*]}" >"$out/install-2.log" 2>&1; then
+on_vm "cd elachisto && ./install --yes ${install_args[*]}" >"$out/install-2.log" 2>&1; rc=$?
+echo "exit code $rc" >>"$out/install-2.log"
+if ((rc == 0)); then
   pass "second install run exits 0"
 else
   fail "second install run exits 0 (see install-2.log)"
@@ -53,9 +57,16 @@ sleep 5
 for _ in $(seq 60); do on_vm true 2>/dev/null && break; sleep 2; done
 sleep 10   # let autologin start the session
 check "labwc runs after reboot" on_vm 'pgrep -x labwc'
+check "running labwc is the elachisto build" on_vm 'pid=$(pgrep -x labwc) && [ "$(readlink /proc/$pid/exe)" = /usr/local/bin/labwc ] && grep -qx "$(. elachisto/pins/labwc; echo "$LABWC_COMMIT $WLROOTS_COMMIT")" /usr/local/share/elachisto/labwc.commit'
 check "labwc runs on tty1" on_vm 'pid=$(pgrep -x labwc) && tty=$(ps -o tty= -p $pid) && [ "$tty" = tty1 ]'
 check "NetworkManager connected" on_vm 'nmcli -t -f STATE general | grep -q ^connected'
 check "networkd stays off" on_vm '! systemctl -q is-active systemd-networkd.service'
+check "built binaries have all their libraries" on_vm 'test -x /usr/local/bin/labwc -a -x /usr/local/bin/pcmanfm && ! ldd /usr/local/bin/labwc /usr/local/bin/labnag /usr/local/bin/pcmanfm | grep -q "not found"'
+check "pcmanfm on PATH is the Space-preview build" on_vm '[ "$(bash -lc "command -v pcmanfm")" = /usr/local/bin/pcmanfm ] && grep -q preview_cmd /usr/local/bin/pcmanfm'
+check "PCManFM appears once in the app menu" on_vm '[ "$(ls /usr/share/applications/pcmanfm.desktop /usr/local/share/applications/pcmanfm.desktop 2>/dev/null | wc -l)" = 1 ]'
+check "walker and elephant have all their libraries" on_vm 'for f in /usr/local/bin/walker /usr/local/bin/elephant /usr/local/lib/elephant/{calc,desktopapplications,files,providerlist}.so; do [ -f "$f" ] || exit 1; done; ! ldd /usr/local/bin/walker /usr/local/bin/elephant /usr/local/lib/elephant/*.so 2>&1 | grep -q "not found"'
+check "walker runs" on_vm '/usr/local/bin/walker --version'
+check "elephant loads all four providers" on_vm 'out=$(timeout 20 /usr/local/bin/elephant listproviders 2>&1); for p in calc desktopapplications files providerlist; do echo "$out" | grep -qi "$p" || exit 1; done'
 check "no failed units" on_vm '[ -z "$(systemctl --failed --no-legend)" ]'
 on_vm 'systemctl --failed --no-legend; cat ~/.local/state/elachisto/labwc.log' >"$out/after-reboot.log" 2>&1 || true
 "$vm" shot "$name" "$out/screen.png" >/dev/null || fail "screenshot"

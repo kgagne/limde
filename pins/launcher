@@ -1,0 +1,13 @@
+# Walker (the launcher) and Elephant (its data service) come from upstream GitHub releases,
+# pinned here by version and sha256. Format: name  url  sha256
+WALKER_VERSION=2.17.2
+ELEPHANT_VERSION=2.22.1
+LAUNCHER_ASSETS="
+walker-v2.17.2-x86_64-unknown-linux-gnu.tar.gz https://github.com/abenz1267/walker/releases/download/v2.17.2/walker-v2.17.2-x86_64-unknown-linux-gnu.tar.gz 57e68d1f9f14782f1ae0f1c704509749a545a92531b8788b76b16bc29fcc5c19
+elephant-linux-amd64.tar.gz https://github.com/abenz1267/elephant/releases/download/v2.22.1/elephant-linux-amd64.tar.gz 53098cd67fbd0eb256d02594b06ef6817031ed93e93911126bea9904b33ad775
+calc-linux-amd64.tar.gz https://github.com/abenz1267/elephant/releases/download/v2.22.1/calc-linux-amd64.tar.gz b0b861f6e88ce84c7e5bbcedf233e028ac86fe50312c1291b906ce6741e4be1c
+desktopapplications-linux-amd64.tar.gz https://github.com/abenz1267/elephant/releases/download/v2.22.1/desktopapplications-linux-amd64.tar.gz a185897cae065c036a2b2a5beac08201e0a233ad51587b9a553428434225c75a
+files-linux-amd64.tar.gz https://github.com/abenz1267/elephant/releases/download/v2.22.1/files-linux-amd64.tar.gz 1342d88da31610fdadb3c62445c033ca188a4bbcb17da992d1ef2ee0f23be9dc
+providerlist-linux-amd64.tar.gz https://github.com/abenz1267/elephant/releases/download/v2.22.1/providerlist-linux-amd64.tar.gz bafb807419f9cf38825935e15097aea10adc8678234468a7971543d3bba59862
+"
+ELEPHANT_PROVIDERS="calc desktopapplications files providerlist"

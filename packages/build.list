@@ -1,0 +1,53 @@
+# Build packages: compilers and headers for the parts elachisto builds from source.
+# They stay installed so updates and rebuilds work without asking again.
+
+## Build tools
+build-essential     # the C compiler and make
+git                 # downloads the pinned source code
+meson               # the build system labwc and wlroots use
+ninja-build         # runs the builds meson prepares
+pkg-config          # finds the libraries a build needs
+scdoc               # builds labwc's manual pages
+
+## labwc and wlroots
+libwayland-dev      # Wayland protocol library
+libwayland-bin      # generates Wayland protocol code
+wayland-protocols   # Wayland protocol definitions
+libxkbcommon-dev    # keyboard layouts
+libinput-dev        # mice, touchpads and keyboards
+libudev-dev         # finding input and display devices
+libseat-dev         # access to displays and input without root
+libdrm-dev          # talking to the graphics driver
+libgbm-dev          # graphics buffers
+libegl-dev          # OpenGL ES setup
+libgles-dev         # OpenGL ES rendering
+libpixman-1-dev     # software rendering
+libdisplay-info-dev # reading monitor capabilities
+libliftoff-dev      # efficient use of display planes
+liblcms2-dev        # colour management
+hwdata              # monitor vendor names
+libcairo2-dev       # drawing window decorations
+libpango1.0-dev     # text in window titles and menus
+librsvg2-dev        # SVG icons and theme buttons
+libpng-dev          # PNG icons
+libxml2-dev         # reading labwc's XML configuration
+libsfdo-dev         # finding application icons and menu entries
+libgio-2.0-dev      # GLib, used by labwc
+libxcb1-dev         # X11 apps through Xwayland
+libxcb-composite0-dev  # X11 apps through Xwayland
+libxcb-ewmh-dev     # X11 apps through Xwayland
+libxcb-icccm4-dev   # X11 apps through Xwayland
+libxcb-render0-dev  # X11 apps through Xwayland
+libxcb-res0-dev     # X11 apps through Xwayland
+libxcb-xfixes0-dev  # X11 apps through Xwayland
+xwayland            # runs older X11 apps inside the Wayland desktop
+
+## PCManFM with Space preview
+autoconf            # prepares PCManFM's build scripts
+automake            # prepares PCManFM's build scripts
+libtool             # prepares PCManFM's build scripts
+intltool            # PCManFM's translations
+libx11-dev          # PCManFM's desktop-icons mode
+libgtk-3-dev        # GTK 3, which PCManFM uses
+libfm-dev           # the file-manager library PCManFM is built on
+libfm-gtk3-dev      # its GTK 3 widgets

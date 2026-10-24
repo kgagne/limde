@@ -5,7 +5,10 @@
 
 NETPLAN_FILE=/etc/netplan/90-elachisto-networkmanager.yaml
 
-nm_connected() { [[ $(nmcli -t -f STATE general 2>/dev/null) == connected* ]]; }
+# Connected, and names resolve: NetworkManager reports "connected" slightly before DNS works.
+nm_connected() {
+  [[ $(nmcli -t -f STATE general 2>/dev/null) == connected* ]] && getent hosts archive.ubuntu.com >/dev/null
+}
 
 step_network() {
   heading "Network"
@@ -24,7 +27,7 @@ step_network() {
     for i in $(seq 30); do nm_connected && break; sleep 1; done
     if ! nm_connected; then
       sudo rm -f "$NETPLAN_FILE"; sudo netplan apply
-      die "NetworkManager did not connect within 30 s; the previous network setup is restored"
+      die "NetworkManager did not connect (with working DNS) within 30 s; the previous network setup is restored"
     fi
     changed "netplan now uses NetworkManager ($NETPLAN_FILE)"
   fi

@@ -1,3 +1,5 @@
 # Extended regexes for scrub hits that are not personal. A hit line matching any of these
 # is ignored by `scripts/check`.
 \b10\.0\.2\.2\b
+# The author's public GitHub noreply address (patch and commit authorship).
+kgagne@users\.noreply\.github\.com

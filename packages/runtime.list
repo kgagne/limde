@@ -2,7 +2,6 @@
 # Shown to the user before anything is installed.
 
 ## Session
-labwc               # the Wayland compositor (Ubuntu's build until elachisto builds it from source)
 foot                # the default terminal
 swayidle            # runs the screen locker after inactivity
 swaylock            # the screen locker
@@ -14,6 +13,9 @@ python3-gi                  # Tinybar is written in Python with GTK
 gir1.2-gtk-4.0              # GTK 4 for Tinybar
 gir1.2-gtk4layershell-1.0   # lets Tinybar sit at the screen edge
 qalc                        # the calculator in the launcher
+libgtk-4-1                  # GTK 4 for the Walker launcher
+libgtk4-layer-shell0        # lets Walker open above other windows
+libpoppler-glib8t64         # PDF previews in Walker
 
 ## Files and preview
 pcmanfm             # the file manager (elachisto later builds it with Space preview)

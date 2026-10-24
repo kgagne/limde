@@ -39,5 +39,8 @@ step_plan "${WITH[@]}"
 sudo_keepalive
 step_packages
 step_network
+step_labwc
+step_pcmanfm
+step_launcher
 step_session
 summary

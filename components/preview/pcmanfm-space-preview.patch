@@ -1,0 +1,151 @@
+From 42ce2bd4935dcaac417d858f3ce79d37ae53dfa7 Mon Sep 17 00:00:00 2001
+From: Keith Gagne <kgagne@users.noreply.github.com>
+Date: Wed, 21 Oct 2026 19:47:24 -0400
+Subject: [PATCH] Add an optional Space preview command for the folder view
+
+Pressing Space in the folder view runs the command set as preview_cmd in
+the [config] group of pcmanfm.conf on the selected items, so a
+quick-look style previewer can show files without opening them. The
+command takes desktop entry field codes: %F or %U receive every selected
+item, %f or %u run it once per item, and GLib adds %f when it has none.
+The launch uses the display's app launch context, so the previewer gets
+startup notification and activation.
+
+Only plain Space is taken, only while the folder view has focus and at
+least one item is selected; the location bar, rename and search entries
+keep it. Without preview_cmd, Space behaves exactly as before.
+---
+ data/pcmanfm.1.in |  8 ++++++++
+ src/app-config.c  |  5 +++++
+ src/app-config.h  |  2 ++
+ src/main-win.c    | 47 +++++++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 62 insertions(+)
+
+diff --git a/data/pcmanfm.1.in b/data/pcmanfm.1.in
+index b1187d2..6c19f7a 100644
+--- a/data/pcmanfm.1.in
++++ b/data/pcmanfm.1.in
+@@ -101,6 +101,14 @@ of icons resembles folder view in main window of \fBpcmanfm\fP but icons on
+ desktop can "remember" their position. If you have two or more monitors then
+ desktop background and set of icons will be shown on each of them. Icons
+ positions will be remembered individually for each of monitors.
++
++Pressing Space in the folder view can preview the selected items without
++opening them, if a preview command is set as \fBpreview_cmd\fP in the
++[config] group of \fIpcmanfm.conf\fP, for example
++\fBpreview_cmd=my\-previewer %F\fP. The command takes the field codes of a
++desktop entry's Exec key: %F or %U receive every selected item as paths or
++URIs, while %f or %u run the command once per item; %f is added when it has
++none. Without \fBpreview_cmd\fP Space keeps its usual meaning.
+ .SH ENVIRONMENT
+ .PD 0
+ .TP
+diff --git a/src/app-config.c b/src/app-config.c
+index 3778583..f782ded 100644
+--- a/src/app-config.c
++++ b/src/app-config.c
+@@ -455,6 +455,7 @@ static void fm_app_config_finalize(GObject *object)
+       g_free(cfg->desktop_section.folder);
+     }
+     /*g_free(cfg->su_cmd);*/
++    g_free(cfg->preview_cmd);
+     g_hash_table_unref(cfg->autorun_choices);
+ 
+ #if !FM_CHECK_VERSION(1, 2, 0)
+@@ -663,6 +664,8 @@ void fm_app_config_load_from_key_file(FmAppConfig* cfg, GKeyFile* kf)
+     /*tmp = g_key_file_get_string(kf, "config", "su_cmd", NULL);
+     g_free(cfg->su_cmd);
+     cfg->su_cmd = tmp;*/
++    g_free(cfg->preview_cmd);
++    cfg->preview_cmd = g_key_file_get_string(kf, "config", "preview_cmd", NULL);
+ #if FM_CHECK_VERSION(1, 2, 0)
+     g_free(cfg->home_path);
+     cfg->home_path = g_key_file_get_string(kf, "config", "home_path", NULL);
+@@ -1100,6 +1103,8 @@ void fm_app_config_save_profile(FmAppConfig* cfg, const char* name)
+         g_string_append_printf(buf, "bm_open_method=%d\n", cfg->bm_open_method);
+         /*if(cfg->su_cmd && *cfg->su_cmd)
+             g_string_append_printf(buf, "su_cmd=%s\n", cfg->su_cmd);*/
++        if (cfg->preview_cmd && *cfg->preview_cmd)
++            g_string_append_printf(buf, "preview_cmd=%s\n", cfg->preview_cmd);
+ #if FM_CHECK_VERSION(1, 2, 0)
+         if (cfg->home_path && cfg->home_path[0]
+             && strcmp(cfg->home_path, fm_get_home_dir()) != 0)
+diff --git a/src/app-config.h b/src/app-config.h
+index 3abb6d3..1168d91 100644
+--- a/src/app-config.h
++++ b/src/app-config.h
+@@ -150,6 +150,8 @@ struct _FmAppConfig
+ #endif
+ 
+     /*char* su_cmd;*/
++    /* command run on the selected file when Space is pressed; NULL = off */
++    char *preview_cmd;
+ 
+     /* pre-1.2.0 style config - common settings for all monitors */
+     FmDesktopConfig desktop_section;
+diff --git a/src/main-win.c b/src/main-win.c
+index 49fc53b..5667cef 100644
+--- a/src/main-win.c
++++ b/src/main-win.c
+@@ -2458,11 +2458,58 @@ static void switch_to_prev_tab(FmMainWin* win)
+     gtk_notebook_set_current_page(win->notebook, n);
+ }
+ 
++/* Space in the folder view runs the configured preview command on the
++ * selected items, like a quick look. Without preview_cmd nothing changes. */
++static gboolean preview_selected_file(FmMainWin* win)
++{
++    GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(win));
++    FmFileInfoList *files;
++    GAppInfo *app;
++    GList *l, *gfiles = NULL;
++    GdkAppLaunchContext *ctx;
++    GError *err = NULL;
++
++    if (!app_config->preview_cmd || !*app_config->preview_cmd)
++        return FALSE;
++    if (!win->folder_view || !focus
++        || (focus != GTK_WIDGET(win->folder_view)
++            && !gtk_widget_is_ancestor(focus, GTK_WIDGET(win->folder_view))))
++        return FALSE;
++    if (fm_folder_view_get_n_selected_files(win->folder_view) == 0)
++        return FALSE;
++
++    files = fm_folder_view_dup_selected_files(win->folder_view);
++    for (l = fm_file_info_list_peek_head_link(files); l; l = l->next)
++        gfiles = g_list_prepend(gfiles, fm_path_to_gfile(fm_file_info_get_path(l->data)));
++    gfiles = g_list_reverse(gfiles);
++    fm_file_info_list_unref(files);
++    /* GLib appends %f when the command has no field code of its own */
++    app = g_app_info_create_from_commandline(app_config->preview_cmd, NULL,
++                                             G_APP_INFO_CREATE_NONE, &err);
++    if (app)
++    {
++        ctx = gdk_display_get_app_launch_context(gtk_widget_get_display(GTK_WIDGET(win)));
++        g_app_info_launch(app, gfiles, G_APP_LAUNCH_CONTEXT(ctx), &err);
++        g_object_unref(ctx);
++        g_object_unref(app);
++    }
++    g_list_free_full(gfiles, g_object_unref);
++    if (err)
++    {
++        fm_show_error(GTK_WINDOW(win), NULL, err->message);
++        g_error_free(err);
++    }
++    return TRUE;
++}
++
+ static gboolean on_key_press_event(GtkWidget* w, GdkEventKey* evt)
+ {
+     FmMainWin* win = FM_MAIN_WIN(w);
+     int modifier = evt->state & gtk_accelerator_get_default_mod_mask();
+ 
++    if (modifier == 0 && evt->keyval == GDK_KEY_space && preview_selected_file(win))
++        return TRUE;
++
+     if(modifier == GDK_MOD1_MASK) /* Alt */
+     {
+         if(evt->keyval >= '0' && evt->keyval <= '9') /* Alt + 0 ~ 9, nth tab */
+-- 
+2.53.0
+
