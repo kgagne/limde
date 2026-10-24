@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import shutil
 import signal
 import subprocess
 import sys
@@ -107,7 +108,7 @@ def main():
             results.append(name)
             print('PASS:', name, flush=True)
         try:
-            compositor = spawn([str(Path.home() / '.local/bin/labwc'), '-C', str(config)], 'compositor')
+            compositor = spawn([shutil.which('labwc') or '/usr/local/bin/labwc', '-C', str(config)], 'compositor')
             wait_for(lambda: any(p.is_socket() for p in runtime.glob('wayland-*')), 'compositor socket')
             env['WAYLAND_DISPLAY'] = next(p.name for p in runtime.glob('wayland-*') if p.is_socket())
             assert json.loads(run([str(HELPER), 'plan-quit']))['action'] == 'none'
