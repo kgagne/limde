@@ -13,4 +13,28 @@ precedence = "override"
 SPDX-FileCopyrightText = "2026 Keith Gagne"
 SPDX-License-Identifier = "GPL-2.0-or-later"
 
+[[annotations]]
+path = ["components/icons/brands/blender.svg", "components/icons/brands/krita.svg", "components/icons/brands/libreoffice-startcenter.svg", "components/icons/brands/vlc.svg", "components/icons/brands/mpv.svg", "components/icons/brands/audacity.svg", "components/icons/brands/kdenlive.svg", "components/icons/brands/obs.svg", "components/icons/brands/keepassxc.svg", "components/icons/brands/transmission.svg", "components/icons/brands/vscodium.svg", "components/icons/brands/htop.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "Simple Icons contributors"
+SPDX-License-Identifier = "CC0-1.0"
+
+[[annotations]]
+path = ["components/icons/brands/cc-by-sa/gimp.svg", "components/icons/brands/cc-by-sa/foot.svg", "components/icons/brands/cc-by-sa/papers.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "See components/icons/brands/cc-by-sa/CREDITS.md"
+SPDX-License-Identifier = "CC-BY-SA-4.0"
+
+[[annotations]]
+path = ["components/icons/brands/cc-by-sa/inkscape.svg", "components/icons/brands/cc-by-sa/nvim.svg"]
+precedence = "override"
+SPDX-FileCopyrightText = "See components/icons/brands/cc-by-sa/CREDITS.md"
+SPDX-License-Identifier = "CC-BY-SA-3.0"
+
+[[annotations]]
+path = "components/icons/brands/mpl-2.0/**"
+precedence = "override"
+SPDX-FileCopyrightText = "The Document Foundation, via Simple Icons"
+SPDX-License-Identifier = "MPL-2.0"
+
 # Still to come: lab-sensible-terminal (GPL-2.0-only, from labwc).

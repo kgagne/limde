@@ -250,6 +250,7 @@
 "video-single-display" = "desktop"
 
 [categories]
+"system-file-manager" = "folder-open"
 "applications-development" = "code"
 "applications-engineering" = "set-square"
 "applications-games" = "gamepad"

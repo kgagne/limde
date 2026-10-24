@@ -7,7 +7,7 @@ does; none of storytold's artwork is traced. Style rules: README.md.
 import math
 from pathlib import Path
 
-from _draw import circle, dot, f, path, polar, rect, write
+from _draw import circle, dot, f, path, rect, write
 
 BRANDS = Path(__file__).resolve().parent / 'brands'
 
@@ -49,13 +49,10 @@ brand('gridcraft', rect(2.25, 3.25, 19.5, 17.5),
       '<path d="M3 4h18v4.75H3z" fill="currentColor" stroke="none" opacity="0.35"/>',
       path('M2.25 8.75h19.5M2.25 14.75h19.5M9 3.25v17.5M15.5 3.25v17.5'))
 # Aperture: six blades drawn as chords inside the ring.
-_blades = []
-for i in range(6):
-    a = 60 * i
-    x0, y0 = polar(12, 12, 9.75, a)
-    x1, y1 = polar(12, 12, 4.5, a + 100)
-    _blades.append(f'M{f(x0, y0)}L{f(x1, y1)}')
-brand('lightcraft', circle(12, 12, 9.75), path(''.join(_blades)))
+# A light bulb (darktable's real logo is an aperture, so LightCraft avoids one).
+brand('lightcraft', path('M9 17.5c0-2-.75-3-1.75-4.25A6.5 6.5 0 1 1 18.5 9c0 1.75-.75 3-1.75 4.25'
+                         '-1 1.25-1.75 2.25-1.75 4.25z'),
+      path('M9.25 20.25h5.5M10.5 22.25h3'))
 brand('pdfcraft', path('M13.5 2H6a1.75 1.75 0 0 0-1.75 1.75v16.5A1.75 1.75 0 0 0 6 22h5'),
       path('M13.5 2v4.25a1 1 0 0 0 1 1h4.25V11'), path('M13.5 2l5.25 5.25'),
       path('M17.5 13.25l3.5 3.5-5.25 5.25H12.25v-3.5z'), path('M15.75 15l3.5 3.5'))

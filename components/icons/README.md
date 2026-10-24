@@ -25,17 +25,18 @@ Every icon in `src/` follows these, so the set reads as one family:
   Against GNOME's Adwaita symbolic set (498 names, excluding legacy and right-to-left), 355
   are covered. The rest are skipped on purpose: emoji faces, weather, presence states,
   screen orientation, cellular generations, and Apple-specific devices.
-- Tier 4 (brands), in `brands/`, drawn by `draw_brands_craft.py`:
-  - All 16 Craft icons drafted 2026-10-24. CADCraft follows Keith's set-square tile; the other
-    thirteen are original glyphs.
-  - PhotoCraft (kitsune) and VectorCraft (dragon) come from Keith's Lumo line-art
-    references, composed for icon size: the fox's face and tails, the dragon's head.
-    - The fox was traced with `tools/centerline.py`, then its diamond and eye enlarged.
-      Keith chose it over a hand-drawn version.
-    - The dragon was hand-drawn on a grid over the reference, with its mouth curved and
-      shortened at Keith's request.
-    - The references stay in Keith's own machine repository, not here.
-  - AniCraft needs a redesign: it reads as a chain link.
-  - Third-party logos only after their owner's logo policy has been checked.
+- Tier 4 (brands), in `brands/` (39 icons; `brands.toml` maps them to app icon names):
+  - The 16 Craft apps are original line glyphs. PhotoCraft (fox) and VectorCraft
+    (dragon) were traced from Keith's Lumo line-art references with `tools/centerline.py`.
+    LightCraft is a light bulb, so it doesn't clash with darktable's aperture logo.
+  - 18 third-party logos are solid icons from Simple Icons (`import_simple_icons.py`).
+    That's deliberate: they are accurate and CC0 or openly licensed, and Keith's desktop
+    already pairs line system icons with solid brand logos.
+  - darktable, RawTherapee, btop, foot and Papers, which Simple Icons lacks, are line
+    drawings (`draw_brands_apps.py`).
+  - Licences follow each logo: CC BY-SA files are in `brands/cc-by-sa/` (credits in
+    `CREDITS.md`), MPL-2.0 files in `brands/mpl-2.0/`. Trademarks and the not-included
+    list are in `brands/NOTICE.md`.
 
-Generators: `_draw.py` (shared helpers and outlines), `draw_tier1.py`, `draw_tier2.py`.
+Generators: `_draw.py` (shared helpers and outlines), `draw_tier1.py`, `draw_tier2.py`,
+`draw_brands_craft.py`, `draw_brands_apps.py`, `import_simple_icons.py`.

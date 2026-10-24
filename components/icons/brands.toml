@@ -1,0 +1,49 @@
+# Brand icon -> the desktop icon names that apps request. The theme installs each brand icon
+# under all of its names (plus "-symbolic" forms), so an app shows it as soon as it is
+# installed. Names come from the apps' own .desktop files (checked 2026-10-24). Path is
+# relative to brands/.
+
+[craft]
+"cadcraft.svg" = ["ai.storyteller.cadcraft"]
+"deckcraft.svg" = ["ai.storyteller.deckcraft"]
+"designcraft.svg" = ["ai.storyteller.designcraft"]
+"effectcraft.svg" = ["ai.storyteller.effectcraft"]
+"figcraft.svg" = ["ai.storyteller.figcraft"]
+"filmcraft.svg" = ["ai.storyteller.filmcraft"]
+"gridcraft.svg" = ["ai.storyteller.gridcraft"]
+"lightcraft.svg" = ["ai.storyteller.lightcraft"]
+"pdfcraft.svg" = ["ai.storyteller.pdfcraft"]
+"photocraft.svg" = ["ai.storyteller.photocraft"]
+"soundcraft.svg" = ["ai.storyteller.soundcraft"]
+"vectorcraft.svg" = ["ai.storyteller.vectorcraft"]
+"wordcraft.svg" = ["ai.storyteller.wordcraft"]
+"anicraft.svg" = ["ai.storyteller.anicraft"]            # unverified: upstream repo still empty
+"artcraft.svg" = ["ai.artcraft.app"]                    # unverified: no Linux desktop file yet
+"craft-launcher.svg" = ["ai.storyteller.artcraft-launcher"]
+
+[apps]
+"blender.svg" = ["blender", "org.blender.Blender"]
+"cc-by-sa/gimp.svg" = ["gimp", "org.gimp.GIMP"]
+"cc-by-sa/inkscape.svg" = ["org.inkscape.Inkscape", "inkscape"]
+"krita.svg" = ["krita", "org.kde.krita"]
+"darktable.svg" = ["darktable", "org.darktable.Darktable"]
+"rawtherapee.svg" = ["rawtherapee", "com.rawtherapee.RawTherapee"]
+"libreoffice-startcenter.svg" = ["libreoffice-startcenter", "libreoffice-main", "org.libreoffice.LibreOffice", "org.libreoffice.LibreOffice.startcenter"]
+"mpl-2.0/libreoffice-writer.svg" = ["libreoffice-writer", "org.libreoffice.LibreOffice.writer"]
+"mpl-2.0/libreoffice-calc.svg" = ["libreoffice-calc", "org.libreoffice.LibreOffice.calc"]
+"mpl-2.0/libreoffice-impress.svg" = ["libreoffice-impress", "org.libreoffice.LibreOffice.impress"]
+"vlc.svg" = ["vlc", "org.videolan.VLC"]
+"mpv.svg" = ["mpv", "io.mpv.Mpv"]
+"audacity.svg" = ["audacity", "org.audacityteam.Audacity"]
+"kdenlive.svg" = ["kdenlive", "org.kde.kdenlive"]
+"obs.svg" = ["com.obsproject.Studio", "obs"]
+"keepassxc.svg" = ["keepassxc", "org.keepassxc.KeePassXC"]
+"transmission.svg" = ["transmission-gtk", "transmission-qt", "transmission", "com.transmissionbt.Transmission"]
+"vscodium.svg" = ["vscodium", "com.vscodium.codium"]
+"cc-by-sa/nvim.svg" = ["nvim", "io.neovim.nvim"]
+"htop.svg" = ["htop"]
+"btop.svg" = ["btop"]
+"cc-by-sa/foot.svg" = ["foot", "footclient", "page.codeberg.dnkl.foot"]
+"cc-by-sa/papers.svg" = ["org.gnome.Papers"]
+
+# PCManFM uses the generic "system-file-manager" name; aliases.toml covers it.
