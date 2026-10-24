@@ -1,0 +1,7 @@
+# Menu entries hidden from the launcher: not useful to start directly, or duplicates.
+# The apps stay installed and still work as file and link handlers. One desktop file
+# name per line, then "# why".
+footclient.desktop            # Foot again, in client mode for a running Foot server
+foot-server.desktop           # Foot again, as a background server
+pcmanfm-desktop-pref.desktop  # PCManFM's desktop-icons mode, which elachisto doesn't use
+info.desktop                  # TeXInfo, a terminal manual reader that duplicates man

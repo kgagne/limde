@@ -22,7 +22,7 @@ WANT = {
     'libreoffice-calc': 'libreofficecalc', 'libreoffice-impress': 'libreofficeimpress',
     'vlc': 'vlcmediaplayer', 'mpv': 'mpv', 'audacity': 'audacity', 'kdenlive': 'kdenlive',
     'obs': 'obsstudio', 'keepassxc': 'keepassxc', 'transmission': 'transmission',
-    'vscodium': 'vscodium', 'nvim': 'neovim', 'htop': 'htop',
+    'vscodium': 'vscodium', 'nvim': 'neovim', 'htop': 'htop', 'vim': 'vim',
 }
 FOLDER = {None: 'brands', 'CC-BY-SA-3.0': 'brands/cc-by-sa', 'CC-BY-SA-4.0': 'brands/cc-by-sa',
           'MPL-2.0': 'brands/mpl-2.0'}

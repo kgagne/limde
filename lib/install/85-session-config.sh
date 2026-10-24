@@ -31,4 +31,20 @@ step_session_config() {
   ((added)) && changed "added $added starting config file(s) to your home"
   ((kept)) && note "kept $kept config file(s) you already have (elachisto's versions are in $cfg/home)"
   ((added || kept)) || ok "your config files are in place"
+
+  # Hide redundant launcher entries: a full copy of each, marked NoDisplay, in
+  # /usr/local/share/applications, which takes precedence over /usr/share/applications.
+  local hidden=0 name orig want_file
+  while read -r name _; do
+    [[ $name && $name != \#* ]] || continue
+    orig=/usr/share/applications/$name
+    [[ -f $orig ]] || continue
+    want_file=$(sed '0,/^\[Desktop Entry\]/s//[Desktop Entry]\nNoDisplay=true/' "$orig")
+    if [[ $(cat "/usr/local/share/applications/$name" 2>/dev/null) != "$want_file" ]]; then
+      printf '%s\n' "$want_file" | sudo install -D -m 644 /dev/stdin "/usr/local/share/applications/$name"
+      hidden=$((hidden + 1))
+    fi
+  done < "$cfg/hidden-apps.list"
+  ((hidden)) && changed "hid $hidden redundant launcher entr$( ((hidden == 1)) && echo y || echo ies)"
+  return 0
 }

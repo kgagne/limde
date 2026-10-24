@@ -42,6 +42,7 @@
 "vscodium.svg" = ["vscodium", "com.vscodium.codium"]
 "cc-by-sa/nvim.svg" = ["nvim", "io.neovim.nvim"]
 "htop.svg" = ["htop"]
+"vim.svg" = ["vim", "gvim"]
 "btop.svg" = ["btop"]
 "cc-by-sa/foot.svg" = ["foot", "footclient", "page.codeberg.dnkl.foot"]
 "cc-by-sa/papers.svg" = ["org.gnome.Papers"]
