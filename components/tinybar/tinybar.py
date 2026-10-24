@@ -37,6 +37,8 @@ def first_device(pattern, fallback):
 
 BATTERY = first_device("power_supply/BAT*", "power_supply/BAT0")
 BACKLIGHT = first_device("backlight/*", "backlight/none")
+HAS_BATTERY = (BATTERY / "capacity").exists()
+HAS_BACKLIGHT = (BACKLIGHT / "brightness").exists()
 
 RUNTIME_DIR = Path(
     f"/run/user/{os.getuid()}/tinybar"
@@ -1429,6 +1431,10 @@ class NetworkMenu(Gtk.MenuButton):
         elif state["wifi_connected"]:
             self.indicator.set_text("WIFI ON")
 
+        elif state["wired"]:
+            # Online by cable (desktops, VMs, docks): show that rather than Wi-Fi off.
+            self.indicator.set_text("WIRED Connected", icon="network-wired")
+
         else:
             self.indicator.set_text("WIFI OFF")
 
@@ -1731,6 +1737,9 @@ class TinyBar(Gtk.Application):
             show_value=False
         )
         self.battery = StatusIndicator(self.icons, "battery")
+        # Desktops and VMs have no battery or backlight: leave those indicators out.
+        self.battery.set_visible(HAS_BATTERY)
+        self.brightness.set_visible(HAS_BACKLIGHT)
 
         self.level_overlay = LevelOverlay(self, self.icons)
 
@@ -2387,6 +2396,8 @@ class TinyBar(Gtk.Application):
 
     def update_brightness(self, announce=False):
         # announce: the backlight changed, so also show the level overlay.
+        if not HAS_BACKLIGHT:
+            return
         current = read_path(
             BACKLIGHT / "brightness"
         )
@@ -2436,6 +2447,8 @@ class TinyBar(Gtk.Application):
     # ---------- battery ----------
 
     def update_battery(self):
+        if not HAS_BATTERY:
+            return
         now = time.time()
 
         capacity = (

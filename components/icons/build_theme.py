@@ -46,7 +46,7 @@ Type=Scalable
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('output')
-    ap.add_argument('--color', default='#eeeeee', help='colour baked into the scalable/ copies')
+    ap.add_argument('--color', default='#888888', help='colour baked into the scalable/ copies')
     args = ap.parse_args()
     if not HEX.match(args.color):
         ap.error('--color must look like #rrggbb')
