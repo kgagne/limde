@@ -52,20 +52,15 @@ write('volume-off', SPEAKER)
 write('volume-xmark', SPEAKER, path('M15.5 9.5l5 5M20.5 9.5l-5 5'))
 
 # --- brightness family (dim to bright) ----------------------------------------------
-def sun(core_filled, ray_from, ray_to, dots=False):
-    parts = [f'<circle cx="12" cy="12" r="3.75"{" fill=\"currentColor\"" if core_filled else ""}/>']
-    for i in range(8):
-        a = i * 45
-        if dots:
-            parts.append(dot(*polar(12, 12, ray_from, a), 1))
-        else:
-            parts.append(path(f'M{f(*polar(12, 12, ray_from, a))}L{f(*polar(12, 12, ray_to, a))}'))
-    return parts
+# Brightness levels use a small solid dot, so they read differently from the plain "sun"
+# (a ring), which is what most icon sets leave nearly identical (compared 2026-10-24).
+def rays(r_from, r_to):
+    return [path(f'M{f(*polar(12, 12, r_from, a))}L{f(*polar(12, 12, r_to, a))}') for a in range(0, 360, 45)]
 
-write('brightness-low', *sun(False, 7.25, 0, dots=True))
-write('brightness', *sun(False, 6.75, 8))
-write('sun', *sun(False, 6.5, 9))
-write('sun-bright', *sun(True, 6.5, 10))
+write('brightness-low', dot(12, 12, 2.25), *(dot(*polar(12, 12, 7.25, a), 1) for a in range(0, 360, 45)))
+write('brightness', dot(12, 12, 2.25), *rays(5, 9.5))
+write('sun', circle(12, 12, 3.75), *rays(6.5, 9))
+write('sun-bright', '<circle cx="12" cy="12" r="3.75" fill="currentColor"/>', *rays(6.5, 10))
 
 # --- files --------------------------------------------------------------------------
 write('file', *FILE)

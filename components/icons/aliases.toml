@@ -3,6 +3,8 @@
 # Icon Naming Spec context (the group is informational; lookups ignore it).
 
 [actions]
+"edit" = "pencil"
+"pen-to-square" = "pencil"
 "action-unavailable" = "circle-slash"
 "address-book-new" = "person-plus"
 "application-exit" = "log-out"
