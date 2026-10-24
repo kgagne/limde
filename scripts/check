@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Repository checks. Run before every commit (the pre-commit hook does this).
+#   scripts/check            scrub gate + syntax checks on the tracked tree
+#   scripts/check --clone    also clone the repository into a temp dir and check there
+set -euo pipefail
+root=$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel)
+cd "$root"
+fail=0
+
+# 1. Scrub gate: nothing personal or machine-specific in tracked files.
+patterns=$(grep -vE '^\s*(#|$)' scripts/public-patterns)
+mapfile -t files < <(git ls-files -co --exclude-standard \
+  | grep -vxE 'scripts/public-patterns|LICENSE|REUSE.toml')
+if ((${#files[@]})); then
+  if hits=$(grep -nHiE -f <(printf '%s\n' "$patterns") -- "${files[@]}" 2>/dev/null); then
+    echo "scrub: personal or machine-specific text found:" >&2
+    printf '%s\n' "$hits" >&2
+    fail=1
+  fi
+fi
+
+# 2. Shell syntax for every bash/sh script.
+while IFS= read -r f; do
+  head -n1 "$f" | grep -qE '^#!.*\b(ba)?sh\b' || continue
+  bash -n "$f" || { echo "syntax: $f" >&2; fail=1; }
+done < <(git ls-files -co --exclude-standard)
+
+# 3. Fresh-clone self-test: the same checks must pass on a clone (file modes, ignored files).
+if [[ ${1:-} == --clone ]]; then
+  tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+  git clone -q --no-local . "$tmp/elachisto"
+  "$tmp/elachisto/scripts/check" || fail=1
+fi
+
+((fail == 0)) && echo "check: ok"
+exit "$fail"

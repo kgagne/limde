@@ -1,0 +1,11 @@
+version = 1
+
+[[annotations]]
+path = "**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Keith Gagne"
+SPDX-License-Identifier = "MIT"
+
+# Upstream-derived files keep their own licence. Entries are added as the files arrive:
+# - the PCManFM Space-preview patch: GPL-2.0-or-later (PCManFM's licence)
+# - lab-sensible-terminal: GPL-2.0-only (from labwc)

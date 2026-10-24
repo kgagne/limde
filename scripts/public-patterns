@@ -1,0 +1,12 @@
+# Extended regexes (grep -E, case-insensitive). A match anywhere in a tracked file fails
+# `scripts/check`. This file and LICENSE/REUSE.toml are exempt (they name the author).
+keithgagne
+kgagne
+/home/[a-z]
+\bxps\b
+@gmail\.com
+claude\.ai/code/session
+\b(10|127)\.[0-9]+\.[0-9]+\.[0-9]+\b
+\b192\.168\.[0-9]+\.[0-9]+\b
+\b172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+\b
+\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b
