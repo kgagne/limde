@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+# Release acceptance, in a fresh throwaway VM. Covers what test-install does not:
+#   1. interrupted installs: the power is cut during the package install, then the
+#      installer is stopped with Ctrl+C during the labwc build; each time the next run
+#      must finish cleanly, and a run after that must report "No changes"
+#   2. first login: the session starts by itself after a reboot, with nothing failing
+#   3. resource baseline of the idle session (memory, CPU, processes, disk)
+#   4. an update keeps your own settings: a newer elachisto is installed over personal
+#      changes (appearance, labwc keys, autostart, starting files, ~/.profile, agent-web);
+#      every one must be untouched and still in effect after a reboot
+#   tests/vm/test-acceptance [VM_NAME] [--keep]
+# Saves logs, the baseline and screenshots under local/vm/results/<VM_NAME>/.
+# Exit 0 = all passed.
+set -uo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+repo=$(cd "$here/../.." && pwd)
+vm=$here/vm
+name=accept; keep=0
+for arg in "$@"; do
+  case $arg in
+    --keep) keep=1 ;;
+    *) name=$arg ;;
+  esac
+done
+vmd=$repo/local/vm/$name
+out=$repo/local/vm/results/$name
+rm -rf "$out"; mkdir -p "$out"
+fails=0
+pass() { echo "PASS  $*" | tee -a "$out/summary.txt"; }
+fail() { echo "FAIL  $*" | tee -a "$out/summary.txt"; fails=$((fails + 1)); }
+check() { local what=$1; shift; echo "== $what" >>"$out/checks.log"
+  if "$@" >>"$out/checks.log" 2>&1; then pass "$what"; else fail "$what"; fi; }
+on_vm() { "$vm" ssh "$name" "$@"; }
+wait_ssh() { for _ in $(seq 90); do on_vm true 2>/dev/null && return 0; sleep 2; done; return 1; }
+# Wait until a guest command succeeds (polled every 2 s). $1: timeout in seconds.
+wait_for() { local t=$1; shift; for _ in $(seq $((t / 2))); do on_vm "$@" 2>/dev/null && return 0; sleep 2; done; return 1; }
+install_bg() { on_vm "setsid -f bash -c 'cd elachisto && exec ./install --yes' >$1 2>&1 </dev/null"; }
+install_fg() {  # $1: log name; exit code is the installer's
+  on_vm 'cd elachisto && ./install --yes' >"$out/$1" 2>&1; local rc=$?
+  echo "exit code $rc" >>"$out/$1"; return $rc
+}
+# Press keys on the VM's keyboard, e.g. "W-F12" (W = Super).
+key() {
+  local keys=() k parts
+  IFS=- read -ra parts <<< "$1"
+  for k in "${parts[@]}"; do
+    case $k in W) k=meta_l ;; C) k=ctrl ;; A) k=alt ;; S) k=shift ;; Return) k=ret ;; *) k=${k,,} ;; esac
+    keys+=("{\"type\": \"qcode\", \"data\": \"$k\"}")
+  done
+  "$here/qmp.py" "$vmd/qmp.sock" send-key "{\"keys\": [$(IFS=,; echo "${keys[*]}")]}" >/dev/null
+}
+reboot_vm() {
+  on_vm 'sudo systemctl reboot' >/dev/null 2>&1 || true
+  sleep 5; wait_ssh
+  # The session is up when the agent-web window has started.
+  wait_for 120 'pgrep -f "[f]irefox --profile .*agent-web/profile" >/dev/null'
+  sleep 15
+}
+
+"$vm" down "$name" >/dev/null 2>&1 || true
+"$vm" rm "$name" >/dev/null 2>&1 || true
+"$vm" up "$name"
+"$vm" copy "$name" --exclude=/local --exclude=.git "$repo/" elachisto/
+
+echo "== 1a. power cut during the package install"
+install_bg install-1.log
+if wait_for 900 '[ "$(grep -c ^Unpacking ~/.local/state/elachisto/apt.log 2>/dev/null)" -ge 120 ]'; then
+  "$here/qmp.py" "$vmd/qmp.sock" system_reset >/dev/null
+  pass "power cut while apt was unpacking"
+else
+  fail "apt never got far enough to cut the power"
+fi
+sleep 5
+check "VM comes back after the power cut" wait_ssh
+on_vm 'ls /var/lib/dpkg/updates; sudo dpkg --audit; echo "---"; cat ~/.local/state/elachisto/apt.log 2>/dev/null | tail -n 5' >"$out/after-power-cut.txt" 2>&1
+check "dpkg was left half done (the case being tested)" test "$(head -n 1 "$out/after-power-cut.txt")" != "---"
+
+echo "== 1b. Ctrl+C during the labwc build"
+install_bg install-2.log
+if wait_for 1500 '[ "$(grep -cE "^\[[0-9]+/[0-9]+\]" ~/.local/state/elachisto/labwc-build.log 2>/dev/null)" -ge 100 ]'; then
+  # Ctrl+C signals the whole foreground process group.
+  on_vm 'pgid=$(ps -o pgid= -p "$(pgrep -of "install --yes")" | tr -d " "); kill -INT -- "-$pgid"'
+  pass "Ctrl+C while labwc was compiling"
+else
+  fail "the labwc build never started (see install-2.log)"
+fi
+sleep 8
+on_vm 'cat install-2.log' >"$out/install-2.log" 2>&1
+check "the second run had finished the interrupted package install" grep -q 'finished an interrupted package install' "$out/install-2.log"
+check "nothing is left running after Ctrl+C" on_vm '! pgrep -f "[i]nstall --yes|[m]eson|[n]inja" >/dev/null'
+check "labwc was not installed half built" on_vm '[ ! -e /usr/local/share/elachisto/labwc.commit ]'
+
+echo "== 1c. finishing"
+check "the next run finishes" install_fg install-3.log
+install_fg install-4.log
+check "a run after that reports no changes" grep -q 'No changes' "$out/install-4.log"
+check "dpkg has nothing left half done" on_vm '[ -z "$(sudo dpkg --audit)" ] && [ -z "$(ls /var/lib/dpkg/updates)" ]'
+
+echo "== 2. first login"
+reboot_vm
+check "labwc runs on tty1 from the elachisto build" on_vm 'pid=$(pgrep -x labwc) && [ "$(readlink /proc/$pid/exe)" = /usr/local/bin/labwc ] && [ "$(ps -o tty= -p $pid)" = tty1 ]'
+for proc in tinybar.py mako swayidle elephant 'walker --gapplication-service' 'agent-web --keep-open'; do
+  # "[t]inybar": the pattern must not match the shell that runs pgrep.
+  check "session runs $proc" on_vm "pgrep -f '[${proc:0:1}]${proc:1}' >/dev/null"
+done
+check "no failed units" on_vm '[ -z "$(systemctl --failed --no-legend)" ]'
+# GTK's accessibility-bus warning is left out: accessibility is an open question.
+check "panel and launcher logs show no errors" on_vm '! grep -iE "traceback|error|critical" ~/.local/state/elachisto/{tinybar,walker,elephant}.log | grep -v "accessibility bus"'
+check "launcher file search finds files" on_vm 'touch ~/elachisto-findme.txt && fd -t f elachisto-findme ~ | grep -q findme'
+on_vm 'cat ~/.local/state/elachisto/labwc.log' >"$out/labwc-first-login.log" 2>&1
+"$vm" shot "$name" "$out/first-login.png" >/dev/null || fail "screenshot"
+
+echo "== 3. resource baseline (idle session)"
+sleep 60
+on_vm 'bash -s' >"$out/baseline.txt" 2>&1 <<'EOF'
+cpu() { awk '/^cpu /{print $2+$3+$4+$7+$8, $2+$3+$4+$5+$6+$7+$8}' /proc/stat; }
+read b1 t1 < <(cpu); sleep 60; read b2 t2 < <(cpu)
+echo "CPU busy over 60 s idle: $(awk -v b=$((b2-b1)) -v t=$((t2-t1)) 'BEGIN{printf "%.2f%%", 100*b/t}') ($(nproc) vCPUs)"
+awk '/MemTotal/{t=$2} /MemAvailable/{a=$2} END{printf "Memory in use: %d MiB of %d MiB\n", (t-a)/1024, t/1024}' /proc/meminfo
+pss=0; n=0
+for p in /proc/[0-9]*; do
+  [ "$(stat -c %U "$p" 2>/dev/null)" = "$USER" ] || continue
+  v=$(awk '/^Pss:/{print $2}' "$p/smaps_rollup" 2>/dev/null) || continue
+  pss=$((pss + ${v:-0})); n=$((n + 1))
+done
+echo "Session (all of $USER's processes): $n processes, $((pss / 1024)) MiB PSS"
+echo "Processes on the system: $(ps -e --no-headers | wc -l)"
+echo "Boot: $(systemd-analyze 2>/dev/null | head -1)"
+echo
+echo "Largest processes (RSS MiB, %CPU since start):"
+ps -eo rss=,pcpu=,comm= --sort=-rss | head -n 15 | awk '{printf "  %6.0f  %5s  %s\n", $1/1024, $2, $3}'
+echo
+echo "Disk:"
+df -h / | tail -n 1 | awk '{print "  root filesystem: " $3 " used of " $2}'
+echo "  installed packages: $(dpkg-query -W -f '${db:Status-Status}\n' | grep -cx installed)"
+sudo du -sh /usr/local ~/.local/opt/firefox ~/.cache/elachisto 2>/dev/null | sed 's/^/  /'
+EOF
+cat "$out/baseline.txt"
+check "baseline recorded" grep -q 'Memory in use' "$out/baseline.txt"
+
+echo "== 4. an update keeps your own settings"
+on_vm 'bash -s' >>"$out/checks.log" 2>&1 <<'EOF'
+set -e
+mkdir -p ~/.config/elachisto/autostart.d ~/.config/labwc
+printf '[colors]\nfocus = "#7fb4ca"\n' > ~/.config/elachisto/appearance.toml
+elachisto-appearance --apply
+cat > ~/.config/labwc/rc.xml <<'XML'
+<?xml version="1.0"?>
+<labwc_config>
+  <keyboard>
+    <keybind key="W-F12"><action name="Execute" command="touch /tmp/mine-key"/></keybind>
+  </keyboard>
+</labwc_config>
+XML
+printf 'touch "$HOME/.local/state/mine-autostart"\n' > ~/.config/elachisto/autostart.d/90-mine.sh
+: > ~/.config/elachisto/autostart.d/20-idle.sh
+echo '# mine' >> ~/.config/walker/config.toml
+printf '\nexport MINE=1\n' >> ~/.profile
+agent-web stop
+printf 'url=https://example.org/\nkeep=\n' > ~/.config/elachisto/agent-web.conf
+cd ~
+sha256sum .config/elachisto/appearance.toml .config/labwc/rc.xml .config/elachisto/autostart.d/* \
+  .config/walker/config.toml .profile .config/elachisto/agent-web.conf > ~/mine.sha256
+EOF
+# The "newer elachisto": a changed default colour, panel, labwc defaults, welcome page and
+# starting file, so every kind of step has something to update.
+on_vm 'bash -s' >>"$out/checks.log" 2>&1 <<'EOF'
+set -e
+cd elachisto
+sed -i 's/^secondary = "#bdbdbd"/secondary = "#bcbcbc"/' components/appearance/appearance.toml
+echo '# update test' >> components/tinybar/tinybar.py
+echo '<!-- update test -->' >> config/labwc/rc.xml
+echo '<!-- update test -->' >> components/agent-web/welcome.html
+echo '# update test' >> config/home/.config/walker/config.toml
+EOF
+check "the update installs" install_fg install-update.log
+check "the update reports what it changed" grep -qE '[0-9]+ change\(s\) made' "$out/install-update.log"
+check "the update says it kept your starting files" grep -q 'kept .* config file(s) you already have' "$out/install-update.log"
+check "your files are byte for byte unchanged" on_vm 'cd ~ && sha256sum -c --quiet mine.sha256'
+check "the session block in ~/.profile is still there once" on_vm '[ "$(grep -c "^# >>> elachisto session >>>" ~/.profile)" = 1 ]'
+check "new defaults are installed" on_vm 'grep -q "update test" /etc/xdg/labwc/rc.xml /usr/local/share/elachisto/agent-web/welcome.html /usr/local/share/elachisto/tinybar/tinybar.py && grep -q bcbcbc /usr/local/share/elachisto/appearance/appearance.toml'
+check "styles carry the new default and your colour" on_vm 'elachisto-appearance --check && grep -rqi bcbcbc ~/.config/tinybar ~/.config/gtk-3.0 ~/.local/share/themes 2>/dev/null && grep -rqi 7fb4ca ~/.config ~/.local/share/themes'
+install_fg install-update-2.log
+check "a run after the update reports no changes" grep -q 'No changes' "$out/install-update-2.log"
+
+reboot_vm
+check "your autostart piece ran" on_vm 'test -e ~/.local/state/mine-autostart'
+check "your empty 20-idle.sh turned idle locking off" on_vm '! pgrep -x swayidle >/dev/null'
+check "the rest of the session still starts" on_vm 'pgrep -f "[t]inybar.py" && pgrep -x mako && pgrep -x elephant'
+on_vm 'rm -f /tmp/mine-key; pkill -x foot' >/dev/null 2>&1
+key W-F12; key W-Return; sleep 3
+check "your labwc key works" on_vm 'test -e /tmp/mine-key'
+check "the default keys still work next to yours (Super+Return opens foot)" on_vm 'pgrep -x foot'
+check "agent-web opens your page" on_vm 'grep "loaded" ~/.local/state/elachisto/agent-web.log | tail -n 1 | grep -q "home https://example.org/"'
+check "your ~/.profile line still applies" on_vm 'bash -lc "[ \"\$MINE\" = 1 ]"'
+check "no failed units" on_vm '[ -z "$(systemctl --failed --no-legend)" ]'
+"$vm" shot "$name" "$out/after-update.png" >/dev/null || fail "screenshot"
+
+((keep)) || { "$vm" down "$name" >/dev/null; "$vm" rm "$name" >/dev/null; }
+echo "== $(grep -c ^PASS "$out/summary.txt") passed, $fails failed; results in $out"
+exit $((fails > 0))

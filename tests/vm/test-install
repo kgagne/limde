@@ -66,6 +66,7 @@ check "pcmanfm on PATH is the Space-preview build" on_vm '[ "$(bash -lc "command
 check "PCManFM appears once in the app menu" on_vm '[ "$(ls /usr/share/applications/pcmanfm.desktop /usr/local/share/applications/pcmanfm.desktop 2>/dev/null | wc -l)" = 1 ]'
 check "walker and elephant have all their libraries" on_vm 'for f in /usr/local/bin/walker /usr/local/bin/elephant /usr/local/lib/elephant/{calc,desktopapplications,files,providerlist}.so; do [ -f "$f" ] || exit 1; done; ! ldd /usr/local/bin/walker /usr/local/bin/elephant /usr/local/lib/elephant/*.so 2>&1 | grep -q "not found"'
 check "walker runs" on_vm '/usr/local/bin/walker --version'
+check "fd is on PATH for the launcher's file search" on_vm 'command -v fd && fd --version'
 check "elephant loads all four providers" on_vm 'out=$(timeout 20 /usr/local/bin/elephant listproviders 2>&1); for p in calc desktopapplications files providerlist; do echo "$out" | grep -qi "$p" || exit 1; done'
 check "firefox has all its libraries" on_vm 'test -x ~/.local/opt/firefox/firefox && ! LD_LIBRARY_PATH=$HOME/.local/opt/firefox ldd ~/.local/opt/firefox/libxul.so ~/.local/opt/firefox/firefox-bin | grep -q "not found"'
 check "firefox AppArmor profile loaded" on_vm 'sudo aa-status 2>/dev/null | grep -qx "   elachisto-firefox"'

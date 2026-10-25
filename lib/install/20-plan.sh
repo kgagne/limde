@@ -53,6 +53,8 @@ step_plan() {
   total=$(apt-get -s install --no-install-recommends "${PACKAGES[@]}" 2>/dev/null | grep -c '^Inst ' || true)
   heading "Summary"
   echo "  ${#PACKAGES[@]} packages listed; with their dependencies, $total new package(s) would be installed."
+  dpkg_interrupted \
+    && note "An earlier package install was cut short; it is finished first (the count above may be low)."
 
   if ((PLAN_ONLY)); then
     heading "Plan only"; echo "  Nothing was changed."; return

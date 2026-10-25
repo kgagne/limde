@@ -2,6 +2,19 @@
 
 step_packages() {
   heading "Packages"
+  # A package install cut short (power loss, Ctrl+C) leaves dpkg half done, and apt
+  # refuses to install anything until it is finished. Finish it first.
+  if dpkg_interrupted; then
+    mkdir -p "$STATE_DIR"
+    {
+      sudo DEBIAN_FRONTEND=noninteractive dpkg --configure -a
+      # A package that was only half unpacked needs apt to fetch and unpack it again.
+      dpkg_interrupted && sudo DEBIAN_FRONTEND=noninteractive apt-get install -f -y -q
+      ! dpkg_interrupted
+    } >"$STATE_DIR/dpkg-configure.log" 2>&1 \
+      || { tail -n 20 "$STATE_DIR/dpkg-configure.log" >&2; die "could not finish an interrupted package install (log: $STATE_DIR/dpkg-configure.log)"; }
+    changed "finished an interrupted package install (dpkg --configure -a)"
+  fi
   local missing=() p
   for p in "${PACKAGES[@]}"; do installed "$p" || missing+=("$p"); done
   if ((${#missing[@]} == 0)); then

@@ -34,7 +34,7 @@ control_radius = 4
 popup_radius = 6
 border_width = 1
 
-# Font Awesome fonts and the native-fallback icon theme.
+# The icon theme: elachisto's own SVG icons, falling back to Adwaita.
 [icons]
 theme = "elachisto"
 # Icon sizes in pixels for each place. The panel size is the reference the others follow.

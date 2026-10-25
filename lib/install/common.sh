@@ -29,6 +29,14 @@ show_list() {
          -e 's/^\([a-z0-9][a-z0-9.+-]*\)\s*#\s*\(.*\)/      \1 — \2/p' "$1"
 }
 
+# A package install was cut short (power loss, Ctrl+C) and dpkg is half done: what apt
+# checks before refusing to install ("dpkg was interrupted"), or what dpkg --audit lists.
+# dpkg --audit needs root to read its lock; without sudo, only the first check runs.
+dpkg_interrupted() {
+  compgen -G '/var/lib/dpkg/updates/[0-9]*' >/dev/null && return 0
+  [[ -n $(sudo -n dpkg --audit 2>/dev/null) ]]
+}
+
 installed() { dpkg-query -W -f '${db:Status-Status}' "$1" 2>/dev/null | grep -qx installed; }
 
 # Keep sudo's ticket fresh during long steps, so the user is asked once.

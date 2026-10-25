@@ -30,3 +30,21 @@ Observed on the first build (2026-10-24):
   The EGL device-query errors in its log are expected without GPU acceleration.
 - The CD-ROM I/O errors during the installer's power-off are harmless: the media is
   ejected after the install has finished.
+
+## Release acceptance
+
+`test-install NAME` checks a clean install, a second run and a reboot. `test-acceptance
+NAME` covers the rest of a release check, in one fresh VM (about 40 minutes):
+- the power is cut while apt is unpacking, then Ctrl+C lands during the labwc build;
+  each next run must finish, and the run after must report "No changes"
+- the first login starts the whole session with no failed units or errors in its logs
+- an idle-session resource baseline (`local/vm/results/NAME/baseline.txt`)
+- an update installed over personal changes (appearance, labwc keys, autostart pieces,
+  starting files, `~/.profile`, agent-web's page) leaves every one byte for byte
+  unchanged and in effect after a reboot
+
+Baseline from the first passing run (2026-10-25; 4 vCPUs, 3.4 GiB RAM, software
+rendering, agent-web on its welcome page): 0.44% CPU busy at idle, 953 MiB memory in
+use (the session's processes 811 MiB PSS, most of it agent-web's Firefox), 178
+processes, 5.6 s boot, 8.9 GB on disk with 1181 packages (`/usr/local` 140 MB, Firefox
+326 MB). A laptop's numbers differ; this is for spotting regressions between runs.
