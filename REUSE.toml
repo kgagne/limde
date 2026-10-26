@@ -8,7 +8,7 @@ SPDX-License-Identifier = "MIT"
 
 # Upstream-derived files keep their own licence.
 [[annotations]]
-path = "components/preview/pcmanfm-space-preview.patch"
+path = ["components/preview/pcmanfm-space-preview.patch", "components/pcmanfm/pcmanfm-focus-file-shortcuts.patch"]
 precedence = "override"
 SPDX-FileCopyrightText = "2026 Keith Gagne"
 SPDX-License-Identifier = "GPL-2.0-or-later"

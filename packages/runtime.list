@@ -37,6 +37,7 @@ libx11-xcb1         # Firefox's X11 compatibility
 grim                # screenshots
 slurp               # choosing a region for a screenshot
 wl-clipboard        # copy and paste from the command line
+libglib2.0-bin      # gdbus, which sends notifications for screenshots and cut or copied files
 wtype               # sends keystrokes for some keyboard shortcuts
 
 ## Sound

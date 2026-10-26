@@ -1,0 +1,45 @@
+From a5b5362b4a7202f330374c9439d05b4a0e89f0db Mon Sep 17 00:00:00 2001
+From: Keith Gagne <kgagne@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 05:45:49 -0400
+Subject: [PATCH] Move focus to the folder view for Cut, Copy, Paste and Select
+ All
+
+The file actions behind Ctrl+X, Ctrl+C, Ctrl+V and Ctrl+A only act on
+files while the folder view has the keyboard focus. After choosing a
+place in the side pane the focus can stay there, and the shortcuts then
+do nothing, although the Edit menu shows them. Move the focus to the
+folder view before the accelerator runs, unless a text entry has it.
+---
+ src/main-win.c | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/src/main-win.c b/src/main-win.c
+index 49fc53b..2327bf7 100644
+--- a/src/main-win.c
++++ b/src/main-win.c
+@@ -2490,6 +2490,22 @@ static gboolean on_key_press_event(GtkWidget* w, GdkEventKey* evt)
+             switch_to_prev_tab(win);
+             return TRUE;
+         }
++        else if(win->folder_view
++                && (evt->keyval == GDK_KEY_x || evt->keyval == GDK_KEY_c
++                    || evt->keyval == GDK_KEY_v || evt->keyval == GDK_KEY_a))
++        {
++            /* Cut, Copy, Paste and Select All only act on files while the
++               folder view has the focus, so after picking a place in the
++               side pane they did nothing. Move the focus to the folder view
++               first, unless it is in a text entry, which keeps its own
++               clipboard handling. The accelerator then runs as usual. */
++            GtkWidget *focus = gtk_window_get_focus(GTK_WINDOW(win));
++            GtkWidget *view = GTK_WIDGET(win->folder_view);
++
++            if(focus && !GTK_IS_EDITABLE(focus) && focus != view
++               && !gtk_widget_is_ancestor(focus, view))
++                gtk_widget_grab_focus(view);
++        }
+     }
+     else if(modifier == (GDK_CONTROL_MASK|GDK_SHIFT_MASK)) /* Ctrl + Shift */
+     {
+-- 
+2.53.0
+

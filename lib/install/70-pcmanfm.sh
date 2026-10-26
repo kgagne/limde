@@ -1,4 +1,5 @@
-# Build PCManFM from its pinned tag with the Space-preview patch and install it to
+# Build PCManFM from its pinned tag with elachisto's patches (Space preview; Cut, Copy and
+# Paste keys that work after picking a place in the side pane) and install it to
 # /usr/local, where it takes precedence over Ubuntu's copy. Ubuntu's package stays
 # installed for its supporting files and dependencies; the patched build's own menu
 # entries are removed so the launcher doesn't list PCManFM twice.
@@ -10,8 +11,9 @@ step_pcmanfm() {
   heading "PCManFM with Space preview (built from source)"
   # shellcheck source=/dev/null
   . "$ELACHISTO_ROOT/pins/pcmanfm"
-  local patch=$ELACHISTO_ROOT/components/preview/pcmanfm-space-preview.patch
-  local want; want="$PCMANFM_COMMIT $(sha256sum "$patch" | cut -d' ' -f1)"
+  local patches=("$ELACHISTO_ROOT/components/preview/pcmanfm-space-preview.patch"
+                 "$ELACHISTO_ROOT/components/pcmanfm/pcmanfm-focus-file-shortcuts.patch")
+  local patch want; want="$PCMANFM_COMMIT $(cat "${patches[@]}" | sha256sum | cut -d' ' -f1)"
   if [[ -x $PCMANFM_PREFIX/bin/pcmanfm && -f $PCMANFM_STAMP && $(cat "$PCMANFM_STAMP") == "$want" ]]; then
     ok "PCManFM $PCMANFM_TAG with Space preview is installed"
     return
@@ -23,8 +25,10 @@ step_pcmanfm() {
   note "downloading PCManFM $PCMANFM_TAG"
   fetch_commit "$PCMANFM_URL" "$PCMANFM_COMMIT" "$work" >>"$log" 2>&1 \
     || die "could not download PCManFM (log: $log)"
-  git -C "$work" apply "$patch" >>"$log" 2>&1 \
-    || die "the Space-preview patch does not apply to PCManFM $PCMANFM_TAG (log: $log)"
+  for patch in "${patches[@]}"; do
+    git -C "$work" apply "$patch" >>"$log" 2>&1 \
+      || die "${patch##*/} does not apply to PCManFM $PCMANFM_TAG (log: $log)"
+  done
 
   note "building (log: $log)"
   (

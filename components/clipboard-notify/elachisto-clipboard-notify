@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Show a short notification when files are cut or copied.
+
+PCManFM gives no sign that files were cut: the rows look the same until the paste.
+This watches the clipboard for file lists and says what was cut or copied.
+
+It never reads x-special/gnome-copied-files: libfm empties the clipboard after the first
+read of that type for a cut (it expects that read to be the paste), so reading it here
+would cancel the cut. It reads text/uri-list for the names and libfm's
+application/x-kde-cutselection marker, which is "1" for a cut; neither has that effect.
+Copied text and images are never read.
+
+  elachisto-clipboard-notify          watch the clipboard (session autostart)
+  elachisto-clipboard-notify --event  handle one change, the uri list on stdin
+"""
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
+
+WL_PASTE = os.environ.get('ELACHISTO_CLIPBOARD_WLPASTE', '/usr/bin/wl-paste')
+FILES_TYPE = 'x-special/gnome-copied-files'
+CUT_TYPE = 'application/x-kde-cutselection'
+TIMEOUT_MS = 2500
+
+
+def summary(uris, cut):
+    """(title, body, icon) for the notification."""
+    if len(uris) == 1:
+        name = Path(unquote(urlsplit(uris[0]).path)).name or uris[0]
+        what = f'“{name}”'
+    else:
+        what = f'{len(uris)} items'
+    if cut:
+        return f'Cut {what}', 'Paste with Ctrl+V to move', 'edit-cut'
+    return f'Copied {what}', 'Paste with Ctrl+V', 'edit-copy'
+
+
+def paste(*args):
+    try:
+        result = subprocess.run([WL_PASTE, '--no-newline', *args],
+                                capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return ''
+    return result.stdout if result.returncode == 0 else ''
+
+
+def id_file():
+    runtime = os.environ.get('XDG_RUNTIME_DIR') or f'/tmp/elachisto-{os.getuid()}'
+    return Path(runtime) / 'elachisto-clipboard-notify.id'
+
+
+def notify(title, body, icon):
+    # Replace the previous one, so quick successive copies don't stack up.
+    try:
+        previous = int(id_file().read_text())
+    except (OSError, ValueError):
+        previous = 0
+    try:
+        result = subprocess.run(
+            ['gdbus', 'call', '--session', '--dest', 'org.freedesktop.Notifications',
+             '--object-path', '/org/freedesktop/Notifications',
+             '--method', 'org.freedesktop.Notifications.Notify',
+             'Files', str(previous), icon, title, body, '[]', '{}', str(TIMEOUT_MS)],
+            capture_output=True, text=True)
+    except OSError:
+        return
+    # gdbus prints "(uint32 7,)".
+    found = re.search(r'uint32 (\d+)', result.stdout)
+    if result.returncode == 0 and found:
+        try:
+            id_file().write_text(found.group(1))
+        except OSError:
+            pass
+
+
+def event():
+    if os.environ.get('CLIPBOARD_STATE', 'data') != 'data':
+        return 0
+    uris = [u.strip('\0 \r') for u in sys.stdin.read().split('\n')]
+    uris = [u for u in uris if u and not u.startswith('#')]
+    if not uris:
+        return 0
+    # Only file managers offer this type; other apps' uri lists (links) are ignored.
+    types = paste('--list-types').split('\n')
+    if FILES_TYPE not in types:
+        return 0
+    cut = CUT_TYPE in types and paste('--type', CUT_TYPE).strip('\0').strip() == '1'
+    found = summary(uris, cut)
+    if os.environ.get('ELACHISTO_CLIPBOARD_NO_NOTIFY'):
+        print('\n'.join(found))
+    else:
+        notify(*found)
+    return 0
+
+
+def main(argv):
+    if argv[1:] == ['--event']:
+        return event()
+    if argv[1:]:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    os.execv(WL_PASTE, [WL_PASTE, '--type', 'text/uri-list', '--watch',
+                        sys.executable, os.path.abspath(argv[0]), '--event'])
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))

@@ -99,7 +99,7 @@ check "dpkg has nothing left half done" on_vm '[ -z "$(sudo dpkg --audit)" ] && 
 echo "== 2. first login"
 reboot_vm
 check "labwc runs on tty1 from the elachisto build" on_vm 'pid=$(pgrep -x labwc) && [ "$(readlink /proc/$pid/exe)" = /usr/local/bin/labwc ] && [ "$(ps -o tty= -p $pid)" = tty1 ]'
-for proc in tinybar.py mako swayidle elephant 'walker --gapplication-service' 'agent-web --keep-open'; do
+for proc in tinybar.py mako swayidle elephant 'walker --gapplication-service' 'agent-web --keep-open' 'wl-paste --type text/uri-list --watch'; do
   # "[t]inybar": the pattern must not match the shell that runs pgrep.
   check "session runs $proc" on_vm "pgrep -f '[${proc:0:1}]${proc:1}' >/dev/null"
 done

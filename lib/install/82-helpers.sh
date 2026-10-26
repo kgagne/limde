@@ -1,7 +1,8 @@
-# Small elachisto tools: Space preview, screenshots, and the app-aware close/quit helper.
+# Small elachisto tools: Space preview, screenshots, the app-aware close/quit helper, and
+# the notification for cut and copied files.
 
 step_helpers() {
-  heading "Helpers (preview, screenshots, shortcuts)"
+  heading "Helpers (preview, screenshots, shortcuts, clipboard)"
   local src=$ELACHISTO_ROOT/components work log stage
   work=$(mktemp -d); stage=$(mktemp -d); log=$STATE_DIR/helpers-build.log
   cp -r "$src/shortcuts/." "$work/"
@@ -9,6 +10,7 @@ step_helpers() {
   install -m 755 "$work/build/app-shortcut" "$stage/app-shortcut"
   install -m 755 "$src/preview/elachisto-preview" "$stage/elachisto-preview"
   install -m 755 "$src/screenshot/elachisto-screenshot" "$stage/elachisto-screenshot"
+  install -m 755 "$src/clipboard-notify/elachisto-clipboard-notify" "$stage/elachisto-clipboard-notify"
   local f n=0
   for f in "$stage"/*; do
     cmp -s "$f" "/usr/local/bin/${f##*/}" && continue
@@ -16,6 +18,6 @@ step_helpers() {
     n=$((n + 1))
   done
   rm -rf "$work" "$stage"
-  if ((n)); then changed "installed $n helper(s): elachisto-preview, elachisto-screenshot, app-shortcut"
+  if ((n)); then changed "installed $n helper(s): elachisto-preview, elachisto-screenshot, elachisto-clipboard-notify, app-shortcut"
   else ok "helpers are up to date"; fi
 }
