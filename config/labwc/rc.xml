@@ -91,5 +91,15 @@
       <action name="SetDecorations" decorations="border" forceSSD="yes" />
     </windowRule>
     <windowRule identifier="elachisto.Preview" skipTaskbar="yes" skipWindowSwitcher="yes" />
+    <!-- PCManFM's questions during a copy ("file exists", others) kept on top: libfm opens
+         them together with the progress window, before that window is mapped, so the
+         parent link is dropped (xdg-shell: an unmapped parent counts as none) and the
+         progress window then opened over the question and hid it -->
+    <windowRule identifier="pcmanfm" title="Confirm File Replacing">
+      <action name="ToggleAlwaysOnTop" />
+    </windowRule>
+    <windowRule identifier="pcmanfm" title="Question">
+      <action name="ToggleAlwaysOnTop" />
+    </windowRule>
   </windowRules>
 </labwc_config>
