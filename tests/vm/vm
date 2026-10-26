@@ -3,6 +3,7 @@
 #
 #   tests/vm/vm base             install Ubuntu Server into the base image (unattended)
 #   tests/vm/vm up NAME          start a throwaway VM on a copy-on-write overlay of base
+#                                (LIMDE_VM_RES=1920x1200 offers a bigger screen)
 #   tests/vm/vm ssh NAME [CMD]   run a command (or a shell) in it as `tester`
 #   tests/vm/vm copy NAME SRC... DEST   rsync files into it (DEST is a guest path)
 #   tests/vm/vm shot NAME FILE   save a PNG of its screen
@@ -29,6 +30,8 @@ ovmf_code=/usr/share/OVMF/OVMF_CODE_4M.fd
 ovmf_vars=/usr/share/OVMF/OVMF_VARS_4M.fd
 mem=${LIMDE_VM_MEM:-4096}
 cpus=${LIMDE_VM_CPUS:-4}
+# Screen size the guest is offered, WIDTHxHEIGHT (QEMU's default is 1280x800).
+res=${LIMDE_VM_RES:-}
 disk_size=20G
 # The user-mode network's address for the host, as seen from the guest.
 host_from_guest=10.0.2.2
@@ -51,7 +54,7 @@ qemu_common() {  # $1: disk, $2: vars file, $3: qmp socket
     -drive "if=pflash,format=raw,readonly=on,file=$ovmf_code" \
     -drive "if=pflash,format=raw,file=$2" \
     -drive "if=virtio,format=qcow2,file=$1" \
-    -device virtio-vga -display none \
+    -device "virtio-vga${res:+,xres=${res%x*},yres=${res#*x}}" -display none \
     -qmp "unix:$3,server=on,wait=off"
 }
 

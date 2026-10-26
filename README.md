@@ -10,6 +10,19 @@ run `./install`, and log in.
 > **Status: beta (`v1.0.0-beta.1`).** It installs and runs, but it has been tested on one
 > laptop and in QEMU only. Expect rough edges, and see [Known gaps](#known-gaps).
 
+## Screenshots
+
+![The desktop on first login: Tinybar at the top and the agent-web window's welcome page](docs/screenshots/desktop.png)
+
+| | |
+| --- | --- |
+| ![Walker, the launcher, listing apps](docs/screenshots/launcher.png) | ![PCManFM with an image open in Space preview](docs/screenshots/files-preview.png) |
+| **Launcher:** Super+Space opens Walker for apps, files and sums. | **Files:** select a file in PCManFM and press Space to preview it. |
+| ![foot running htop, with a "Cut" notification at the top right](docs/screenshots/terminal-notification.png) | ![The swaylock lock screen](docs/screenshots/lock.png) |
+| **Terminal and notifications:** foot with htop, and a notification after a file is cut. | **Lock:** Super+L, or after 5 idle minutes. |
+
+Screenshots are from a clean install in a VM at 1920×1200.
+
 ## Philosophy
 
 - **Minimal, but not dogmatic.** The installer lists every package it wants, with the
