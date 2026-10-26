@@ -101,5 +101,13 @@
     <windowRule identifier="pcmanfm" title="Question">
       <action name="ToggleAlwaysOnTop" />
     </windowRule>
+    <!-- ...and given the keyboard focus back when the progress window opens and takes it -->
+    <windowRule identifier="pcmanfm">
+      <action name="ForEach">
+        <query identifier="pcmanfm" title="Confirm File Replacing" />
+        <query identifier="pcmanfm" title="Question" />
+        <then><action name="Focus" /></then>
+      </action>
+    </windowRule>
   </windowRules>
 </labwc_config>
