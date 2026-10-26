@@ -20,8 +20,9 @@ Every icon in `src/` follows these, so the set reads as one family:
 ## Status
 
 - Tier 1, the panel set (75 icons): drawn 2026-10-24 by `draw_tier1.py`; Keith approved the style from 10 samples.
-- Tiers 2 and 3 (162 icons): system concepts and text-editing controls, drawn 2026-10-24 by
-  `draw_tier2.py`. `aliases.toml` maps 378 freedesktop icon names onto the 237 drawings.
+- Tiers 2 and 3 (164 icons): system concepts and text-editing controls, drawn 2026-10-24 by
+  `draw_tier2.py`. `sparkle` and `agent-threads` (the agent-web window: chat bubble with a
+  sparkle, Keith's pick of four drafts) added 2026-10-26. `aliases.toml` maps 378 freedesktop icon names onto the 239 drawings.
   Against GNOME's Adwaita symbolic set (498 names, excluding legacy and right-to-left), 355
   are covered. The rest are skipped on purpose: emoji faces, weather, presence states,
   screen orientation, cellular generations, and Apple-specific devices.

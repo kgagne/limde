@@ -109,3 +109,12 @@ def star_left_half(cx, cy, ro, ri):
     pts = star_points(cx, cy, ro, ri)
     half = pts[5:] + [pts[0]]
     return f'<path d="M{" L".join(f(x, y) for x, y in half)}Z" fill="currentColor" stroke="none"/>'
+
+
+def sparkle(cx, cy, r, waist=0.15):
+    """Four-point sparkle: points at radius r, sides curving in toward the centre."""
+    a = r * waist
+    tips = [(cx, cy - r), (cx + r, cy), (cx, cy + r), (cx - r, cy)]
+    bends = [(cx + a, cy - a), (cx + a, cy + a), (cx - a, cy + a), (cx - a, cy - a)]
+    d = f'M{f(*tips[0])}' + ''.join(f'Q{f(*bends[i])} {f(*tips[(i + 1) % 4])}' for i in range(4))
+    return path(d + 'z')

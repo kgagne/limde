@@ -6,7 +6,7 @@ existing icon are aliases (aliases.toml), not drawings. Style rules: README.md.
 import math
 
 from _draw import (FILE, FOLDER, SLASH, SRC, arc_arrow, circle, dot, f, gear, path, polar,
-                   polygon, rect, star, star_left_half, write)
+                   polygon, rect, sparkle, star, star_left_half, write)
 
 # --- navigation ---------------------------------------------------------------------
 write('chevron-left', path('M15 4.5L7.5 12l7.5 7.5'))
@@ -132,6 +132,11 @@ write('paperclip', path('M16 7.25l-7 7a2.1 2.1 0 0 0 3 3l7.25-7.25a4.25 4.25 0 0
                         'a6.25 6.25 0 0 0 8.84 8.84l6.16-6.16'))
 write('chat', path('M3.75 5.75A1.75 1.75 0 0 1 5.5 4h13a1.75 1.75 0 0 1 1.75 1.75v9.5A1.75 1.75 0 0 1 18.5 17H10'
                    'l-4.25 3.75V17H5.5a1.75 1.75 0 0 1-1.75-1.75z'))
+write('sparkle', sparkle(10, 13.25, 8.25), sparkle(18.75, 5.25, 3.5))
+# A web AI agent: the chat bubble with a sparkle breaking out of its top-right corner.
+write('agent-threads', path('M12.5 4H5.5A1.75 1.75 0 0 0 3.75 5.75v9.5A1.75 1.75 0 0 0 5.5 17h.25v3.75L10 17'
+                            'h8.5a1.75 1.75 0 0 0 1.75-1.75V12.5'),
+      sparkle(17.75, 6.25, 4.5), sparkle(9.5, 10.5, 2.25))
 write('phone-call', path('M4.5 2.75h3l1.75 4.5L7 8.75a11.5 11.5 0 0 0 8.25 8.25l1.5-2.25 4.5 1.75v3'
                          'a1.75 1.75 0 0 1-1.75 1.75C10.75 21.25 2.75 13.25 2.75 4.5A1.75 1.75 0 0 1 4.5 2.75z'))
 CALENDAR = [rect(2.75, 4.5, 18.5, 17), path('M2.75 9.5h18.5M8 2.75v3.5M16 2.75v3.5')]

@@ -272,7 +272,7 @@
 "video-single-display" = "desktop"
 
 [apps]
-"elachisto.AgentWeb" = "chat"
+"elachisto.AgentWeb" = "agent-threads"
 "elachisto.Preview" = "eye"
 
 [categories]
