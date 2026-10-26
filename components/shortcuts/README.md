@@ -1,6 +1,6 @@
 # Super close and quit shortcuts
 
-Installed on 2026-09-16 for Keith's labwc desktop.
+elachisto's app-aware close and quit keys for labwc.
 
 | Shortcut | Behavior |
 | --- | --- |
