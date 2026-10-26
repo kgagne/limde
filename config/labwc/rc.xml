@@ -10,12 +10,18 @@
       <naturalScroll>yes</naturalScroll>
       <clickMethod>clickfinger</clickMethod>
       <!--
-        Custom pointer acceleration and scroll curves need labwc built from source (which
-        limde does). Example, tune to taste in your own rc.xml:
-        <accelProfile>custom</accelProfile>
-        <motionCurve step="0.09" points="0 0.0144 0.0288 0.0432 0.0576 0.072 0.0864 0.1008 0.1152 0.144 0.207 0.306 0.432 0.576" />
-        <scrollCurve step="0.10" points="0 0.016 0.032 0.048 0.064 0.080 0.096 0.112 0.128 0.144 0.160 0.176 0.210 0.264 0.336 0.432 0.525 0.615 0.6825" />
+        MacBook-like pointer motion and scrolling: slow, precise movement that speeds up
+        smoothly, and scrolling that follows your fingers. These custom curves need labwc
+        built from source (which limde does). Tuned on one laptop's touchpad. To change
+        them, copy this whole <device category="touchpad"> block into ~/.config/labwc/rc.xml
+        and edit it there: your block replaces this one entirely (it is not merged setting
+        by setting). For libinput's default motion, use <accelProfile>adaptive</accelProfile>
+        and remove the three curve lines.
       -->
+      <accelProfile>custom</accelProfile>
+      <motionCurve step="0.09" points="0 0.0144 0.0288 0.0432 0.0576 0.072 0.0864 0.1008 0.1152 0.144 0.207 0.306 0.432 0.576" />
+      <scrollCurve step="0.10" points="0 0.016 0.032 0.048 0.064 0.080 0.096 0.112 0.128 0.144 0.160 0.176 0.210 0.264 0.336 0.432 0.525 0.615 0.6825" />
+      <fallbackCurve step="1" points="0 1" />
     </device>
   </libinput>
 

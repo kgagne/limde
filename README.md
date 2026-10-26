@@ -7,6 +7,9 @@ launcher, a consistent dark theme, Space-bar file preview in PCManFM, and a pers
 window for a web-based AI agent. Install Ubuntu Server 26.04, clone this repository,
 run `./install`, and log in.
 
+It's made for laptops first: careful with the battery, with trackpad motion and scrolling
+modelled on a MacBook's.
+
 > **Status: beta (`v1.0.0-beta.1`).** It installs and runs, but it has been tested on one
 > laptop and in QEMU only. Expect rough edges, and see [Known gaps](#known-gaps).
 
@@ -25,12 +28,28 @@ Screenshots are from a clean install in a VM at 1920×1200.
 
 ## Philosophy
 
+Two goals shaped limDE from the start, and they come before everything else:
+
+- **Know and control where the battery goes.** On a laptop, every background process,
+  wake-up and service costs battery life. limDE starts only what the desktop needs (no
+  display manager, no extra services, no recommended-package extras), and it puts the
+  numbers in front of you: Tinybar shows the battery's live draw in watts and the hours
+  left, and colours the battery icon as the draw climbs, so you see at once when something
+  is eating the battery. After 5 idle minutes the screen locks, and after 8 a laptop on
+  battery suspends.
+- **Trackpad motion and scrolling that feel like a MacBook.** Slow, precise pointer
+  movement that speeds up smoothly, and two-finger scrolling that follows your fingers.
+  That needs labwc's custom acceleration and scroll curves, which is why labwc is built
+  from source: the newest pointer-acceleration and scrolling work is often not in a
+  release or in Ubuntu's package yet. limDE ships tuned curves, turned on for touchpads.
+
+And three habits that follow from those goals:
+
 - **Minimal, but not dogmatic.** The installer lists every package it wants, with the
   reason for it, before installing anything. Optional pieces are optional, and you choose
   them.
-- **Built from source where it matters.** labwc is built from a pinned upstream commit,
-  because the newest pointer-acceleration and scrolling work is often not in a release
-  or in Ubuntu's package yet. Everything else comes from Ubuntu or from pinned upstream
+- **Built from source only where it matters.** labwc is built from a pinned upstream
+  commit, for the curves above. Everything else comes from Ubuntu or from pinned upstream
   releases.
 - **Yours to change.** Shipped defaults sit apart from your own changes, so updates
   don't overwrite them.
@@ -131,6 +150,11 @@ or out of date, including the pinned source builds in `pins/`.
 - Tested on one Dell laptop with Intel graphics, booted from a USB stick, and in QEMU. Not
   yet installed to a laptop's internal drive. Sound, suspend and resume, the lid and the
   battery readout haven't been checked on real hardware yet.
+- The trackpad curves were tuned on one laptop's touchpad and may feel different on
+  yours. To change them, copy the whole `<device category="touchpad">` block from
+  `/etc/xdg/labwc/rc.xml` into `~/.config/labwc/rc.xml` and edit it there; your block
+  replaces limDE's entirely. For libinput's default motion, use
+  `<accelProfile>adaptive</accelProfile>` and remove the curve lines.
 - Tinybar's Wi-Fi list is display-only. Join networks with `nmtui`.
 - On NVIDIA laptops, the desktop runs on the integrated GPU. The NVIDIA card is left to
   Ubuntu's open nouveau driver; limDE doesn't set up NVIDIA's driver.
