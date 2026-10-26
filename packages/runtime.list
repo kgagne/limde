@@ -20,7 +20,7 @@ libgtk4-layer-shell0        # lets Walker open above other windows
 libpoppler-glib8t64         # PDF previews in Walker
 
 ## Files and preview
-pcmanfm             # the file manager (elachisto later builds it with Space preview)
+pcmanfm             # the file manager (limde later builds it with Space preview)
 gvfs                # trash, mounting and other file-manager features
 gvfs-backends       # network shares and phones in the file manager
 desktop-file-utils  # keeps the application menu up to date

@@ -3,7 +3,7 @@
 # headless test session, so a broken build never replaces a working one.
 
 LABWC_PREFIX=/usr/local
-LABWC_STAMP=$LABWC_PREFIX/share/elachisto/labwc.commit
+LABWC_STAMP=$LABWC_PREFIX/share/limde/labwc.commit
 
 # Fetch exactly one commit of a repository into a directory.
 # Returns non-zero on failure; callers report it (their output may go to a log).
@@ -18,14 +18,14 @@ fetch_commit() {  # $1: url, $2: commit, $3: directory
 step_labwc() {
   heading "labwc (built from source)"
   # shellcheck source=/dev/null
-  . "$ELACHISTO_ROOT/pins/labwc"
+  . "$LIMDE_ROOT/pins/labwc"
   local want="$LABWC_COMMIT $WLROOTS_COMMIT"
   if [[ -x $LABWC_PREFIX/bin/labwc && -f $LABWC_STAMP && $(cat "$LABWC_STAMP") == "$want" ]]; then
     ok "labwc ${LABWC_COMMIT:0:12} is installed ($($LABWC_PREFIX/bin/labwc --version | head -1))"
     return
   fi
 
-  local work=${XDG_CACHE_HOME:-$HOME/.cache}/elachisto/build/labwc
+  local work=${XDG_CACHE_HOME:-$HOME/.cache}/limde/build/labwc
   local log=$STATE_DIR/labwc-build.log
   mkdir -p "$STATE_DIR"; : > "$log"
   note "downloading labwc ${LABWC_COMMIT:0:12} and wlroots ${WLROOTS_COMMIT:0:12}"

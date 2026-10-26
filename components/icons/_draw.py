@@ -1,4 +1,4 @@
-"""Shared drawing helpers for elachisto's icon generators (see README.md for the style)."""
+"""Shared drawing helpers for limde's icon generators (see README.md for the style)."""
 import math
 from pathlib import Path
 

@@ -1,6 +1,6 @@
 # Super close and quit shortcuts
 
-elachisto's app-aware close and quit keys for labwc.
+limDE's app-aware close and quit keys for labwc.
 
 | Shortcut | Behavior |
 | --- | --- |

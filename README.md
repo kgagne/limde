@@ -1,6 +1,6 @@
-# elachisto
+# limDE
 
-*elachisto* (ελάχιστο) is Greek for "minimum".
+**limDE — less is more.** A small labwc desktop for Ubuntu Server.
 
 A small Wayland desktop for Ubuntu Server: labwc, a compact panel (Tinybar), the Walker
 launcher, a consistent dark theme, Space-bar file preview in PCManFM, and a persistent
@@ -30,8 +30,8 @@ network connection. Choose no extra snaps or server roles in Ubuntu's installer.
 1. Log in on the text console and clone this repository:
 
    ```
-   git clone <this repository's URL> elachisto
-   cd elachisto
+   git clone https://github.com/kgagne/limde.git
+   cd limde
    ```
 
 2. See the plan without changing anything:
@@ -92,15 +92,15 @@ opens other links in your main Firefox. See `components/agent-web/README.md`.
 
 ## Customizing
 
-Your own files override elachisto's, and the installer never overwrites them:
+Your own files override limDE's, and the installer never overwrites them:
 
 - **labwc:** put only the settings you change in `~/.config/labwc/rc.xml`. labwc merges it
-  over elachisto's defaults in `/etc/xdg/labwc/`.
-- **Session start:** add scripts to `~/.config/elachisto/autostart.d/`. A file with the
-  same name as one of elachisto's replaces it, and an empty one turns that piece off.
-- **Theme:** colours, fonts and icons live in `~/.config/elachisto/appearance.toml`, which
-  needs only the keys you change. `elachisto-appearance` shows what would change, and
-  `elachisto-appearance --apply` writes it, backing up what it replaces.
+  over limDE's defaults in `/etc/xdg/labwc/`.
+- **Session start:** add scripts to `~/.config/limde/autostart.d/`. A file with the
+  same name as one of limDE's replaces it, and an empty one turns that piece off.
+- **Theme:** colours, fonts and icons live in `~/.config/limde/appearance.toml`, which
+  needs only the keys you change. `limde-appearance` shows what would change, and
+  `limde-appearance --apply` writes it, backing up what it replaces.
 - **Panel:** `~/.config/tinybar/settings.toml` (see `components/tinybar/README.md`).
 
 ## Updating
@@ -120,7 +120,7 @@ or out of date, including the pinned source builds in `pins/`.
   battery readout haven't been checked on real hardware yet.
 - Tinybar's Wi-Fi list is display-only. Join networks with `nmtui`.
 - On NVIDIA laptops, the desktop runs on the integrated GPU. The NVIDIA card is left to
-  Ubuntu's open nouveau driver; elachisto doesn't set up NVIDIA's driver.
+  Ubuntu's open nouveau driver; limDE doesn't set up NVIDIA's driver.
 - There is no uninstaller yet.
 - Ubuntu 26.04 only.
 
@@ -129,7 +129,7 @@ Bug reports are welcome. Please include your hardware and the output of
 
 ## How this was made
 
-elachisto grew out of one person's daily-driver laptop setup. It was designed, tested
+limDE grew out of one person's daily-driver laptop setup. It was designed, tested
 and directed by its author over many iterations, and much of the implementation, review
 and documentation was done with AI coding tools working from that guidance. Without that
 tooling, a project of this scope would not have been practical for one person. Every
@@ -137,5 +137,5 @@ change was steered and accepted by a human, and tested on real hardware and in V
 
 ## Licence
 
-MIT for elachisto's own code (see `LICENSE`). Some files come from or patch other
+MIT for limDE's own code (see `LICENSE`). Some files come from or patch other
 projects and keep their own licences; `REUSE.toml` lists them.

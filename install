@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# elachisto installer. Run as your normal user on Ubuntu Server 26.04 (x86_64).
+# limde installer. Run as your normal user on Ubuntu Server 26.04 (x86_64).
 #
 #   ./install                 show the plan, ask about optional parts, then install
 #   ./install --plan          show the plan and stop; changes nothing
@@ -9,10 +9,10 @@
 # Safe to run again: every step checks first and only changes what is missing.
 set -euo pipefail
 
-ELACHISTO_ROOT=$(cd "$(dirname "$0")" && pwd)
-export ELACHISTO_ROOT
+LIMDE_ROOT=$(cd "$(dirname "$0")" && pwd)
+export LIMDE_ROOT
 # shellcheck source=lib/install/common.sh
-. "$ELACHISTO_ROOT/lib/install/common.sh"
+. "$LIMDE_ROOT/lib/install/common.sh"
 
 ASSUME_YES=0
 PLAN_ONLY=0
@@ -28,7 +28,7 @@ for arg in "$@"; do
 done
 export ASSUME_YES PLAN_ONLY
 
-for step in "$ELACHISTO_ROOT"/lib/install/[0-9][0-9]-*.sh; do
+for step in "$LIMDE_ROOT"/lib/install/[0-9][0-9]-*.sh; do
   # shellcheck source=/dev/null
   . "$step"
 done

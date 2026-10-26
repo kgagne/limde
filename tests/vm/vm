@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Headless QEMU test VMs for elachisto. No root needed; KVM access is enough.
+# Headless QEMU test VMs for limde. No root needed; KVM access is enough.
 #
 #   tests/vm/vm base             install Ubuntu Server into the base image (unattended)
 #   tests/vm/vm up NAME          start a throwaway VM on a copy-on-write overlay of base
@@ -14,21 +14,21 @@
 #   tests/vm/vm clean [--all]    delete every VM and the base image (--all: also the ISO);
 #                                `vm base` rebuilds from the recipe in this folder
 #
-# Everything lives in $ELACHISTO_VM_DIR (default: <repo>/local/vm, ignored by Git).
+# Everything lives in $LIMDE_VM_DIR (default: <repo>/local/vm, ignored by Git).
 # The base image is for testing only: it has passwordless sudo for `tester` and
-# autologin on tty1. elachisto itself never sets up either.
+# autologin on tty1. limde itself never sets up either.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
-dir=${ELACHISTO_VM_DIR:-$repo/local/vm}
+dir=${LIMDE_VM_DIR:-$repo/local/vm}
 iso_name=ubuntu-26.04.1-live-server-amd64.iso
 iso_sha256=cc8a95cde20f6ced61a322420de00f10cc3c90ced545daa46cb9c1a117f1d927
 iso_url=https://releases.ubuntu.com/26.04/$iso_name
 ovmf_code=/usr/share/OVMF/OVMF_CODE_4M.fd
 ovmf_vars=/usr/share/OVMF/OVMF_VARS_4M.fd
-mem=${ELACHISTO_VM_MEM:-4096}
-cpus=${ELACHISTO_VM_CPUS:-4}
+mem=${LIMDE_VM_MEM:-4096}
+cpus=${LIMDE_VM_CPUS:-4}
 disk_size=20G
 # The user-mode network's address for the host, as seen from the guest.
 host_from_guest=10.0.2.2
@@ -90,12 +90,12 @@ cmd_base() {
   "$here/iso-extract.py" "$iso" casper/vmlinuz "$work/vmlinuz"
   "$here/iso-extract.py" "$iso" casper/initrd "$work/initrd"
 
-  [[ -f $dir/id_ed25519 ]] || ssh-keygen -q -t ed25519 -N '' -C elachisto-test -f "$dir/id_ed25519"
+  [[ -f $dir/id_ed25519 ]] || ssh-keygen -q -t ed25519 -N '' -C limde-test -f "$dir/id_ed25519"
   local hash
   hash=$(openssl passwd -6 tester)
   sed -e "s|@PASSWORD_HASH@|$hash|" -e "s|@SSH_KEY@|$(cat "$dir/id_ed25519.pub")|" \
     "$here/autoinstall.yaml" > "$work/seed/user-data"
-  echo "instance-id: elachisto-base" > "$work/seed/meta-data"
+  echo "instance-id: limde-base" > "$work/seed/meta-data"
   : > "$work/seed/vendor-data"
 
   local port; port=$(free_port)

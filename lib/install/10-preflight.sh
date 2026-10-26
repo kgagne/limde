@@ -6,8 +6,8 @@ step_preflight() {
   # shellcheck source=/dev/null
   . /etc/os-release
   [[ ${ID:-} == ubuntu && ${VERSION_ID:-} == 26.04 ]] \
-    || die "elachisto supports Ubuntu 26.04 only (this is ${PRETTY_NAME:-unknown})"
-  [[ $(uname -m) == x86_64 ]] || die "elachisto supports x86_64 only (this is $(uname -m))"
+    || die "limde supports Ubuntu 26.04 only (this is ${PRETTY_NAME:-unknown})"
+  [[ $(uname -m) == x86_64 ]] || die "limde supports x86_64 only (this is $(uname -m))"
   command -v sudo >/dev/null || die "sudo is missing"
   id -nG | tr ' ' '\n' | grep -qx sudo || die "$(id -un) is not in the sudo group"
   getent hosts archive.ubuntu.com >/dev/null \

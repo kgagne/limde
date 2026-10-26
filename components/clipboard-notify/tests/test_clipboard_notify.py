@@ -1,11 +1,11 @@
-"""Check elachisto-clipboard-notify against a stand-in wl-paste. Never touches the real clipboard."""
+"""Check limde-clipboard-notify against a stand-in wl-paste. Never touches the real clipboard."""
 from pathlib import Path
 import os
 import subprocess
 import tempfile
 import unittest
 
-SCRIPT = Path(__file__).resolve().parents[1] / "elachisto-clipboard-notify"
+SCRIPT = Path(__file__).resolve().parents[1] / "limde-clipboard-notify"
 
 
 class ClipboardNotifyTests(unittest.TestCase):
@@ -31,8 +31,8 @@ class ClipboardNotifyTests(unittest.TestCase):
         return path
 
     def event(self, uri_list, types, cut_marker="", state="data"):
-        env = dict(os.environ, ELACHISTO_CLIPBOARD_NO_NOTIFY="1", CLIPBOARD_STATE=state,
-                   ELACHISTO_CLIPBOARD_WLPASTE=str(self.wl_paste(types, cut_marker)))
+        env = dict(os.environ, LIMDE_CLIPBOARD_NO_NOTIFY="1", CLIPBOARD_STATE=state,
+                   LIMDE_CLIPBOARD_WLPASTE=str(self.wl_paste(types, cut_marker)))
         r = subprocess.run(["python3", str(SCRIPT), "--event"], input=uri_list, env=env,
                            capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -65,7 +65,7 @@ class ClipboardNotifyTests(unittest.TestCase):
         fake = self.root / "wl-paste-watch"
         fake.write_text(f'#!/bin/sh\necho "$@" > "{self.calls}"\n')
         fake.chmod(0o755)
-        env = dict(os.environ, ELACHISTO_CLIPBOARD_WLPASTE=str(fake))
+        env = dict(os.environ, LIMDE_CLIPBOARD_WLPASTE=str(fake))
         subprocess.run(["python3", str(SCRIPT)], env=env, check=True)
         args = self.calls.read_text().split()
         self.assertEqual(args[:3], ["--type", "text/uri-list", "--watch"])

@@ -1,4 +1,4 @@
-# PCManFM is built from a pinned upstream tag plus elachisto's patches
+# PCManFM is built from a pinned upstream tag plus limde's patches
 # (components/preview/pcmanfm-space-preview.patch and
 # components/pcmanfm/pcmanfm-focus-file-shortcuts.patch, GPL-2.0-or-later like PCManFM).
 PCMANFM_URL=https://github.com/lxde/pcmanfm.git

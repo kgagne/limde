@@ -1,11 +1,11 @@
-# Install Tinybar: the panel in /usr/local/share/elachisto/tinybar, its commands in
+# Install Tinybar: the panel in /usr/local/share/limde/tinybar, its commands in
 # /usr/local/bin. The window-list helper is compiled here from its C source.
 
-TINYBAR_SHARE=/usr/local/share/elachisto/tinybar
+TINYBAR_SHARE=/usr/local/share/limde/tinybar
 
 step_tinybar() {
   heading "Tinybar (the panel)"
-  local src=$ELACHISTO_ROOT/components/tinybar work log
+  local src=$LIMDE_ROOT/components/tinybar work log
   work=$(mktemp -d); log=$STATE_DIR/tinybar-build.log
   mkdir -p "$STATE_DIR"
   cp -r "$src/." "$work/"

@@ -1,4 +1,4 @@
-"""Panel icons: SVG icons from the icon theme (elachisto's by default), never font glyphs.
+"""Panel icons: SVG icons from the icon theme (limde's by default), never font glyphs.
 
 Every icon is drawn by a Gtk.Image from the theme's "-symbolic" variant, so GTK colours it
 like the surrounding text. Sizes come from CSS (-gtk-icon-size), one per place: the panel,
@@ -41,7 +41,7 @@ STATUS_ICONS = {
 APP_ICON_FALLBACKS = {
     'soffice': 'libreoffice-startcenter',
     'soffice.bin': 'libreoffice-startcenter',
-    'elachisto.preview': 'eye',
+    'limde.preview': 'eye',
 }
 
 
@@ -94,7 +94,7 @@ class IconLibrary:
         return True
 
     def application_widget(self, app_id):
-        """The window's app icon: the theme's symbolic version when there is one (elachisto
+        """The window's app icon: the theme's symbolic version when there is one (limde
         ships many), else the app's own icon drawn at the same visual size."""
         names = []
         fallback = APP_ICON_FALLBACKS.get(app_id.casefold())
@@ -136,7 +136,7 @@ class IconLibrary:
 
         if native_icon is not None:
             # Another theme's full-colour icon, usually drawn edge to edge: the
-            # task-icon-foreign class shrinks it to the same margin as elachisto's.
+            # task-icon-foreign class shrinks it to the same margin as limde's.
             image = Gtk.Image.new_from_gicon(native_icon)
             image.add_css_class('task-icon')
             image.add_css_class('task-icon-foreign')

@@ -1,4 +1,4 @@
-# Freedesktop icon names → elachisto icons in src/. The theme installs each icon under
+# Freedesktop icon names → limde icons in src/. The theme installs each icon under
 # its own name and every alias here, plus the "-symbolic" form of each. Grouped by the
 # Icon Naming Spec context (the group is informational; lookups ignore it).
 
@@ -272,8 +272,8 @@
 "video-single-display" = "desktop"
 
 [apps]
-"elachisto.AgentWeb" = "agent-threads"
-"elachisto.Preview" = "eye"
+"limde.AgentWeb" = "agent-threads"
+"limde.Preview" = "eye"
 
 [categories]
 "system-file-manager" = "folder-open"

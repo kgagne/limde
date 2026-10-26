@@ -1,5 +1,5 @@
-# Appearance comes from elachisto-appearance (theme "elachisto").
-theme = "elachisto"
+# Appearance comes from limde-appearance (theme "limde").
+theme = "limde"
 
 # Apps and files are searchable directly with Super+Space.
 [providers]

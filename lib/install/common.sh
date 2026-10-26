@@ -1,12 +1,12 @@
 # Shared helpers for the installer steps. Sourced, not run.
 
 CHANGES=0
-STATE_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/elachisto
+STATE_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/limde
 
 if [[ -t 1 ]]; then bold=$'\e[1m'; dim=$'\e[2m'; red=$'\e[31m'; reset=$'\e[0m'
 else bold=; dim=; red=; reset=; fi
 
-die() { echo "${red}elachisto: $*${reset}" >&2; exit 1; }
+die() { echo "${red}limde: $*${reset}" >&2; exit 1; }
 heading() { echo; echo "${bold}== $* ==${reset}"; }
 ok() { echo "  ok       $*"; }
 changed() { echo "  ${bold}changed${reset}  $*"; CHANGES=$((CHANGES + 1)); }

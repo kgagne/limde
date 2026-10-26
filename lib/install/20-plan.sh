@@ -1,6 +1,6 @@
 # Show what will be installed and why; choose optional groups.
 
-OPTIONAL_DIR=$ELACHISTO_ROOT/packages/optional
+OPTIONAL_DIR=$LIMDE_ROOT/packages/optional
 PACKAGES=()
 
 optional_groups() { for f in "$OPTIONAL_DIR"/*.list; do basename "$f" .list; done; }
@@ -22,13 +22,13 @@ step_plan() {
       || die "unknown optional group: $group (available: $(optional_groups | tr '\n' ' '))"
   done
 
-  heading "What elachisto installs"
+  heading "What limde installs"
   echo "  Runtime packages (needed for the desktop):"
-  show_list "$ELACHISTO_ROOT/packages/runtime.list"
+  show_list "$LIMDE_ROOT/packages/runtime.list"
 
   echo
   echo "  Build packages (for the parts built from source; they stay installed):"
-  show_list "$ELACHISTO_ROOT/packages/build.list"
+  show_list "$LIMDE_ROOT/packages/build.list"
 
   heading "Optional parts"
   for group in $(optional_groups); do
@@ -44,8 +44,8 @@ step_plan() {
     fi
   done
 
-  mapfile -t PACKAGES < <(list_packages "$ELACHISTO_ROOT/packages/runtime.list"
-    list_packages "$ELACHISTO_ROOT/packages/build.list"
+  mapfile -t PACKAGES < <(list_packages "$LIMDE_ROOT/packages/runtime.list"
+    list_packages "$LIMDE_ROOT/packages/build.list"
     for group in "${chosen[@]}"; do list_packages "$OPTIONAL_DIR/$group.list"; done)
 
   # Count what apt would actually add, dependencies included (a simulation; no root).

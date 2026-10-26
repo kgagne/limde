@@ -3,7 +3,7 @@
 # until NetworkManager has a connection, and only then turn networkd off. If no
 # connection comes up, put everything back.
 
-NETPLAN_FILE=/etc/netplan/90-elachisto-networkmanager.yaml
+NETPLAN_FILE=/etc/netplan/90-limde-networkmanager.yaml
 
 # Connected, and names resolve: NetworkManager reports "connected" slightly before DNS works.
 nm_connected() {
@@ -18,7 +18,7 @@ step_network() {
   fi
 
   if [[ ! -f $NETPLAN_FILE ]]; then
-    printf '%s\n' '# Written by elachisto: NetworkManager manages all interfaces.' \
+    printf '%s\n' '# Written by limde: NetworkManager manages all interfaces.' \
       'network:' '  version: 2' '  renderer: NetworkManager' \
       | sudo install -m 600 /dev/stdin "$NETPLAN_FILE"
     sudo systemctl enable --now NetworkManager.service >/dev/null 2>&1

@@ -4,7 +4,7 @@
 usage: import_simple_icons.py PATH_TO_SIMPLE_ICONS_PACKAGE
 
 Simple Icons draws accurate single-colour logos on a 24-unit grid, edge to edge. This
-places each one inside elachisto's margin (1.75 units) and files it by the licence
+places each one inside limde's margin (1.75 units) and files it by the licence
 Simple Icons records for it: CC0 into brands/, CC BY-SA into brands/cc-by-sa/, MPL-2.0
 into brands/mpl-2.0/. Brands Simple Icons lacks are drawn by draw_brands_apps.py.
 Trademark rules still apply; see brands/NOTICE.md.
@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-# elachisto icon name -> Simple Icons slug
+# limde icon name -> Simple Icons slug
 WANT = {
     'blender': 'blender', 'gimp': 'gimp', 'inkscape': 'inkscape', 'krita': 'krita',
     'libreoffice-startcenter': 'libreoffice', 'libreoffice-writer': 'libreofficewriter',

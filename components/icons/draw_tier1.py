@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draw tier 1 of elachisto's icons (the panel set) into src/.
+"""Draw tier 1 of limde's icons (the panel set) into src/.
 
 The SVG files in src/ are the source of truth; this script records how they were drawn,
 so families (battery levels, Wi-Fi strength, volume, brightness, file and folder types)

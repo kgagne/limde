@@ -1,5 +1,5 @@
 <!--
-  elachisto's labwc defaults, installed to /etc/xdg/labwc/rc.xml. labwc starts with
+  limde's labwc defaults, installed to /etc/xdg/labwc/rc.xml. labwc starts with
   merge-config, so your own ~/.config/labwc/rc.xml only needs the settings you change.
   Every option, with comments: man labwc-config.
 -->
@@ -11,7 +11,7 @@
       <clickMethod>clickfinger</clickMethod>
       <!--
         Custom pointer acceleration and scroll curves need labwc built from source (which
-        elachisto does). Example, tune to taste in your own rc.xml:
+        limde does). Example, tune to taste in your own rc.xml:
         <accelProfile>custom</accelProfile>
         <motionCurve step="0.09" points="0 0.0144 0.0288 0.0432 0.0576 0.072 0.0864 0.1008 0.1152 0.144 0.207 0.306 0.432 0.576" />
         <scrollCurve step="0.10" points="0 0.016 0.032 0.048 0.064 0.080 0.096 0.112 0.128 0.144 0.160 0.176 0.210 0.264 0.336 0.432 0.525 0.615 0.6825" />
@@ -20,8 +20,8 @@
   </libinput>
 
   <theme>
-    <name>elachisto</name>
-    <icon>elachisto</icon>
+    <name>limde</name>
+    <icon>limde</icon>
     <cornerRadius>6</cornerRadius>
     <titlebar>
       <layout>close,iconify,max:</layout>
@@ -47,23 +47,23 @@
     <keybind key="XF86MonBrightnessUp"><action name="Execute" command="tinybar-brightness up" /></keybind>
     <keybind key="XF86MonBrightnessDown"><action name="Execute" command="tinybar-brightness down" /></keybind>
 
-    <keybind key="Print"><action name="Execute" command="elachisto-screenshot region" /></keybind>
-    <keybind key="S-Print"><action name="Execute" command="elachisto-screenshot screen" /></keybind>
-    <keybind key="C-Print"><action name="Execute" command="elachisto-screenshot clip" /></keybind>
+    <keybind key="Print"><action name="Execute" command="limde-screenshot region" /></keybind>
+    <keybind key="S-Print"><action name="Execute" command="limde-screenshot screen" /></keybind>
+    <keybind key="C-Print"><action name="Execute" command="limde-screenshot clip" /></keybind>
 
     <!-- Mac-style, app-aware close (Super+W) and quit (Super+Q). The agent-web window is
          skipped by these and by Alt+F4, so it isn't closed by accident; "agent-web stop"
          closes it. -->
     <keybind key="W-w" onRelease="yes">
-      <action name="If"><query identifier="elachisto.AgentWeb" />
+      <action name="If"><query identifier="limde.AgentWeb" />
         <else><action name="Execute" command="app-shortcut close" /></else></action>
     </keybind>
     <keybind key="W-q" onRelease="yes">
-      <action name="If"><query identifier="elachisto.AgentWeb" />
+      <action name="If"><query identifier="limde.AgentWeb" />
         <else><action name="Execute" command="app-shortcut quit" /></else></action>
     </keybind>
     <keybind key="A-F4">
-      <action name="If"><query identifier="elachisto.AgentWeb" />
+      <action name="If"><query identifier="limde.AgentWeb" />
         <else><action name="Close" /></else></action>
     </keybind>
   </keyboard>
@@ -86,11 +86,11 @@
   <windowRules>
     <!-- Space preview: each file's window centred, off the panel and the window switcher,
          with the theme's border and shadow but no titlebar. -->
-    <windowRule identifier="elachisto.Preview" serverDecoration="yes">
+    <windowRule identifier="limde.Preview" serverDecoration="yes">
       <action name="AutoPlace" policy="center" />
       <action name="SetDecorations" decorations="border" forceSSD="yes" />
     </windowRule>
-    <windowRule identifier="elachisto.Preview" skipTaskbar="yes" skipWindowSwitcher="yes" />
+    <windowRule identifier="limde.Preview" skipTaskbar="yes" skipWindowSwitcher="yes" />
     <!-- PCManFM's questions during a copy ("file exists", others) kept on top: libfm opens
          them together with the progress window, before that window is mapped, so the
          parent link is dropped (xdg-shell: an unmapped parent counts as none) and the

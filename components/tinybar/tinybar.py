@@ -65,7 +65,7 @@ NOTIFICATION_SAMPLE_SECONDS = 2
 # metrics also stop being added to the history file.
 SHOW_USAGE = False
 TINYBAR_APP_IDS = {
-    "elachisto.Tinybar",
+    "limde.Tinybar",
     "tinybar",
 }
 
@@ -80,8 +80,8 @@ def load_settings():
 
 # This app's button always sits leftmost, ahead of every other app, however
 # often its window closes and reopens, and shows only its icon. Defaults to
-# elachisto's agent-web window; set first_app_id in settings.toml to change it.
-FIRST_APP_ID = load_settings().get("first_app_id", "elachisto.AgentWeb")
+# limde's agent-web window; set first_app_id in settings.toml to change it.
+FIRST_APP_ID = load_settings().get("first_app_id", "limde.AgentWeb")
 
 HISTORY_BUCKET_SECONDS = 300
 HISTORY_WINDOW_SECONDS = 3 * 60 * 60
@@ -1626,7 +1626,7 @@ class LevelOverlay(Gtk.Window):
 class TinyBar(Gtk.Application):
     def __init__(self):
         super().__init__(
-            application_id="elachisto.Tinybar"
+            application_id="limde.Tinybar"
         )
 
         self.history = HistoryStore()

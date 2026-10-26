@@ -1,17 +1,17 @@
 # Session configuration. System defaults go to /etc/xdg/labwc (labwc merges your own
-# ~/.config/labwc over them) and /usr/local/share/elachisto/autostart.d. Starting copies
+# ~/.config/labwc over them) and /usr/local/share/limde/autostart.d. Starting copies
 # of the per-user files (launcher, file manager, locker, default apps) are put in your
-# home only where you don't have one already; elachisto never overwrites yours.
+# home only where you don't have one already; limde never overwrites yours.
 
 step_session_config() {
   heading "Session configuration"
-  local cfg=$ELACHISTO_ROOT/config n=0 f dest
+  local cfg=$LIMDE_ROOT/config n=0 f dest
   for f in rc.xml autostart environment; do
     if ! cmp -s "$cfg/labwc/$f" "/etc/xdg/labwc/$f"; then
       sudo install -D -m 644 "$cfg/labwc/$f" "/etc/xdg/labwc/$f"; n=$((n + 1))
     fi
   done
-  local auto=/usr/local/share/elachisto/autostart.d
+  local auto=/usr/local/share/limde/autostart.d
   if ! diff -rq "$cfg/autostart.d" "$auto" >/dev/null 2>&1; then
     sudo rm -rf "$auto"; sudo install -d "$auto"
     sudo install -m 644 "$cfg"/autostart.d/*.sh "$auto/"; n=$((n + 1))
@@ -29,7 +29,7 @@ step_session_config() {
     fi
   done < <(cd "$cfg/home" && find . -type f | sed 's|^\./||' | sort)
   ((added)) && changed "added $added starting config file(s) to your home"
-  ((kept)) && note "kept $kept config file(s) you already have (elachisto's versions are in $cfg/home)"
+  ((kept)) && note "kept $kept config file(s) you already have (limde's versions are in $cfg/home)"
   ((added || kept)) || ok "your config files are in place"
 
   # Hide redundant launcher entries: a full copy of each, marked NoDisplay, in

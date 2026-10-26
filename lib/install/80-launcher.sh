@@ -1,19 +1,19 @@
 # Install Walker and Elephant from their pinned upstream releases (pins/launcher) into
 # /usr/local. Every download is checked against its pinned sha256 before use.
 
-LAUNCHER_STAMP=/usr/local/share/elachisto/launcher.versions
+LAUNCHER_STAMP=/usr/local/share/limde/launcher.versions
 
 step_launcher() {
   heading "Launcher (Walker and Elephant)"
   # Elephant's file search runs `fd`; Ubuntu's fd-find names it fdfind.
   if [[ $(readlink /usr/local/bin/fd 2>/dev/null) != /usr/bin/fdfind ]]; then
     [[ -e /usr/local/bin/fd && ! -L /usr/local/bin/fd ]] \
-      && die "/usr/local/bin/fd exists and is not elachisto's link to fdfind; move it aside"
+      && die "/usr/local/bin/fd exists and is not limde's link to fdfind; move it aside"
     sudo ln -sfn /usr/bin/fdfind /usr/local/bin/fd
     changed "fd command for the launcher's file search (/usr/local/bin/fd)"
   fi
   # shellcheck source=/dev/null
-  . "$ELACHISTO_ROOT/pins/launcher"
+  . "$LIMDE_ROOT/pins/launcher"
   local want="walker $WALKER_VERSION elephant $ELEPHANT_VERSION providers $ELEPHANT_PROVIDERS"
   if [[ -x /usr/local/bin/walker && -x /usr/local/bin/elephant && -f $LAUNCHER_STAMP \
         && $(cat "$LAUNCHER_STAMP") == "$want" ]]; then
@@ -21,7 +21,7 @@ step_launcher() {
     return
   fi
 
-  local work=${XDG_CACHE_HOME:-$HOME/.cache}/elachisto/downloads/launcher
+  local work=${XDG_CACHE_HOME:-$HOME/.cache}/limde/downloads/launcher
   rm -rf "$work"; mkdir -p "$work"
   local name url sha
   while read -r name url sha; do

@@ -1,11 +1,11 @@
-"""Check elachisto-screenshot against stand-in grim/slurp/wl-copy. Never touches the real screen or clipboard."""
+"""Check limde-screenshot against stand-in grim/slurp/wl-copy. Never touches the real screen or clipboard."""
 from pathlib import Path
 import os
 import subprocess
 import tempfile
 import unittest
 
-SCRIPT = Path(__file__).resolve().parents[1] / "elachisto-screenshot"
+SCRIPT = Path(__file__).resolve().parents[1] / "limde-screenshot"
 
 
 class ScreenshotTests(unittest.TestCase):
@@ -26,15 +26,15 @@ class ScreenshotTests(unittest.TestCase):
     def run_mode(self, mode, slurp="echo '10,20 300x200'"):
         env = dict(
             os.environ,
-            ELACHISTO_SCREENSHOT_NO_NOTIFY="1",
-            ELACHISTO_SCREENSHOT_DIR=str(self.out),
-            ELACHISTO_SCREENSHOT_SLURP=str(self.tool("slurp", slurp + "\n")),
-            ELACHISTO_SCREENSHOT_GRIM=str(self.tool(
+            LIMDE_SCREENSHOT_NO_NOTIFY="1",
+            LIMDE_SCREENSHOT_DIR=str(self.out),
+            LIMDE_SCREENSHOT_SLURP=str(self.tool("slurp", slurp + "\n")),
+            LIMDE_SCREENSHOT_GRIM=str(self.tool(
                 "grim",
                 f'echo "$@" > "{self.args}"\n'
                 'last=""; for a; do last="$a"; done\n'
                 'if [ "$last" = - ]; then printf PNGDATA; else printf PNGDATA > "$last"; fi\n')),
-            ELACHISTO_SCREENSHOT_WLCOPY=str(self.tool("wl-copy", f'[ "$1" = --type ] && [ "$2" = image/png ] || exit 9\ncat > "{self.clip}"\n')),
+            LIMDE_SCREENSHOT_WLCOPY=str(self.tool("wl-copy", f'[ "$1" = --type ] && [ "$2" = image/png ] || exit 9\ncat > "{self.clip}"\n')),
         )
         return subprocess.run(["sh", str(SCRIPT), mode], env=env, capture_output=True, text=True)
 

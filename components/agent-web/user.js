@@ -1,5 +1,5 @@
 // Prefs for the agent-web profile; agent-web writes this over the profile on every launch
-// and appends the home page and kept domains (elachisto.agentweb.*).
+// and appends the home page and kept domains (limde.agentweb.*).
 user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
 user_pref("browser.startup.page", 1);
 user_pref("browser.shell.checkDefaultBrowser", false);

@@ -1,4 +1,4 @@
-# Build packages: compilers and headers for the parts elachisto builds from source.
+# Build packages: compilers and headers for the parts limde builds from source.
 # They stay installed so updates and rebuilds work without asking again.
 
 ## Build tools

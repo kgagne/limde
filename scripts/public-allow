@@ -3,3 +3,5 @@
 \b10\.0\.2\.2\b
 # The author's public GitHub noreply address (patch and commit authorship).
 kgagne@users\.noreply\.github\.com
+# The project's own public repository.
+github\.com/kgagne/limde

@@ -1,7 +1,7 @@
-# elachisto icons
+# limDE icons
 
-elachisto's own icon set: hand-written SVG, MIT-licensed like the rest of the project.
-No icon font is used anywhere in elachisto; fonts are for text only.
+limDE's own icon set: hand-written SVG, MIT-licensed like the rest of the project.
+No icon font is used anywhere in limDE; fonts are for text only.
 
 ## Style rules
 

@@ -30,10 +30,10 @@ on_vm() { "$vm" ssh "$name" "$@"; }
 "$vm" down "$name" >/dev/null 2>&1 || true
 "$vm" rm "$name" >/dev/null 2>&1 || true
 "$vm" up "$name"
-"$vm" copy "$name" --exclude=/local --exclude=.git "$repo/" elachisto/
+"$vm" copy "$name" --exclude=/local --exclude=.git "$repo/" limde/
 
 echo "== first run"
-on_vm "cd elachisto && ./install --yes ${install_args[*]}" >"$out/install-1.log" 2>&1; rc=$?
+on_vm "cd limde && ./install --yes ${install_args[*]}" >"$out/install-1.log" 2>&1; rc=$?
 echo "exit code $rc" >>"$out/install-1.log"
 if ((rc == 0)); then
   pass "first install run exits 0"
@@ -41,7 +41,7 @@ else
   fail "first install run exits 0 (see install-1.log)"
 fi
 echo "== second run"
-on_vm "cd elachisto && ./install --yes ${install_args[*]}" >"$out/install-2.log" 2>&1; rc=$?
+on_vm "cd limde && ./install --yes ${install_args[*]}" >"$out/install-2.log" 2>&1; rc=$?
 echo "exit code $rc" >>"$out/install-2.log"
 if ((rc == 0)); then
   pass "second install run exits 0"
@@ -57,7 +57,7 @@ sleep 5
 for _ in $(seq 60); do on_vm true 2>/dev/null && break; sleep 2; done
 sleep 25   # let autologin start the session and its autostart pieces
 check "labwc runs after reboot" on_vm 'pgrep -x labwc'
-check "running labwc is the elachisto build" on_vm 'pid=$(pgrep -x labwc) && [ "$(readlink /proc/$pid/exe)" = /usr/local/bin/labwc ] && grep -qx "$(. elachisto/pins/labwc; echo "$LABWC_COMMIT $WLROOTS_COMMIT")" /usr/local/share/elachisto/labwc.commit'
+check "running labwc is the limde build" on_vm 'pid=$(pgrep -x labwc) && [ "$(readlink /proc/$pid/exe)" = /usr/local/bin/labwc ] && grep -qx "$(. limde/pins/labwc; echo "$LABWC_COMMIT $WLROOTS_COMMIT")" /usr/local/share/limde/labwc.commit'
 check "labwc runs on tty1" on_vm 'pid=$(pgrep -x labwc) && tty=$(ps -o tty= -p $pid) && [ "$tty" = tty1 ]'
 check "NetworkManager connected" on_vm 'nmcli -t -f STATE general | grep -q ^connected'
 check "networkd stays off" on_vm '! systemctl -q is-active systemd-networkd.service'
@@ -69,19 +69,19 @@ check "walker runs" on_vm '/usr/local/bin/walker --version'
 check "fd is on PATH for the launcher's file search" on_vm 'command -v fd && fd --version'
 check "elephant loads all four providers" on_vm 'out=$(timeout 20 /usr/local/bin/elephant listproviders 2>&1); for p in calc desktopapplications files providerlist; do echo "$out" | grep -qi "$p" || exit 1; done'
 check "firefox has all its libraries" on_vm 'test -x ~/.local/opt/firefox/firefox && ! LD_LIBRARY_PATH=$HOME/.local/opt/firefox ldd ~/.local/opt/firefox/libxul.so ~/.local/opt/firefox/firefox-bin | grep -q "not found"'
-check "firefox AppArmor profile loaded" on_vm 'sudo aa-status 2>/dev/null | grep -qx "   elachisto-firefox"'
-check "firefox renders a page headless" on_vm 'rm -f /tmp/ff.png; timeout 90 ~/.local/opt/firefox/firefox --headless --screenshot /tmp/ff.png "data:text/html,<h1>elachisto</h1>" >/tmp/ff.log 2>&1; test -s /tmp/ff.png'
-check "icon theme installed and resolves names" on_vm 'test -L /usr/local/share/icons/elachisto/24x24/icons/user-home.svg && test -f /usr/local/share/icons/elachisto/symbolic/icons/folder-symbolic.svg && test -f /usr/local/share/icons/elachisto/index.theme'
+check "firefox AppArmor profile loaded" on_vm 'sudo aa-status 2>/dev/null | grep -qx "   limde-firefox"'
+check "firefox renders a page headless" on_vm 'rm -f /tmp/ff.png; timeout 90 ~/.local/opt/firefox/firefox --headless --screenshot /tmp/ff.png "data:text/html,<h1>limde</h1>" >/tmp/ff.log 2>&1; test -s /tmp/ff.png'
+check "icon theme installed and resolves names" on_vm 'test -L /usr/local/share/icons/limde/24x24/icons/user-home.svg && test -f /usr/local/share/icons/limde/symbolic/icons/folder-symbolic.svg && test -f /usr/local/share/icons/limde/index.theme'
 check "labwc merges config" on_vm 'tr "\0" " " < /proc/$(pgrep -x labwc)/cmdline | grep -q -- --merge-config'
 for proc in tinybar.py mako swayidle elephant 'walker --gapplication-service'; do
   check "session runs $proc" on_vm "pgrep -f '$proc' >/dev/null"
 done
-check "appearance rendered" on_vm 'test -f ~/.config/tinybar/style.css && elachisto-appearance --check'
+check "appearance rendered" on_vm 'test -f ~/.config/tinybar/style.css && limde-appearance --check'
 check "redundant launcher entries hidden" on_vm 'for n in footclient foot-server pcmanfm-desktop-pref; do grep -q "^NoDisplay=true" /usr/local/share/applications/$n.desktop || exit 1; done'
-check "agent-web window starts by itself" on_vm 'pgrep -f "[f]irefox --profile .*agent-web/profile --name elachisto.AgentWeb" >/dev/null'
-check "agent-web opens the welcome page" on_vm 'grep -q "learning: not set up yet" ~/.local/state/elachisto/agent-web.log'
+check "agent-web window starts by itself" on_vm 'pgrep -f "[f]irefox --profile .*agent-web/profile --name limde.AgentWeb" >/dev/null'
+check "agent-web opens the welcome page" on_vm 'grep -q "learning: not set up yet" ~/.local/state/limde/agent-web.log'
 check "no failed units" on_vm '[ -z "$(systemctl --failed --no-legend)" ]'
-on_vm 'systemctl --failed --no-legend; cat ~/.local/state/elachisto/labwc.log' >"$out/after-reboot.log" 2>&1 || true
+on_vm 'systemctl --failed --no-legend; cat ~/.local/state/limde/labwc.log' >"$out/after-reboot.log" 2>&1 || true
 "$vm" shot "$name" "$out/screen.png" >/dev/null || fail "screenshot"
 
 ((keep)) || { "$vm" down "$name" >/dev/null; "$vm" rm "$name" >/dev/null; }

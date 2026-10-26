@@ -10,12 +10,12 @@
 #   agent-web --keep-open   session autostart: reopen the window whenever it closes
 #   agent-web --window      open the window once (used by --keep-open)
 #
-# Settings: ~/.config/elachisto/agent-web.conf, lines "url=..." and "keep=domain ..."
+# Settings: ~/.config/limde/agent-web.conf, lines "url=..." and "keep=domain ..."
 # (domains besides the page's own that stay in the window, for example a login domain).
 set -eu
 
-SHARE=$(dirname "$(readlink -f "$0")")/../share/elachisto/agent-web
-CONF="$HOME/.config/elachisto/agent-web.conf"
+SHARE=$(dirname "$(readlink -f "$0")")/../share/limde/agent-web
+CONF="$HOME/.config/limde/agent-web.conf"
 PROFILE="$HOME/.local/share/agent-web/profile"
 FIREFOX="$HOME/.local/opt/firefox"
 LOOP="agent-web --keep-open"
@@ -88,7 +88,7 @@ https://?*) ;;
 esac
 keep=$(setting keep | tr -cd 'a-zA-Z0-9.\- ')
 
-mkdir -p "$PROFILE/chrome" "$HOME/.local/state/elachisto"
+mkdir -p "$PROFILE/chrome" "$HOME/.local/state/limde"
 # A new profile opens tiny; give the first window a sensible size. Firefox remembers any
 # size you choose after that.
 [ -e "$PROFILE/xulstore.json" ] ||
@@ -96,9 +96,9 @@ mkdir -p "$PROFILE/chrome" "$HOME/.local/state/elachisto"
         >"$PROFILE/xulstore.json"
 {
     cat "$SHARE/user.js"
-    printf 'user_pref("elachisto.agentweb.home", "%s");\n' "$url"
-    printf 'user_pref("elachisto.agentweb.keep", "%s");\n' "$keep"
-    printf 'user_pref("elachisto.agentweb.conf", "%s");\n' "$CONF"
+    printf 'user_pref("limde.agentweb.home", "%s");\n' "$url"
+    printf 'user_pref("limde.agentweb.keep", "%s");\n' "$keep"
+    printf 'user_pref("limde.agentweb.conf", "%s");\n' "$CONF"
 } >"$PROFILE/user.js"
 cp "$SHARE/userChrome.css" "$PROFILE/chrome/userChrome.css"
 
@@ -110,5 +110,5 @@ cmp -s "$SHARE/autoconfig.js" "$FIREFOX/defaults/pref/agent-web.js" ||
 cmp -s "$SHARE/agent-web.cfg" "$FIREFOX/agent-web.cfg" ||
     cp "$SHARE/agent-web.cfg" "$FIREFOX/agent-web.cfg"
 
-exec "$FIREFOX/firefox" --profile "$PROFILE" --name elachisto.AgentWeb \
+exec "$FIREFOX/firefox" --profile "$PROFILE" --name limde.AgentWeb \
     "${url:-file://$(readlink -f "$SHARE/welcome.html")}"

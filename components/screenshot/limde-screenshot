@@ -7,18 +7,18 @@
 
 set -eu
 
-GRIM="${ELACHISTO_SCREENSHOT_GRIM:-/usr/bin/grim}"
-SLURP="${ELACHISTO_SCREENSHOT_SLURP:-/usr/bin/slurp}"
-WLCOPY="${ELACHISTO_SCREENSHOT_WLCOPY:-/usr/bin/wl-copy}"
-DIR="${ELACHISTO_SCREENSHOT_DIR:-$HOME/Pictures/Screenshots}"
+GRIM="${LIMDE_SCREENSHOT_GRIM:-/usr/bin/grim}"
+SLURP="${LIMDE_SCREENSHOT_SLURP:-/usr/bin/slurp}"
+WLCOPY="${LIMDE_SCREENSHOT_WLCOPY:-/usr/bin/wl-copy}"
+DIR="${LIMDE_SCREENSHOT_DIR:-$HOME/Pictures/Screenshots}"
 
 notify() {
     # Best effort through whatever owns org.freedesktop.Notifications (Mako).
-    [ -z "${ELACHISTO_SCREENSHOT_NO_NOTIFY:-}" ] || return 0
+    [ -z "${LIMDE_SCREENSHOT_NO_NOTIFY:-}" ] || return 0
     gdbus call --session --dest org.freedesktop.Notifications \
         --object-path /org/freedesktop/Notifications \
         --method org.freedesktop.Notifications.Notify \
-        elachisto-screenshot 0 '' "$1" "$2" '[]' '{}' 3000 >/dev/null 2>&1 || true
+        limde-screenshot 0 '' "$1" "$2" '[]' '{}' 3000 >/dev/null 2>&1 || true
 }
 
 mode="${1:-}"
@@ -46,7 +46,7 @@ case "$mode" in
         notify "Screenshot copied" "Clipboard only; nothing saved"
         ;;
     *)
-        echo "usage: elachisto-screenshot region|screen|clip" >&2
+        echo "usage: limde-screenshot region|screen|clip" >&2
         exit 2
         ;;
 esac

@@ -1,7 +1,7 @@
 #!/usr/bin/python3 -I
 """Quick-look files in a small window; PCManFM's Space hook runs it.
 
-    elachisto-preview FILE [FILE...]
+    limde-preview FILE [FILE...]
 
 PDFs show their pages (rendered with pdftoppm, the first one straight away),
 images and SVGs are scaled to fit, text files show their first megabyte in a
@@ -37,7 +37,7 @@ os.environ.setdefault("VK_DRIVER_FILES", "/usr/share/vulkan/icd.d/intel_icd.json
 # This desktop runs no accessibility bus; skip GTK's lookup and its warning.
 os.environ.setdefault("GTK_A11Y", "none")
 
-APP_ID = "elachisto.Preview"
+APP_ID = "limde.Preview"
 TEXT_LIMIT = 1 << 20
 PDF_PAGES = 50
 PDF_DPI = 110
@@ -229,9 +229,9 @@ def main(argv):
 
     css = Gtk.CssProvider()
     css.load_from_string("""
-        .elachisto-preview-pill { background-color: @theme_bg_color; color: @theme_fg_color;
+        .limde-preview-pill { background-color: @theme_bg_color; color: @theme_fg_color;
                            border: 1px solid @borders; border-radius: 999px; padding: 4px 14px; }
-        .elachisto-preview-page { background-color: alpha(@theme_fg_color, 0.06); }
+        .limde-preview-page { background-color: alpha(@theme_fg_color, 0.06); }
     """)
     Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css,
                                               Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
@@ -275,7 +275,7 @@ def main(argv):
         def do_startup(self):
             Gtk.Application.do_startup(self)
             # Only one preview runs at a time, so any render folder left now is from one that was killed.
-            for stale in Path(tempfile.gettempdir()).glob("elachisto-preview-*"):
+            for stale in Path(tempfile.gettempdir()).glob("limde-preview-*"):
                 shutil.rmtree(stale, ignore_errors=True)
             from gi.repository import GLibUnix
             GLibUnix.signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, lambda: self.close() or False)
@@ -345,7 +345,7 @@ def main(argv):
             self.pill_label = lambda: pill.set_label(
                 path.name + (f"   {self.pill_detail()}" if self.pill_detail else ""))
             self.pill_label()
-            pill.add_css_class("elachisto-preview-pill")
+            pill.add_css_class("limde-preview-pill")
             # Sits one pill height lower than a plain 10 px inset.
             pill_height = pill.measure(Gtk.Orientation.VERTICAL, -1)[1]
             self.pill = Gtk.Revealer(child=pill, reveal_child=True, transition_duration=200,
@@ -450,7 +450,7 @@ def main(argv):
             frames = []
             for w, h in sizes:
                 frame = Gtk.Picture(can_shrink=True, content_fit=Gtk.ContentFit.FILL, halign=Gtk.Align.CENTER)
-                frame.add_css_class("elachisto-preview-page")
+                frame.add_css_class("limde-preview-page")
                 frame.ratio = h / w
                 pages.append(frame)
                 frames.append(frame)
@@ -490,7 +490,7 @@ def main(argv):
                     frame.set_paintable(Gdk.Texture.new_from_filename(png))
                 return
             if not self.tmp or not Path(self.tmp).is_dir():
-                self.tmp = tempfile.mkdtemp(prefix="elachisto-preview-")
+                self.tmp = tempfile.mkdtemp(prefix="limde-preview-")
             scale = self.window.get_scale_factor() if self.window else 1
             results = [None] * len(frames)
             job = RenderJob()

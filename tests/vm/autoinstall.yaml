@@ -2,13 +2,13 @@
 # Unattended Ubuntu Server install for the TEST base image only (tests/vm/vm base).
 # @PASSWORD_HASH@ and @SSH_KEY@ are filled in by the script. The test user gets
 # passwordless sudo and tty1 autologin so VMs run without a person at the screen;
-# elachisto's installer does neither.
+# limde's installer does neither.
 autoinstall:
   version: 1
   refresh-installer:
     update: false
   identity:
-    hostname: elachisto-test
+    hostname: limde-test
     username: tester
     realname: Test User
     password: "@PASSWORD_HASH@"

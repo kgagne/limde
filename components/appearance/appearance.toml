@@ -1,9 +1,9 @@
-# elachisto's default appearance: colours, shapes, icon sizes and fonts for the desktop,
+# limde's default appearance: colours, shapes, icon sizes and fonts for the desktop,
 # the panel (Tinybar), the launcher (Walker), notifications (Mako), PCManFM and labwc.
 #
-# Don't edit this file. Put your own values in ~/.config/elachisto/appearance.toml; it
+# Don't edit this file. Put your own values in ~/.config/limde/appearance.toml; it
 # only needs the keys you change, and updates never overwrite it. Then run:
-#     elachisto-appearance --apply
+#     limde-appearance --apply
 # Layout and padding live in the templates, not here.
 
 [colors]
@@ -34,9 +34,9 @@ control_radius = 4
 popup_radius = 6
 border_width = 1
 
-# The icon theme: elachisto's own SVG icons, falling back to Adwaita.
+# The icon theme: limde's own SVG icons, falling back to Adwaita.
 [icons]
-theme = "elachisto"
+theme = "limde"
 # Icon sizes in pixels for each place. The panel size is the reference the others follow.
 panel_size = 16
 small_size = 13
@@ -44,7 +44,7 @@ menu_size = 16
 launcher_size = 32
 
 [desktop]
-gtk_theme = "Elachisto"
+gtk_theme = "LimDE"
 color_scheme = "prefer-dark"
 
 [fonts]

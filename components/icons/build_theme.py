@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Build the installable "elachisto" icon theme from outlined/ (standard library only).
+"""Build the installable "limde" icon theme from outlined/ (standard library only).
 
 usage: build_theme.py OUTPUT_DIR [--color '#eeeeee']
 
-Writes OUTPUT_DIR/elachisto/ with:
+Writes OUTPUT_DIR/limde/ with:
   symbolic/icons/NAME-symbolic.svg  for every icon and alias. GTK recolours these itself.
   24x24/icons/NAME.svg              the same shapes with --color baked in, for programs that
                               do not recolour (and for app icons in launchers and panels).
 Aliases (aliases.toml) and brand names (brands.toml) are relative symlinks to the drawn
-files. The theme inherits Adwaita and hicolor, so anything elachisto does not draw falls
+files. The theme inherits Adwaita and hicolor, so anything limde does not draw falls
 back to them.
 """
 import argparse
@@ -22,8 +22,8 @@ OUTLINED = HERE / 'outlined'
 HEX = re.compile(r'^#[0-9a-fA-F]{6}$')
 
 INDEX = """[Icon Theme]
-Name=elachisto
-Comment=elachisto's own line icons and brand icons
+Name=limde
+Comment=limde's own line icons and brand icons
 Inherits=Adwaita,hicolor
 Directories=symbolic/icons,24x24/icons
 
@@ -51,7 +51,7 @@ def main():
     if not HEX.match(args.color):
         ap.error('--color must look like #rrggbb')
 
-    theme = Path(args.output) / 'elachisto'
+    theme = Path(args.output) / 'limde'
     shutil.rmtree(theme, ignore_errors=True)
     # A category level below each size folder, and the plain icons under a size-named
     # folder: Mako only finds icons in <size>/<category>/ ("scalable" is skipped). The

@@ -1,25 +1,25 @@
-# Build PCManFM from its pinned tag with elachisto's patches (Space preview; Cut, Copy and
+# Build PCManFM from its pinned tag with limde's patches (Space preview; Cut, Copy and
 # Paste keys that work after picking a place in the side pane) and install it to
 # /usr/local, where it takes precedence over Ubuntu's copy. Ubuntu's package stays
 # installed for its supporting files and dependencies; the patched build's own menu
 # entries are removed so the launcher doesn't list PCManFM twice.
 
 PCMANFM_PREFIX=/usr/local
-PCMANFM_STAMP=$PCMANFM_PREFIX/share/elachisto/pcmanfm.build
+PCMANFM_STAMP=$PCMANFM_PREFIX/share/limde/pcmanfm.build
 
 step_pcmanfm() {
   heading "PCManFM with Space preview (built from source)"
   # shellcheck source=/dev/null
-  . "$ELACHISTO_ROOT/pins/pcmanfm"
-  local patches=("$ELACHISTO_ROOT/components/preview/pcmanfm-space-preview.patch"
-                 "$ELACHISTO_ROOT/components/pcmanfm/pcmanfm-focus-file-shortcuts.patch")
+  . "$LIMDE_ROOT/pins/pcmanfm"
+  local patches=("$LIMDE_ROOT/components/preview/pcmanfm-space-preview.patch"
+                 "$LIMDE_ROOT/components/pcmanfm/pcmanfm-focus-file-shortcuts.patch")
   local patch want; want="$PCMANFM_COMMIT $(cat "${patches[@]}" | sha256sum | cut -d' ' -f1)"
   if [[ -x $PCMANFM_PREFIX/bin/pcmanfm && -f $PCMANFM_STAMP && $(cat "$PCMANFM_STAMP") == "$want" ]]; then
     ok "PCManFM $PCMANFM_TAG with Space preview is installed"
     return
   fi
 
-  local work=${XDG_CACHE_HOME:-$HOME/.cache}/elachisto/build/pcmanfm
+  local work=${XDG_CACHE_HOME:-$HOME/.cache}/limde/build/pcmanfm
   local log=$STATE_DIR/pcmanfm-build.log
   mkdir -p "$STATE_DIR"; : > "$log"
   note "downloading PCManFM $PCMANFM_TAG"

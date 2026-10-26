@@ -10,8 +10,8 @@ would cancel the cut. It reads text/uri-list for the names and libfm's
 application/x-kde-cutselection marker, which is "1" for a cut; neither has that effect.
 Copied text and images are never read.
 
-  elachisto-clipboard-notify          watch the clipboard (session autostart)
-  elachisto-clipboard-notify --event  handle one change, the uri list on stdin
+  limde-clipboard-notify          watch the clipboard (session autostart)
+  limde-clipboard-notify --event  handle one change, the uri list on stdin
 """
 import os
 import re
@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-WL_PASTE = os.environ.get('ELACHISTO_CLIPBOARD_WLPASTE', '/usr/bin/wl-paste')
+WL_PASTE = os.environ.get('LIMDE_CLIPBOARD_WLPASTE', '/usr/bin/wl-paste')
 FILES_TYPE = 'x-special/gnome-copied-files'
 CUT_TYPE = 'application/x-kde-cutselection'
 TIMEOUT_MS = 2500
@@ -48,8 +48,8 @@ def paste(*args):
 
 
 def id_file():
-    runtime = os.environ.get('XDG_RUNTIME_DIR') or f'/tmp/elachisto-{os.getuid()}'
-    return Path(runtime) / 'elachisto-clipboard-notify.id'
+    runtime = os.environ.get('XDG_RUNTIME_DIR') or f'/tmp/limde-{os.getuid()}'
+    return Path(runtime) / 'limde-clipboard-notify.id'
 
 
 def notify(title, body, icon):
@@ -89,7 +89,7 @@ def event():
         return 0
     cut = CUT_TYPE in types and paste('--type', CUT_TYPE).strip('\0').strip() == '1'
     found = summary(uris, cut)
-    if os.environ.get('ELACHISTO_CLIPBOARD_NO_NOTIFY'):
+    if os.environ.get('LIMDE_CLIPBOARD_NO_NOTIFY'):
         print('\n'.join(found))
     else:
         notify(*found)

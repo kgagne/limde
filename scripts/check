@@ -50,8 +50,8 @@ rm -rf "$tmp_theme"
 # 4. Fresh-clone self-test: the same checks must pass on a clone (file modes, ignored files).
 if [[ ${1:-} == --clone ]]; then
   tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-  git clone -q --no-local . "$tmp/elachisto"
-  "$tmp/elachisto/scripts/check" || fail=1
+  git clone -q --no-local . "$tmp/limde"
+  "$tmp/limde/scripts/check" || fail=1
 fi
 
 ((fail == 0)) && echo "check: ok"

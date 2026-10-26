@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draw tiers 2 and 3 of elachisto's icons into src/: the system concepts apps request
+"""Draw tiers 2 and 3 of limde's icons into src/: the system concepts apps request
 through freedesktop icon names, and text-editing controls. Names that only rename an
 existing icon are aliases (aliases.toml), not drawings. Style rules: README.md.
 """

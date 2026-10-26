@@ -22,7 +22,7 @@ KVM access and `qemu-system-x86 qemu-utils ovmf`, and never needs root. Run
   in about 10 minutes.
 
 The base image is for testing only: user `tester` (password `tester`, key login only
-over SSH), passwordless sudo and autologin on tty1. elachisto never sets these up.
+over SSH), passwordless sudo and autologin on tty1. limDE never sets these up.
 
 Observed on the first build (2026-10-24):
 - A fresh Server VM does not include NetworkManager; `systemd-networkd` manages the NIC.

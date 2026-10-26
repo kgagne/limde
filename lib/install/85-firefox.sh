@@ -1,9 +1,9 @@
 # Install Mozilla's Firefox to ~/.local/opt/firefox, a folder you own, so Firefox's own
-# updater can keep it current. Once installed, elachisto never changes its version.
+# updater can keep it current. Once installed, limde never changes its version.
 # The download is checked against Mozilla's signed SHA256SUMS (see pins/firefox).
 
 FIREFOX_DIR=$HOME/.local/opt/firefox
-FIREFOX_PROFILE=/etc/apparmor.d/elachisto-firefox
+FIREFOX_PROFILE=/etc/apparmor.d/limde-firefox
 
 # Mozilla's locale for this system's language, if Mozilla builds it; else en-US.
 firefox_locale() {  # $1: SHA256SUMS text
@@ -17,7 +17,7 @@ firefox_locale() {  # $1: SHA256SUMS text
 
 firefox_download() {
   # shellcheck source=/dev/null
-  . "$ELACHISTO_ROOT/pins/firefox"
+  . "$LIMDE_ROOT/pins/firefox"
   local work=$1 version sums locale name sha
   version=$(curl -fsSL "$FIREFOX_VERSIONS_URL" | sed -n 's/.*"LATEST_FIREFOX_VERSION": *"\([^"]*\)".*/\1/p')
   [[ -n $version ]] || die "could not find the current Firefox version"
@@ -59,14 +59,14 @@ step_firefox() {
     tar -xf "$work/firefox.tar" -C "$work" || die "could not unpack Firefox"
     [[ -x $work/firefox/firefox ]] || die "the Firefox archive has an unexpected layout"
     mkdir -p "$work/firefox/distribution"
-    cp "$ELACHISTO_ROOT/config/firefox/policies.json" "$work/firefox/distribution/policies.json"
+    cp "$LIMDE_ROOT/config/firefox/policies.json" "$work/firefox/distribution/policies.json"
     mv "$work/firefox" "$FIREFOX_DIR"
     rm -rf "$work"
     changed "installed Firefox $FIREFOX_VERSION to $FIREFOX_DIR"
   fi
 
-  if ! sudo cmp -s "$ELACHISTO_ROOT/components/firefox/apparmor-profile" "$FIREFOX_PROFILE" 2>/dev/null; then
-    sudo install -m 644 "$ELACHISTO_ROOT/components/firefox/apparmor-profile" "$FIREFOX_PROFILE"
+  if ! sudo cmp -s "$LIMDE_ROOT/components/firefox/apparmor-profile" "$FIREFOX_PROFILE" 2>/dev/null; then
+    sudo install -m 644 "$LIMDE_ROOT/components/firefox/apparmor-profile" "$FIREFOX_PROFILE"
     sudo apparmor_parser -r "$FIREFOX_PROFILE" || die "the Firefox AppArmor profile did not load"
     changed "Firefox may use its sandbox ($FIREFOX_PROFILE)"
   else

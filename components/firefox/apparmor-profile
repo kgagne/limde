@@ -1,12 +1,12 @@
-# Installed by elachisto as /etc/apparmor.d/elachisto-firefox.
+# Installed by limde as /etc/apparmor.d/limde-firefox.
 # Lets Mozilla's Firefox build in ~/.local/opt/firefox use its process sandbox, which
 # needs unprivileged user namespaces (restricted by default on Ubuntu). This is the same
 # permission Ubuntu's own Firefox profile grants.
 abi <abi/4.0>,
 include <tunables/global>
 
-profile elachisto-firefox @{HOME}/.local/opt/firefox/{firefox,firefox-bin,updater} flags=(unconfined) {
+profile limde-firefox @{HOME}/.local/opt/firefox/{firefox,firefox-bin,updater} flags=(unconfined) {
     userns,
 
-    include if exists <local/elachisto-firefox>
+    include if exists <local/limde-firefox>
 }

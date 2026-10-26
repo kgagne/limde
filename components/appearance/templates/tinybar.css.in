@@ -41,7 +41,7 @@ window {
 }
 
 /* Another theme's app icon is usually drawn edge to edge; shrink it so its margin
-   matches elachisto's icons and it doesn't look oversized in the panel. */
+   matches limde's icons and it doesn't look oversized in the panel. */
 .task-icon-foreign {
     -gtk-icon-size: ${icons_panel_foreign_size}px;
     margin: ${icons_panel_foreign_margin}px;

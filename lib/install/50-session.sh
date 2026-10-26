@@ -2,18 +2,18 @@
 # `exec` matters: if labwc ever exits or crashes, the login ends and the console shows
 # a login prompt again instead of leaving a logged-in shell behind a locked screen.
 
-PROFILE_BEGIN='# >>> elachisto session >>>'
-PROFILE_END='# <<< elachisto session <<<'
+PROFILE_BEGIN='# >>> limde session >>>'
+PROFILE_END='# <<< limde session <<<'
 
 profile_block() {
   cat <<'EOF'
-# >>> elachisto session >>>
-# Start the desktop on tty1. Managed by elachisto's installer; edit outside this block.
+# >>> limde session >>>
+# Start the desktop on tty1. Managed by limde's installer; edit outside this block.
 if [ -z "${WAYLAND_DISPLAY:-}" ] && [ "$(tty)" = /dev/tty1 ] && command -v labwc >/dev/null; then
-  mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/elachisto"
-  exec labwc --merge-config >"${XDG_STATE_HOME:-$HOME/.local/state}/elachisto/labwc.log" 2>&1
+  mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/limde"
+  exec labwc --merge-config >"${XDG_STATE_HOME:-$HOME/.local/state}/limde/labwc.log" 2>&1
 fi
-# <<< elachisto session <<<
+# <<< limde session <<<
 EOF
 }
 

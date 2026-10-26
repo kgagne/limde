@@ -1,4 +1,4 @@
-"""Check elachisto-preview's file classification and helpers offline. Opens no window."""
+"""Check limde-preview's file classification and helpers offline. Opens no window."""
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
 from pathlib import Path
@@ -8,9 +8,9 @@ import sys
 import tempfile
 import unittest
 
-SCRIPT = Path(__file__).resolve().parents[1] / "elachisto-preview"
-loader = SourceFileLoader("elachisto_preview", str(SCRIPT))
-preview = module_from_spec(spec_from_loader("elachisto_preview", loader))
+SCRIPT = Path(__file__).resolve().parents[1] / "limde-preview"
+loader = SourceFileLoader("limde_preview", str(SCRIPT))
+preview = module_from_spec(spec_from_loader("limde_preview", loader))
 loader.exec_module(preview)
 
 
@@ -120,7 +120,7 @@ class PreviewTests(unittest.TestCase):
     def test_wrong_arguments_print_usage(self):
         done = subprocess.run([sys.executable, "-I", SCRIPT], capture_output=True, text=True)
         self.assertEqual(done.returncode, 2)
-        self.assertIn("elachisto-preview FILE", done.stderr)
+        self.assertIn("limde-preview FILE", done.stderr)
 
 
 if __name__ == "__main__":
