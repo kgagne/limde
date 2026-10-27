@@ -3,6 +3,7 @@
 
 ## Session
 foot                # the default terminal
+tmux                # keeps terminal programs, such as a CLI agent, running with no terminal open
 swayidle            # runs the screen locker after inactivity
 swaylock            # the screen locker
 wlopm               # turns the screen off when idle on mains power

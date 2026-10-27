@@ -142,9 +142,40 @@ wrappers that do exist usually bundle their own browser engine to show the same 
 agent-web uses the Firefox that limDE already installs, in a separate profile. There is
 nothing more to install or keep updated, you get the same features as the website, and the
 agent's sign-in stays apart from your everyday browsing. It still uses a Firefox
-process's memory while it's open. If you need something only a desktop app does, such as
-reading local files or connecting to tools on your machine, install that app instead and
-turn agent-web off as `components/agent-web/README.md` describes.
+process's memory while it's open. What a website can't do is reach your files, code or
+system, which is the usual reason to want a desktop app. A command-line agent covers that
+instead (next).
+
+**With a CLI agent on the machine.** A command-line agent works directly in your code,
+files and system, and some can be driven from their website. Claude Code, for example,
+has Remote Control: start `claude --remote-control` (or type `/rc` in a running session)
+and the session appears on claude.ai, where the agent window can steer it. Run the CLI in
+tmux, which limDE installs, so it keeps going when no terminal is open and you can still
+attach to it locally. The agent window becomes the front end, and the CLI does the local
+work with its own permission prompts. Together they do what a desktop app would, without installing one,
+and the same session can be reached from your phone. This isn't part of limDE: the CLI,
+its account and its permissions are yours to choose. To keep one running from boot, a
+user unit such as this works (with `loginctl enable-linger` so it starts without a login):
+
+```ini
+# ~/.config/systemd/user/agent-cli.service
+[Unit]
+Description=CLI agent with Remote Control, in tmux (attach: tmux -L agent attach)
+
+[Service]
+Type=forking
+WorkingDirectory=%h
+ExecStart=/usr/bin/tmux -L agent new-session -d -s agent %h/.local/bin/claude --remote-control
+ExecStop=/usr/bin/tmux -L agent kill-server
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=default.target
+```
+
+If you'd rather use a desktop app anyway, turn agent-web off as
+`components/agent-web/README.md` describes.
 
 ## Customizing
 
