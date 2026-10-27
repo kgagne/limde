@@ -73,6 +73,22 @@ class BatteryTests(unittest.TestCase):
         self.assertEqual(tinybar.battery_load(30), "load-severe")
         self.assertEqual(tinybar.battery_load(55), "load-severe")
 
+    def test_cpu_percent_between_readings(self):
+        self.assertIsNone(tinybar.cpu_percent(None, (100, 50)))
+        self.assertIsNone(tinybar.cpu_percent((100, 50), None))
+        self.assertIsNone(tinybar.cpu_percent((100, 50), (100, 50)))
+        self.assertEqual(tinybar.cpu_percent((100, 50), (200, 125)), 25.0)
+        self.assertEqual(tinybar.cpu_percent((100, 50), (200, 50)), 100.0)
+        self.assertEqual(tinybar.cpu_percent((100, 50), (200, 160)), 0.0)
+
+    def test_usage_lines(self):
+        self.assertEqual(
+            tinybar.usage_lines(7.4, (2.94, 14.79)),
+            ["CPU 7%", "RAM 2.9/14.8 GiB"])
+        self.assertEqual(tinybar.usage_lines(None, (2.94, 14.79)), ["RAM 2.9/14.8 GiB"])
+        self.assertEqual(tinybar.usage_lines(12.0, None), ["CPU 12%"])
+        self.assertEqual(tinybar.usage_lines(None, None), [])
+
 
 def power_record(start, avg, low=None, high=None, coverage=300):
     return {

@@ -73,9 +73,10 @@ USAGE_SAMPLE_SECONDS = 2
 TEMP_SAMPLE_SECONDS = 30
 NOTIFICATION_SAMPLE_SECONDS = 2
 
-# CPU and RAM readouts are off until they show something more useful. The
-# sampling code stays; with this off it is never scheduled, so those two
-# metrics also stop being added to the history file.
+# CPU and RAM readouts are off in the panel until they show something more
+# useful. The sampling code stays; with this off it is never scheduled, so
+# those two metrics also stop being added to the history file. The battery's
+# hover text shows both anyway (see update_battery).
 SHOW_USAGE = False
 TINYBAR_APP_IDS = {
     "limde.Tinybar",
@@ -334,6 +335,34 @@ def get_memory_usage():
     gib = 1024 ** 3
 
     return used / gib, total / gib
+
+
+def cpu_percent(previous, current):
+    """Busy share of all CPUs between two read_cpu_counters() readings."""
+    if previous is None or current is None:
+        return None
+
+    total_delta = current[0] - previous[0]
+    idle_delta = current[1] - previous[1]
+
+    if total_delta <= 0:
+        return None
+
+    return max(0.0, min((total_delta - idle_delta) / total_delta * 100, 100.0))
+
+
+def usage_lines(cpu, memory):
+    """Hover-text lines for CPU and RAM; an unavailable reading is left out."""
+    lines = []
+
+    if cpu is not None:
+        lines.append(f"CPU {cpu:.0f}%")
+
+    if memory:
+        used, total = memory
+        lines.append(f"RAM {used:.1f}/{total:.1f} GiB")
+
+    return lines
 
 
 class HistoryStore:
@@ -2046,6 +2075,7 @@ class TinyBar(Gtk.Application):
         self.last_battery_status = None
 
         self.previous_cpu = None
+        self.battery_cpu = None
 
         self.volume_monitor = None
         self.volume_refresh_source = None
@@ -3016,6 +3046,16 @@ class TinyBar(Gtk.Application):
                 parts.append(
                     runtime_text
                 )
+
+        # CPU and RAM ride along in the hover text, sampled with the battery,
+        # so they need no timer of their own and are not recorded. CPU is the
+        # average since the previous battery sample.
+        current_cpu = read_cpu_counters()
+        parts += usage_lines(
+            cpu_percent(self.battery_cpu, current_cpu),
+            get_memory_usage()
+        )
+        self.battery_cpu = current_cpu
 
         parts.append(f"Status: {status}")
         if power_text == "— W":
