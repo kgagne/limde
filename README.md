@@ -10,7 +10,7 @@ run `./install`, and log in.
 It's made for laptops first: careful with the battery, with trackpad motion and scrolling
 modelled on a MacBook's.
 
-> **Status: beta (`v1.0.0-beta.1`).** It installs and runs, but it has been tested on one
+> **Status: beta (`v1.0.0-beta.2`).** It installs and runs, but it has been tested on one
 > laptop and in QEMU only. Expect rough edges, and see [Known gaps](#known-gaps).
 
 ## Screenshots
