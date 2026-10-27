@@ -25,8 +25,21 @@ from tinybar_icons import (
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gtk4LayerShell", "1.0")
 gi.require_version("GioUnix", "2.0")
+gi.require_version("Gdk", "4.0")
+gi.require_version("Graphene", "1.0")
+gi.require_version("Gsk", "4.0")
 
-from gi.repository import Gtk, GLib, Gio, GioUnix, Gtk4LayerShell, Pango
+from gi.repository import (
+    Gdk,
+    Gio,
+    GioUnix,
+    GLib,
+    Graphene,
+    Gsk,
+    Gtk,
+    Gtk4LayerShell,
+    Pango,
+)
 
 
 def first_device(pattern, fallback):
@@ -129,6 +142,24 @@ BATTERY_LOAD_LEVELS = (
     (20.0, "load-high"),
     (12.0, "load-moderate"),
 )
+
+# The battery popover's graph views, cycled with its arrows: name, span, bin
+# size, and hours between gridlines (24 puts them at local midnight).
+POWER_VIEWS = (
+    ("3 hours", 3 * 60 * 60, 5 * 60, 1),
+    ("24 hours", 24 * 60 * 60, 15 * 60, 6),
+    ("7 days", 7 * 24 * 60 * 60, 60 * 60, 24),
+)
+POWER_GRAPH_WIDTH = 300
+POWER_GRAPH_HEIGHT = 120
+# Room under the plot for the gridline labels.
+POWER_GRAPH_LABEL_HEIGHT = 16
+# The graph's top is the highest bin average times the headroom, rounded up to
+# the step and never below the minimum. Short spikes in the band may run off the
+# top; scaling to them would flatten the line that matters.
+POWER_GRAPH_HEADROOM = 1.5
+POWER_GRAPH_STEP_W = 10
+POWER_GRAPH_MIN_W = 10
 
 METRIC_INTERVALS = {
     "power_w": BATTERY_SAMPLE_SECONDS,
@@ -683,6 +714,126 @@ class HistoryStore:
             weighted_sum / coverage_total,
             coverage_total
         )
+
+
+def power_series(records, now, span, bin_seconds, current=None):
+    """Battery draw in clock-aligned bins covering the last `span` seconds.
+
+    Returns (bins, start, end, summary). Each bin is (avg, low, high) in watts,
+    or None when nothing was recorded (charging, on mains power, switched off),
+    so the graph breaks there rather than drawing across. The last bin is the
+    one in progress. summary is (avg, peak, seconds on battery), avg and peak
+    None without data. current is HistoryStore's unflushed bucket as
+    (start_epoch, samples).
+    """
+
+    count = max(1, round(span / bin_seconds))
+    end = (int(now) // bin_seconds + 1) * bin_seconds
+    start = end - count * bin_seconds
+
+    weighted = [0.0] * count
+    covered = [0.0] * count
+    lows = [None] * count
+    highs = [None] * count
+
+    def add(epoch, duration, avg, low, high, coverage):
+        middle = epoch + duration / 2
+
+        if not start <= middle < end:
+            return
+
+        index = int((middle - start) // bin_seconds)
+        weighted[index] += avg * coverage
+        covered[index] += coverage
+
+        if lows[index] is None or low < lows[index]:
+            lows[index] = low
+
+        if highs[index] is None or high > highs[index]:
+            highs[index] = high
+
+    for record in records:
+        epoch = record.get("start_epoch")
+        data = record.get("metrics", {}).get("power_w")
+
+        if epoch is None or not data:
+            continue
+
+        avg = data.get("avg")
+        coverage = data.get("coverage_seconds", 0)
+
+        if avg is None or coverage <= 0:
+            continue
+
+        add(
+            epoch,
+            record.get("duration_seconds", HISTORY_BUCKET_SECONDS),
+            float(avg),
+            float(data.get("min", avg)),
+            float(data.get("max", avg)),
+            float(coverage)
+        )
+
+    if current and current[0] is not None and current[1]:
+        epoch, samples = current
+        add(
+            epoch,
+            HISTORY_BUCKET_SECONDS,
+            sum(samples) / len(samples),
+            min(samples),
+            max(samples),
+            float(len(samples) * BATTERY_SAMPLE_SECONDS)
+        )
+
+    bins = [
+        (weighted[i] / covered[i], lows[i], highs[i])
+        if covered[i] > 0 else None
+        for i in range(count)
+    ]
+
+    total = sum(covered)
+
+    if total <= 0:
+        return bins, start, end, (None, None, 0)
+
+    peak = max(high for high in highs if high is not None)
+
+    return bins, start, end, (sum(weighted) / total, peak, total)
+
+
+def power_grid(start, end, every_hours):
+    """Gridline (time, label) pairs between start and end, on local hours that
+    are a multiple of every_hours: "14:00", or the weekday at midnight."""
+
+    lines = []
+    moment = int(start) // 900 * 900 + 900
+
+    while moment < end:
+        local = datetime.datetime.fromtimestamp(moment)
+
+        if local.minute == 0 and local.hour % every_hours == 0:
+            label = (
+                local.strftime("%a")
+                if every_hours == 24
+                else local.strftime("%H:%M")
+            )
+            lines.append((moment, label))
+
+        moment += 900
+
+    return lines
+
+
+def power_summary(summary, name):
+    avg, peak, covered = summary
+
+    if avg is None:
+        return f"No battery use in the last {name}"
+
+    return (
+        f"Avg {avg:.1f} W · Peak {peak:.1f} W · "
+        f"{format_coverage(covered)} on battery"
+    )
 
 
 def shorten(text, limit):
@@ -1527,6 +1678,263 @@ class NetworkMenu(Gtk.MenuButton):
         self.request_scan()
 
 
+def with_alpha(color, alpha):
+    faded = color.copy()
+    faded.alpha = color.alpha * alpha
+    return faded
+
+
+class PowerGraph(Gtk.Widget):
+    """Battery draw over time: the bin averages as a line over a faint band from
+    each bin's lowest to highest reading. Drawn with GTK's own path API in the
+    CSS text colour, so it needs no cairo bindings and follows the theme."""
+
+    def __init__(self):
+        super().__init__()
+
+        self.add_css_class("power-graph")
+        self.set_size_request(POWER_GRAPH_WIDTH, POWER_GRAPH_HEIGHT)
+
+        self.bins = []
+        self.start = 0
+        self.end = 1
+        self.grid = []
+        self.top = POWER_GRAPH_MIN_W
+
+    def plot(self, bins, start, end, grid):
+        self.bins = bins
+        self.start = start
+        self.end = end
+        self.grid = grid
+
+        highest = max((value[0] for value in bins if value), default=0)
+        steps = -(-highest * POWER_GRAPH_HEADROOM // POWER_GRAPH_STEP_W)
+        self.top = max(POWER_GRAPH_MIN_W, steps * POWER_GRAPH_STEP_W)
+        self.queue_draw()
+
+    def do_snapshot(self, snapshot):
+        width = self.get_width()
+        height = self.get_height() - POWER_GRAPH_LABEL_HEIGHT
+
+        if width <= 0 or height <= 0 or not self.bins:
+            return
+
+        color = self.get_color()
+        span = self.end - self.start
+        step = width / len(self.bins)
+
+        def x_at(moment):
+            return (moment - self.start) / span * width
+
+        def y_at(watts):
+            return height - min(watts, self.top) / self.top * height
+
+        def text(label, x, y, alpha):
+            layout = self.create_pango_layout(label)
+            snapshot.save()
+            snapshot.translate(Graphene.Point().init(x, y))
+            snapshot.append_layout(layout, with_alpha(color, alpha))
+            snapshot.restore()
+
+        # Gridlines: half and full scale across, the view's hours or days down.
+        grid = Gsk.PathBuilder.new()
+
+        for watts in (self.top / 2, self.top):
+            grid.move_to(0, y_at(watts))
+            grid.line_to(width, y_at(watts))
+
+        grid.move_to(0, height)
+        grid.line_to(width, height)
+
+        for moment, _label in self.grid:
+            grid.move_to(x_at(moment), 0)
+            grid.line_to(x_at(moment), height)
+
+        snapshot.append_stroke(
+            grid.to_path(),
+            Gsk.Stroke.new(1),
+            with_alpha(color, 0.12)
+        )
+
+        for watts in (self.top / 2, self.top):
+            text(f"{watts:g} W", 3, y_at(watts) + 1, 0.55)
+
+        for moment, label in self.grid:
+            text(label, x_at(moment) + 3, height + 1, 0.55)
+
+        # Unbroken runs of recorded bins; each is drawn on its own.
+        runs = []
+        run = []
+
+        for index, value in enumerate(self.bins):
+            if value is None:
+                if run:
+                    runs.append(run)
+                run = []
+                continue
+
+            run.append(((index + 0.5) * step, value))
+
+        if run:
+            runs.append(run)
+
+        band = Gsk.PathBuilder.new()
+        line = Gsk.PathBuilder.new()
+        dots = Gsk.PathBuilder.new()
+
+        for run in runs:
+            if len(run) == 1:
+                x, (avg, _low, _high) = run[0]
+                dots.add_circle(Graphene.Point().init(x, y_at(avg)), 1.5)
+                continue
+
+            first_x, (_avg, _low, first_high) = run[0]
+            band.move_to(first_x, y_at(first_high))
+
+            for x, (_avg, _low, high) in run[1:]:
+                band.line_to(x, y_at(high))
+
+            for x, (_avg, low, _high) in reversed(run):
+                band.line_to(x, y_at(low))
+
+            band.close()
+
+            line.move_to(run[0][0], y_at(run[0][1][0]))
+
+            for x, (avg, _low, _high) in run[1:]:
+                line.line_to(x, y_at(avg))
+
+        snapshot.append_fill(
+            band.to_path(),
+            Gsk.FillRule.WINDING,
+            with_alpha(color, 0.2)
+        )
+
+        stroke = Gsk.Stroke.new(1.5)
+        stroke.set_line_join(Gsk.LineJoin.ROUND)
+
+        snapshot.append_stroke(line.to_path(), stroke, color)
+        snapshot.append_fill(dots.to_path(), Gsk.FillRule.WINDING, color)
+
+
+class BatteryMenu(Gtk.MenuButton):
+    """Battery icon and time left. The popover graphs the draw over the last 3
+    hours, 24 hours or 7 days from Tinybar's history file; its arrows (or the
+    Left and Right keys) cycle through the three and wrap around."""
+
+    def __init__(self, library, history):
+        super().__init__()
+
+        self.library = library
+        self.history = history
+        self.view = 0
+
+        self.set_has_frame(False)
+        self.add_css_class("panel-menu")
+
+        self.indicator = StatusIndicator(library, "battery")
+        # The panel colours this icon by the current draw.
+        self.icon = self.indicator.icon
+        self.set_child(self.indicator)
+
+        self.title = Gtk.Label()
+        self.title.set_hexpand(True)
+        self.title.add_css_class("power-title")
+
+        header = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=4
+        )
+
+        header.append(self.arrow("chevron-left", "<", -1, "Previous range"))
+        header.append(self.title)
+        header.append(self.arrow("chevron-right", ">", 1, "Next range"))
+
+        self.graph = PowerGraph()
+
+        self.summary = Gtk.Label()
+        self.summary.set_xalign(0)
+        self.summary.add_css_class("notification-body")
+
+        content = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=6
+        )
+
+        content.add_css_class("notification-popover")
+        content.append(header)
+        content.append(self.graph)
+        content.append(self.summary)
+
+        popover = Gtk.Popover()
+        popover.set_child(content)
+        popover.connect("show", lambda _popover: self.refresh())
+
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self.on_key_pressed)
+        popover.add_controller(keys)
+
+        self.set_popover(popover)
+        open_below_panel(self)
+
+    def arrow(self, glyph, fallback, direction, label):
+        button = Gtk.Button()
+        button.set_has_frame(False)
+        button.add_css_class("power-arrow")
+        button.set_tooltip_text(label)
+
+        image = glyph_widget()
+
+        if self.library.set_glyph(image, glyph):
+            button.set_child(image)
+        else:
+            button.set_label(fallback)
+
+        button.connect("clicked", lambda _button: self.cycle(direction))
+        return button
+
+    def cycle(self, direction):
+        self.view = (self.view + direction) % len(POWER_VIEWS)
+        self.refresh()
+
+    def on_key_pressed(self, _controller, keyval, _keycode, _state):
+        if keyval == Gdk.KEY_Left:
+            self.cycle(-1)
+            return True
+
+        if keyval == Gdk.KEY_Right:
+            self.cycle(1)
+            return True
+
+        return False
+
+    def set_text(self, text, **kwargs):
+        self.indicator.set_text(text, **kwargs)
+
+    def refresh(self):
+        name, span, bin_seconds, every_hours = POWER_VIEWS[self.view]
+
+        bins, start, end, summary = power_series(
+            self.history.records,
+            time.time(),
+            span,
+            bin_seconds,
+            (
+                self.history.current_start,
+                self.history.current.get("power_w", [])
+            )
+        )
+
+        self.title.set_text(f"Last {name}")
+        self.graph.plot(
+            bins,
+            start,
+            end,
+            power_grid(start, end, every_hours)
+        )
+        self.summary.set_text(power_summary(summary, name))
+
+
 class LevelOverlay(Gtk.Window):
     """Brief brightness or volume readout near the bottom of the screen.
 
@@ -1736,7 +2144,7 @@ class TinyBar(Gtk.Application):
             "volume",
             show_value=False
         )
-        self.battery = StatusIndicator(self.icons, "battery")
+        self.battery = BatteryMenu(self.icons, self.history)
         # Desktops and VMs have no battery or backlight: leave those indicators out.
         self.battery.set_visible(HAS_BATTERY)
         self.brightness.set_visible(HAS_BACKLIGHT)
@@ -2631,6 +3039,9 @@ class TinyBar(Gtk.Application):
             if status == "Discharging"
             else None
         )
+
+        if self.battery.get_popover().get_visible():
+            self.battery.refresh()
 
         for _threshold, name in BATTERY_LOAD_LEVELS:
             if name == load:

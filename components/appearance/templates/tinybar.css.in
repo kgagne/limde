@@ -198,6 +198,35 @@ popover > contents {
     color: ${colors_secondary};
 }
 
+/* Battery popover: the range title between its arrows, and the draw graph. */
+.power-title {
+    font-size: 13px;
+    color: ${colors_text};
+}
+
+.power-arrow {
+    min-height: 0;
+    min-width: 0;
+    padding: 2px 6px;
+    border: 0;
+    border-radius: ${shape_control_radius}px;
+    background: transparent;
+    color: ${colors_muted};
+    box-shadow: none;
+    transition: none;
+}
+
+.power-arrow:hover {
+    background: ${colors_hover};
+    color: ${colors_text};
+}
+
+/* The line, band, gridlines and labels are drawn in this colour at set opacities. */
+.power-graph {
+    font-size: 11px;
+    color: ${colors_text};
+}
+
 /* Brightness/volume readout shown briefly after a change. */
 window.level-window {
     background: transparent;

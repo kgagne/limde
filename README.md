@@ -35,7 +35,8 @@ Two goals shaped limDE from the start, and they come before everything else:
   display manager, no extra services, no recommended-package extras), and it puts the
   numbers in front of you: Tinybar shows the battery's live draw in watts and the hours
   left, and colours the battery icon as the draw climbs, so you can see how fast the
-  battery is draining and notice when the draw jumps. After 5 idle minutes the screen
+  battery is draining and notice when the draw jumps. Click the battery for a graph of
+  the draw over the last 3 hours, 24 hours or 7 days. After 5 idle minutes the screen
   locks, and after 8 a laptop on battery suspends.
 - **Trackpad motion and scrolling that feel like a MacBook.** Slow, precise pointer
   movement that speeds up smoothly, and two-finger scrolling that follows your fingers.
