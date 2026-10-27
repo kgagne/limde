@@ -5,7 +5,7 @@
 #
 #   agent-web               open the window (and keep it open)
 #   agent-web stop          close the window and stop reopening it
-#   agent-web set-home URL  open on this page from now on
+#   agent-web set-home URL  open on this page (the window then saves the page it is on)
 #   agent-web reset         forget the page and sign-in domains; show the welcome page again
 #   agent-web --keep-open   session autostart: reopen the window whenever it closes
 #   agent-web --window      open the window once (used by --keep-open)

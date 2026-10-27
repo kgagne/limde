@@ -9,9 +9,11 @@ toolbars. It always sits at the left of the panel and reopens if it is closed.
   the window may go anywhere: agent-web remembers the first site as home, and every domain
   visited on the way.
 - **After that:** the window opens on your agent and only those domains stay in it. Every
-  other link, or one sent to the window from elsewhere, opens in your main Firefox.
+  other link, or one sent to the window from elsewhere, opens in your main Firefox. The
+  window remembers the conversation it was last on and reopens there (not sign-in or
+  settings pages, and not pages on the extra domains).
 - **Commands:** `agent-web stop` closes it until your next login. `agent-web set-home
-  https://...` picks a page directly. `agent-web reset` forgets the page and shows the
+  https://...` picks a page directly, until the window moves to another one. `agent-web reset` forgets the page and shows the
   welcome page again.
 - **Turning it off:** create an empty `~/.config/limde/autostart.d/60-agent-web.sh`, then
   run `agent-web stop`. Delete that file to bring the window back at the next login.
