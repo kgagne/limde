@@ -57,12 +57,14 @@ shared pages are split between the processes that use them):
 
 | | Memory |
 | --- | --- |
-| The desktop: labwc, Tinybar, Walker and Elephant, Mako, swayidle | about 275 MiB |
+| The desktop: labwc, Tinybar, Walker and Elephant, Mako, swayidle | about 240 MiB |
 | Session services: PipeWire, D-Bus, keyring, GVfs, the user's systemd | about 50 MiB |
-| The agent window (Firefox, one long claude.ai conversation open) | about 1.3 GiB |
-| The whole system in use, including a Claude Code CLI session | about 2.9 GiB of 16 GB |
+| The agent window (Firefox, just started on a new claude.ai conversation) | about 1.1 GiB |
+| The whole system in use, including a Claude Code CLI session | about 3.0 GiB of 16 GB |
 
-Most of it is the browser. The desktop itself is a few hundred MiB.
+Most of it is the browser, and it grows with the conversation: with one long claude.ai
+conversation the agent window took 1.2 to 1.8 GiB, and Firefox keeps that memory until the
+window restarts (`agent-web stop; agent-web`). The desktop itself is a few hundred MiB.
 
 And three habits that follow from those goals:
 
