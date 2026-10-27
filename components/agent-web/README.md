@@ -20,7 +20,8 @@ toolbars. It always sits at the left of the panel and reopens if it is closed.
 - **Settings:** `~/.config/limde/agent-web.conf`, with lines `url=...` and
   `keep=domain ...` (extra domains to keep in the window, such as a separate login site).
 - **Keys:** Super+W, Super+Q, Alt+F4 and Firefox's Ctrl+W and Ctrl+Q don't close it, so it
-  isn't closed by accident.
+  isn't closed by accident. Ctrl+T, Ctrl+N and their Shift variants do nothing: the window
+  has no tab bar, so a new tab or window would have no way back.
 
 How it works: the `agent-web` script launches Firefox with its own profile and Wayland app
 ID `limde.AgentWeb`. Firefox autoconfig (`agent-web.cfg`, copied into the Firefox
