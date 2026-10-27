@@ -10,8 +10,11 @@ toolbars. It always sits at the left of the panel and reopens if it is closed.
   visited on the way.
 - **After that:** the window opens on your agent and only those domains stay in it. Every
   other link, or one sent to the window from elsewhere, opens in your main Firefox.
-- **Commands:** `agent-web stop` closes it for good. `agent-web set-home https://...` picks a
-  page directly. `agent-web reset` forgets the page and shows the welcome page again.
+- **Commands:** `agent-web stop` closes it until your next login. `agent-web set-home
+  https://...` picks a page directly. `agent-web reset` forgets the page and shows the
+  welcome page again.
+- **Turning it off:** create an empty `~/.config/limde/autostart.d/60-agent-web.sh`, then
+  run `agent-web stop`. Delete that file to bring the window back at the next login.
 - **Settings:** `~/.config/limde/agent-web.conf`, with lines `url=...` and
   `keep=domain ...` (extra domains to keep in the window, such as a separate login site).
 - **Keys:** Super+W, Super+Q, Alt+F4 and Firefox's Ctrl+W and Ctrl+Q don't close it, so it

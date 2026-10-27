@@ -24,7 +24,12 @@ modelled on a MacBook's.
 | ![foot running htop, with a "Cut" notification at the top right](docs/screenshots/terminal-notification.png) | ![The swaylock lock screen](docs/screenshots/lock.png) |
 | **Terminal and notifications:** foot with htop, and a notification after a file is cut. | **Lock:** Super+L, or after 5 idle minutes. |
 
-Screenshots are from a clean install in a VM at 1920×1200.
+![Tinybar's battery popover: a week of battery draw in watts, with average, peak and time on battery](docs/screenshots/battery-graph.png)
+
+**Battery:** click the battery for its draw over the last 3 hours, 24 hours or 7 days.
+
+Screenshots are from a clean install in a VM at 1920×1200, except the battery graph,
+which needs a real battery and comes from a laptop.
 
 ## Philosophy
 
@@ -119,9 +124,27 @@ If you install from a VM onto a USB stick or another disk for a laptop, add
 
 In PCManFM, select a file and press Space to preview it.
 
-**agent-web** is the window at the left of the panel. On first start it shows a page of
-common web agents. Open yours and sign in; after that the window keeps to that site and
-opens other links in your main Firefox. See `components/agent-web/README.md`.
+### The agent window
+
+**agent-web** is the window at the left of the panel: your web AI agent, kept open as
+part of the desktop instead of as one tab among many. On first start it shows a page of
+common web agents. Open yours and sign in. After that the window keeps to that site,
+reopens if it is closed, ignores the close keys, and sends every other link to your main
+Firefox.
+
+It's meant for an agent you use all day: a chat you keep coming back to, or a
+long-running session you check on and steer, such as a coding agent at work on this or
+another machine. `agent-web set-home URL` opens it straight on one page, such as a
+particular session.
+
+**Why not a desktop app?** Many web agents have no official Linux app, and the apps and
+wrappers that do exist usually bundle their own browser engine to show the same website.
+agent-web uses the Firefox that limDE already installs, in a separate profile. There is
+nothing more to install or keep updated, you get the same features as the website, and the
+agent's sign-in stays apart from your everyday browsing. It still uses a Firefox
+process's memory while it's open. If you need something only a desktop app does, such as
+reading local files or connecting to tools on your machine, install that app instead and
+turn agent-web off as `components/agent-web/README.md` describes.
 
 ## Customizing
 
