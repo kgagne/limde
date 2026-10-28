@@ -31,9 +31,13 @@ Every icon in `src/` follows these, so the set reads as one family:
   are covered. The rest are skipped on purpose: emoji faces, weather, presence states,
   screen orientation, cellular generations, and Apple-specific devices.
 - Tier 4 (brands), in `brands/` (39 icons; `brands.toml` maps them to app icon names):
-  - The 16 Craft apps are original line glyphs. PhotoCraft (fox) and VectorCraft
-    (dragon) were traced from Keith's Lumo line-art references with `tools/centerline.py`.
-    LightCraft is a light bulb, so it doesn't clash with darktable's aperture logo.
+  - The 16 Craft apps are original line glyphs. Keith made line-art references for 15 of
+    them with Lumo, an AI image generator, keeping each app's upstream subject (an animal
+    or object) but not its artwork; ArtCraft is a palette, not its "A" mark. PhotoCraft
+    (fox) and VectorCraft (dragon) were traced from them with `tools/centerline.py` and
+    finished by hand; the other 12 were drawn by hand on the 24-unit grid from the
+    references (2026-10-28), since traces wobble at this size. CADCraft follows Keith's
+    tile, and AniCraft, with no upstream icon yet, is a ball with an onion-skin trail.
   - 18 third-party logos are solid icons from Simple Icons (`import_simple_icons.py`).
     That's deliberate: they are accurate and CC0 or openly licensed, and Keith's desktop
     already pairs line system icons with solid brand logos.

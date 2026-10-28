@@ -8,8 +8,9 @@ belongs to.
 ## Where they come from
 
 - **Craft apps** (`*craft*.svg`, `craft-launcher.svg`): original limDE glyphs, MIT.
-  PhotoCraft, VectorCraft and CADCraft follow artwork made by limDE's author; the rest
-  are new designs. None of them uses the ArtCraft marks.
+  Most are drawn from reference images limDE's author generated with Lumo, an AI image
+  generator: each shows the subject of the app's own icon (an animal or object) but none
+  traces storytold's artwork, and none uses the ArtCraft marks.
 - **Simple Icons** (solid icons with a "Simple Icons" comment in the file): from
   [Simple Icons](https://simpleicons.org) 16.35.0, placed inside limDE's margin.
   Licence as recorded by Simple Icons: CC0-1.0 in this folder, CC BY-SA in `cc-by-sa/`,

@@ -23,7 +23,7 @@
 "wordcraft.svg" = "#3B5AD9"     # upstream
 "artcraft.svg" = "#4E7BFB"      # upstream (crates/desktop/artcraft/icons)
 "craft-launcher.svg" = "#4E7BFB"  # ArtCraft's colour; the launcher has no icon of its own
-# anicraft.svg: no upstream icon yet (empty repository), so plain.
+"anicraft.svg" = "#C8353B"     # tile (no upstream icon yet; Keith's Lumo tile, 2026-10-28)
 
 [apps]
 "blender.svg" = "#E87D0D"       # simple-icons
