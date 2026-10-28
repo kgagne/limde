@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Check limde's colour palettes against WCAG 2.2 contrast minimums.
+
+usage: check-contrast [APPEARANCE.toml]
+
+Text needs 4.5:1 (1.4.3); icons, borders that mark a control's edge, the focus ring
+and title-bar buttons need 3:1 (1.4.11). Disabled text is exempt, as WCAG allows.
+Both palettes ([colors] and [colors_light]) must also have the same keys. App icon
+colours are checked when the icon themes build (components/icons/build_theme.py).
+Standard library only.
+"""
+import sys
+import tomllib
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'icons'))
+import contrast  # noqa: E402
+
+T, G = contrast.TEXT, contrast.GRAPHICS
+# (foreground, background, minimum, where it is used)
+PAIRS = [
+    ('text', 'background', T, 'body text'),
+    ('text', 'surface', T, 'text on raised areas'),
+    ('text', 'hover', T, 'text on a hovered row'),
+    ('secondary', 'background', T, 'secondary text'),
+    ('secondary', 'surface', T, 'secondary text on raised areas'),
+    ('secondary', 'hover', T, 'secondary text on a hovered row'),
+    ('muted', 'background', T, 'inactive window titles'),
+    ('muted', 'surface', T, 'muted text on raised areas'),
+    ('muted', 'hover', G, 'plain icons on a hovered row'),
+    ('selection_text', 'selection', T, 'selected row text'),
+    ('selection_secondary', 'selection', T, 'selected row secondary text'),
+    ('selection_text', 'selection_inactive', T, 'selected row in an unfocused window'),
+    ('error_text', 'error_background', T, 'error messages'),
+    ('focus', 'background', G, 'focus ring'),
+    ('focus', 'surface', G, 'focus ring on raised areas'),
+    ('border_hover', 'background', G, 'control edges'),
+    ('border_hover', 'surface', G, 'control edges on raised areas'),
+    ('load_moderate', 'background', G, 'battery icon, moderate draw'),
+    ('load_high', 'background', G, 'battery icon, high draw'),
+    ('load_severe', 'background', G, 'battery icon, severe draw'),
+    ('button_close', 'background', G, 'close button'),
+    ('button_iconify', 'background', G, 'minimise button'),
+    ('button_maximize', 'background', G, 'maximise button'),
+    ('button_inactive', 'background', G, 'buttons on inactive windows'),
+]
+
+
+def main():
+    path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent / 'appearance.toml'
+    config = tomllib.loads(path.read_text())
+    failures = []
+    dark, light = config['colors'], config['colors_light']
+    if set(dark) != set(light):
+        failures.append(f'[colors] and [colors_light] differ in keys: {sorted(set(dark) ^ set(light))}')
+    for group in ('colors', 'colors_light'):
+        colours = {k: v[:7] for k, v in config[group].items()}
+        for fg, bg, minimum, use in PAIRS:
+            got = contrast.ratio(colours[fg], colours[bg])
+            if got < minimum:
+                failures.append(f'[{group}] {fg} {colours[fg]} on {bg} {colours[bg]}: '
+                                f'{got:.2f}:1, needs {minimum}:1 ({use})')
+    for line in failures:
+        print(f'contrast: {line}', file=sys.stderr)
+    sys.exit(1 if failures else 0)
+
+
+if __name__ == '__main__':
+    main()

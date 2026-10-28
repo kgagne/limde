@@ -232,6 +232,13 @@ row:selected .item-image {
   color: ${colors_selection_text};
 }
 
+/* App colours are chosen for the normal background; on a selected row they are
+   shaded to suit it (dark mode: darkened; light mode: none). */
+child:selected .item-image,
+row:selected .item-image {
+  -gtk-icon-filter: ${icons_selected_filter};
+}
+
 child:selected .item-subtext,
 row:selected .item-subtext {
   color: ${colors_selection_secondary};

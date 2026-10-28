@@ -1,41 +1,36 @@
-# Install limde's icon theme to /usr/local/share/icons/limde. It is built from the
-# repository (components/icons) with the standard library only; GTK recolours the
-# "-symbolic" icons, and the plain copies carry the theme's text colour.
+# Install limde's icon themes to /usr/local/share/icons: "limde" for the dark mode and
+# "limde-light" for the light mode. They are built from the repository
+# (components/icons) with the standard library only; GTK recolours the "-symbolic"
+# icons, and the plain copies carry the mode's muted grey, or an app's own colour
+# shaded to read on that mode's backgrounds (brand-colours.toml).
 
-ICON_THEME_DIR=/usr/local/share/icons/limde
-
-# Programs that ask for plain (not "-symbolic") icon names get a fixed colour. The
-# appearance's "muted" grey reads on both the dark background and the light selection.
-icon_theme_color() {
-  python3 - "$LIMDE_ROOT/components/appearance/appearance.toml" \
-            "$HOME/.config/limde/appearance.toml" <<'PY'
-import sys, tomllib
-color = tomllib.load(open(sys.argv[1], 'rb'))['colors']['muted']
-try:
-    color = tomllib.load(open(sys.argv[2], 'rb')).get('colors', {}).get('muted', color)
-except OSError:
-    pass
-print(color[:7])
-PY
-}
+ICON_THEMES_DIR=/usr/local/share/icons
 
 step_icons() {
   heading "Icons"
-  local tmp; tmp=$(mktemp -d)
-  python3 "$LIMDE_ROOT/components/icons/build_theme.py" "$tmp" --color "$(icon_theme_color)" >/dev/null \
-    || die "the icon theme did not build"
-  if [[ -d $ICON_THEME_DIR ]] && diff -rq --no-dereference -x icon-theme.cache "$tmp/limde" "$ICON_THEME_DIR" >/dev/null 2>&1; then
-    rm -rf "$tmp"
-    ok "limde icon theme is up to date"
-    return
-  fi
-  sudo rm -rf "$ICON_THEME_DIR"
-  sudo mkdir -p "$(dirname "$ICON_THEME_DIR")"
-  sudo cp -a "$tmp/limde" "$ICON_THEME_DIR"
-  sudo chown -R root:root "$ICON_THEME_DIR"
+  local tmp mode name changed_any=0
+  tmp=$(mktemp -d)
+  for mode in dark light; do
+    python3 "$LIMDE_ROOT/components/icons/build_theme.py" "$tmp" --mode "$mode" \
+      --appearance "$LIMDE_ROOT/components/appearance/appearance.toml" \
+      --user "$HOME/.config/limde/appearance.toml" >/dev/null \
+      || die "the $mode icon theme did not build"
+  done
+  for name in limde limde-light; do
+    local dir=$ICON_THEMES_DIR/$name
+    if [[ -d $dir ]] && diff -rq --no-dereference -x icon-theme.cache "$tmp/$name" "$dir" >/dev/null 2>&1; then
+      continue
+    fi
+    sudo rm -rf "$dir"
+    sudo mkdir -p "$ICON_THEMES_DIR"
+    sudo cp -a "$tmp/$name" "$dir"
+    sudo chown -R root:root "$dir"
+    if command -v gtk-update-icon-cache >/dev/null; then
+      sudo gtk-update-icon-cache -q -f "$dir" || true
+    fi
+    changed "installed the $name icon theme ($(find "$dir" -name '*.svg' | wc -l) files)"
+    changed_any=1
+  done
   rm -rf "$tmp"
-  if command -v gtk-update-icon-cache >/dev/null; then
-    sudo gtk-update-icon-cache -q -f "$ICON_THEME_DIR" || true
-  fi
-  changed "installed the limde icon theme ($(find "$ICON_THEME_DIR" -name '*.svg' | wc -l) files)"
+  ((changed_any)) || ok "limde icon themes are up to date"
 }

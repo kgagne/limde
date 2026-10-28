@@ -6,37 +6,75 @@
 #     limde-appearance --apply
 # Layout and padding live in the templates, not here.
 
+# Colours for the dark mode ([colors]) and the light mode ([colors_light]); [desktop]
+# mode picks one. Text pairs reach WCAG's 4.5:1 and icons and borders 3:1; scripts/check
+# tests that, so keep it in mind when you change them.
 [colors]
 background = "#1e1e1e"
 surface = "#262626"
 hover = "#343434"
 text = "#eeeeee"
 secondary = "#bdbdbd"
-muted = "#888888"
+muted = "#8f8f8f"
 border = "#343434"
 border_inactive = "#303030"
-border_hover = "#555555"
+border_hover = "#707070"
 focus = "#aaaaaa"
 selection = "#eeeeee"
 selection_text = "#1e1e1e"
 selection_secondary = "#555555"
 selection_inactive = "#bdbdbd"
-error_background = "#C34043"
-error_text = "#DCD7BA"
+error_background = "#A8373A"
+error_text = "#F2EFE0"
 shadow = "#00000033"
 # Tinybar battery icon by discharge rate: moderate, high, severe.
 load_moderate = "#E6C384"
 load_high = "#FFA066"
 load_severe = "#E46876"
+# Window title-bar buttons (labwc): close, minimise, maximise, and on inactive windows.
+button_close = "#FF5F57"
+button_iconify = "#FEBC2E"
+button_maximize = "#28C840"
+button_inactive = "#707070"
+
+[colors_light]
+background = "#f5f5f5"
+surface = "#ebebeb"
+hover = "#dedede"
+text = "#1e1e1e"
+secondary = "#454545"
+muted = "#636363"
+border = "#c4c4c4"
+border_inactive = "#d6d6d6"
+border_hover = "#858585"
+focus = "#555555"
+selection = "#c9c9c9"
+selection_text = "#1e1e1e"
+selection_secondary = "#3d3d3d"
+selection_inactive = "#d9d9d9"
+error_background = "#B3261E"
+error_text = "#FFFFFF"
+shadow = "#00000022"
+load_moderate = "#8A5A00"
+load_high = "#B24A00"
+load_severe = "#B3261E"
+button_close = "#E54742"
+button_iconify = "#A57818"
+button_maximize = "#18942C"
+button_inactive = "#707070"
 
 [shape]
 control_radius = 4
 popup_radius = 6
 border_width = 1
 
-# The icon theme: limde's own SVG icons, falling back to Adwaita.
+# The icon theme: limde's own SVG icons, falling back to Adwaita. The light mode uses
+# "<theme>-light", built with the same app colours shaded for light backgrounds.
 [icons]
 theme = "limde"
+# Dark mode only: icons on a selected (light) row are darkened by this factor, so app
+# colours chosen for dark backgrounds still read there.
+selected_brightness = 0.65
 # Icon sizes in pixels for each place. The panel size is the reference the others follow.
 panel_size = 16
 small_size = 13
@@ -44,8 +82,9 @@ menu_size = 16
 launcher_size = 32
 
 [desktop]
+# "dark" or "light".
+mode = "dark"
 gtk_theme = "LimDE"
-color_scheme = "prefer-dark"
 
 [fonts]
 interface = "Open Sans 11"

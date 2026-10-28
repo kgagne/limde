@@ -72,6 +72,12 @@ window {
     color: ${colors_selection_text};
 }
 
+/* App colours are chosen for the panel background; on the active task's light
+   highlight they are shaded to suit it (dark mode: darkened; light mode: none). */
+.task-label.active .task-icon {
+    -gtk-icon-filter: ${icons_selected_filter};
+}
+
 /* Icons share the clock size and inherit text/active-task highlight colors. */
 
 /* Bell and Wi-Fi: flat panel controls, not framed buttons. */

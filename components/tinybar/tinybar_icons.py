@@ -93,6 +93,15 @@ class IconLibrary:
         image.set_visible(True)
         return True
 
+    def is_brand(self, name):
+        """True when the theme answers name with one of limde's brand icons."""
+        if not name or not self.theme.has_icon(name):
+            return False
+        icon = self.theme.lookup_icon(name, None, 16, 1, Gtk.TextDirection.NONE, 0)
+        file = icon.get_file() if icon else None
+        path = file.get_path() if file else None
+        return bool(path) and Path(path).resolve().name.startswith('brand-')
+
     def application_widget(self, app_id):
         """The window's app icon: the theme's symbolic version when there is one (limde
         ships many), else the app's own icon drawn at the same visual size."""
@@ -120,6 +129,12 @@ class IconLibrary:
         names += [app_id, app_id.casefold()]
 
         for name in dict.fromkeys(names):
+            if self.is_brand(name.removesuffix('-symbolic')):
+                # limde's app icons carry the app's own colour in their plain copy.
+                image = glyph_widget('task-icon')
+                image.set_from_icon_name(name.removesuffix('-symbolic'))
+                image.set_visible(True)
+                return image
             if self.theme.has_icon(name.removesuffix('-symbolic') + '-symbolic'):
                 image = glyph_widget('task-icon')
                 self.set_glyph(image, name.removesuffix('-symbolic'))

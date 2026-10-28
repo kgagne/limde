@@ -1,0 +1,52 @@
+# Brand icon -> its colour. build_theme.py fits each one to the theme's backgrounds
+# (WCAG 1.4.11, 3:1 for graphics) by moving only its lightness, so a dark logo gets a
+# lighter shade of its own hue on a dark theme and keeps its colour where it already
+# reads. A brand icon not listed here takes the theme's plain icon colour.
+#
+# Sources: "tile" = the author's own artwork for that app; "upstream" = the main
+# colour of the icon the app ships (storytold/<app> assets/app-icon, checked
+# 2026-10-28); "simple-icons" = Simple Icons 16.35.0's brand colour.
+
+[craft]
+"photocraft.svg" = "#1A65D5"    # tile
+"vectorcraft.svg" = "#E6533B"   # tile
+"cadcraft.svg" = "#119EA5"      # tile
+"deckcraft.svg" = "#ED6A1E"     # upstream
+"designcraft.svg" = "#7BB51D"   # upstream
+"effectcraft.svg" = "#DF378F"   # upstream
+"figcraft.svg" = "#06D695"      # upstream
+"filmcraft.svg" = "#8B5CF5"     # upstream
+"gridcraft.svg" = "#1F9B54"     # upstream
+"lightcraft.svg" = "#EFA418"    # upstream
+"pdfcraft.svg" = "#13A58A"      # upstream
+"soundcraft.svg" = "#14A8C2"    # upstream
+"wordcraft.svg" = "#3B5AD9"     # upstream
+"artcraft.svg" = "#4E7BFB"      # upstream (crates/desktop/artcraft/icons)
+"craft-launcher.svg" = "#4E7BFB"  # ArtCraft's colour; the launcher has no icon of its own
+# anicraft.svg: no upstream icon yet (empty repository), so plain.
+
+[apps]
+"blender.svg" = "#E87D0D"       # simple-icons
+"cc-by-sa/gimp.svg" = "#8C8073"   # simple-icons
+"cc-by-sa/inkscape.svg" = "#000000"  # simple-icons
+"krita.svg" = "#3BABFF"         # simple-icons
+"libreoffice-startcenter.svg" = "#18A303"  # simple-icons
+"mpl-2.0/libreoffice-writer.svg" = "#083FA6"  # simple-icons
+"mpl-2.0/libreoffice-calc.svg" = "#007C3C"    # simple-icons
+"mpl-2.0/libreoffice-impress.svg" = "#D0120D" # simple-icons
+"vlc.svg" = "#FF8800"           # simple-icons
+"mpv.svg" = "#691F69"           # simple-icons
+"audacity.svg" = "#0000CC"      # simple-icons
+"kdenlive.svg" = "#527EB2"      # simple-icons
+"obs.svg" = "#302E31"           # simple-icons
+"keepassxc.svg" = "#6CAC4D"     # simple-icons
+"transmission.svg" = "#D70008"  # simple-icons
+"vscodium.svg" = "#2F80ED"      # simple-icons
+"cc-by-sa/nvim.svg" = "#57A143"   # simple-icons (neovim)
+"htop.svg" = "#009020"          # simple-icons
+"vim.svg" = "#019733"           # simple-icons
+"darktable.svg" = "#D70016"     # upstream (data/pixmaps/scalable/darktable.svg)
+"cc-by-sa/papers.svg" = "#FF7800"  # upstream (org.gnome.Papers.svg)
+"cc-by-sa/foot.svg" = "#FBF1C7"   # upstream (foot.svg, its light glyph colour)
+# rawtherapee.svg: a multicoloured logo with no main colour, so plain.
+# btop.svg: no icon shipped upstream, so plain.

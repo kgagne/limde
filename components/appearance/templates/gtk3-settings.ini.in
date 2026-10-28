@@ -1,5 +1,5 @@
 [Settings]
-gtk-application-prefer-dark-theme=1
+gtk-application-prefer-dark-theme=${desktop_prefer_dark}
 gtk-icon-theme-name=${icons_theme}
 gtk-theme-name=${desktop_gtk_theme}
 gtk-font-name=${fonts_interface}

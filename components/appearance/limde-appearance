@@ -45,26 +45,37 @@ def merged_config(defaults_dir, user_file):
             if group not in config or not isinstance(entries, dict):
                 raise ValueError(f'{user_file}: unknown group [{group}]')
             for key, value in entries.items():
+                if (group, key) == ('desktop', 'color_scheme'):
+                    continue  # replaced by desktop.mode; older files may still set it
                 if key not in config[group]:
                     raise ValueError(f'{user_file}: unknown setting {group}.{key}')
                 config[group][key] = value
     return config
 
 
+def icon_theme(config):
+    theme = config['icons']['theme']
+    return theme if config['desktop']['mode'] == 'dark' else theme + '-light'
+
+
 def template_values(config):
     values = {}
     for group, entries in config.items():
         for key, value in entries.items():
-            if group == 'colors':
+            if group in ('colors', 'colors_light'):
                 ok = isinstance(value, str) and COLOR.fullmatch(value)
             elif group == 'shape':
                 ok = type(value) is int and 0 <= value <= 64
             elif group == 'icons':
-                ok = (isinstance(value, str) and NAME.fullmatch(value)) if key == 'theme' \
-                    else (type(value) is int and 8 <= value <= 128)
+                if key == 'theme':
+                    ok = isinstance(value, str) and NAME.fullmatch(value) and ' ' not in value
+                elif key == 'selected_brightness':
+                    ok = type(value) in (int, float) and 0.3 <= value <= 1
+                else:
+                    ok = type(value) is int and 8 <= value <= 128
             elif group == 'desktop':
                 ok = (isinstance(value, str) and NAME.fullmatch(value)) if key == 'gtk_theme' \
-                    else value == 'prefer-dark'
+                    else value in ('dark', 'light')
             elif group == 'fonts':
                 ok = isinstance(value, str) and FONT.fullmatch(value)
             else:
@@ -72,6 +83,16 @@ def template_values(config):
             if not ok:
                 raise ValueError(f'invalid value for {group}.{key}: {value!r}')
             values[f'{group}_{key}'] = str(value)
+    # The chosen mode's palette is what the templates see as colors_*.
+    dark = config['desktop']['mode'] == 'dark'
+    if not dark:
+        for key, value in config['colors_light'].items():
+            values[f'colors_{key}'] = value
+    values['icons_theme'] = icon_theme(config)
+    values['icons_selected_filter'] = f"brightness({config['icons']['selected_brightness']})" if dark else 'none'
+    values['desktop_color_scheme'] = 'prefer-dark' if dark else 'prefer-light'
+    values['desktop_prefer_dark'] = '1' if dark else '0'
+    values['desktop_interface_scheme'] = 'dark' if dark else 'light'
     # Another theme's app icon, drawn edge to edge, is shrunk to limde's margin
     # (20.5 of 24 units) and centred in the same box.
     panel = config['icons']['panel_size']
@@ -103,9 +124,9 @@ def desktop_preferences(config):
     """GNOME interface settings GTK apps read; skipped when gsettings is unavailable."""
     if not shutil.which('gsettings'):
         return {}
-    wanted = {'icon-theme': config['icons']['theme'],
+    wanted = {'icon-theme': icon_theme(config),
               'gtk-theme': config['desktop']['gtk_theme'],
-              'color-scheme': config['desktop']['color_scheme'],
+              'color-scheme': 'prefer-dark' if config['desktop']['mode'] == 'dark' else 'prefer-light',
               'font-name': config['fonts']['interface'],
               'document-font-name': config['fonts']['document']}
     changes = {}

@@ -44,10 +44,17 @@ sys.exit(1 if stale or gone else 0)
 PY
 then fail=1; fi
 tmp_theme=$(mktemp -d)
-python3 "$root/components/icons/build_theme.py" "$tmp_theme" >/dev/null || { echo "icons: the theme does not build" >&2; fail=1; }
+for mode in dark light; do
+  python3 "$root/components/icons/build_theme.py" "$tmp_theme" --mode "$mode" \
+    --appearance "$root/components/appearance/appearance.toml" >/dev/null \
+    || { echo "icons: the $mode theme does not build" >&2; fail=1; }
+done
 rm -rf "$tmp_theme"
 
-# 4. Fresh-clone self-test: the same checks must pass on a clone (file modes, ignored files).
+# 4. Colour contrast (WCAG 2.2) for both palettes.
+python3 "$root/components/appearance/check-contrast" || fail=1
+
+# 5. Fresh-clone self-test: the same checks must pass on a clone (file modes, ignored files).
 if [[ ${1:-} == --clone ]]; then
   tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
   git clone -q --no-local . "$tmp/limde"

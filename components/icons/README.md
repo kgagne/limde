@@ -10,7 +10,11 @@ Every icon in `src/` follows these, so the set reads as one family:
 - `viewBox="0 0 24 24"`, drawn on whole and half pixels.
 - Strokes, not fills: `stroke-width="1.5"`, round caps and joins, `fill="none"`.
   Small solid details (a battery's charge, a Wi-Fi dot) are filled shapes with no stroke.
-- Colour is always `currentColor`; whatever draws the icon decides the colour.
+- Colour is always `currentColor`; whatever draws the icon decides the colour. The theme
+  build bakes a colour into the plain (non-symbolic) copies: the mode's muted grey, or for
+  app icons the app's own colour from `brand-colours.toml`, shaded (same hue, lightness
+  only, `contrast.py`) until it reaches 3:1 on that mode's backgrounds and on its selected
+  row. Two themes are built: `limde` (dark) and `limde-light`.
 - Content fills the box to about 1.75 px from each edge; corners use a 2.25 px radius
   (1.75 px on folders and files, 1 px on small inner shapes).
 - Families (battery levels, Wi-Fi strength, volume) share one outline and differ only in

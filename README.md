@@ -3,7 +3,7 @@
 **limDE — less is more.** A small labwc desktop for Ubuntu Server.
 
 A small Wayland desktop for Ubuntu Server: labwc, a compact panel (Tinybar), the Walker
-launcher, a consistent dark theme, Space-bar file preview in PCManFM, and a persistent
+launcher, a consistent dark or light theme, Space-bar file preview in PCManFM, and a persistent
 window for a web-based AI agent. Install Ubuntu Server 26.04, clone this repository,
 run `./install`, and log in.
 
@@ -205,7 +205,10 @@ Your own files override limDE's, and the installer never overwrites them:
   same name as one of limDE's replaces it, and an empty one turns that piece off.
 - **Theme:** colours, fonts and icons live in `~/.config/limde/appearance.toml`, which
   needs only the keys you change. `limde-appearance` shows what would change, and
-  `limde-appearance --apply` writes it, backing up what it replaces.
+  `limde-appearance --apply` writes it, backing up what it replaces. For the light theme,
+  put `mode = "light"` under `[desktop]` there, apply, and log in again. Both palettes
+  meet WCAG 2.2's contrast minimums (4.5:1 for text, 3:1 for icons and control edges),
+  and `scripts/check` keeps it that way.
 - **Panel:** `~/.config/tinybar/settings.toml` (see `components/tinybar/README.md`).
 
 ## Updating
@@ -236,6 +239,7 @@ or out of date, including the pinned source builds in `pins/`.
 - Tinybar's Wi-Fi list is display-only. Join networks with `nmtui`.
 - On NVIDIA laptops, the desktop runs on the integrated GPU. The NVIDIA card is left to
   Ubuntu's open nouveau driver; limDE doesn't set up NVIDIA's driver.
+- The light theme doesn't change foot's terminal colours, which stay dark.
 - There is no uninstaller yet.
 - Ubuntu 26.04 only.
 

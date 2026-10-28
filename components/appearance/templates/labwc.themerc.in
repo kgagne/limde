@@ -23,13 +23,13 @@ window.button.spacing: 0
 window.button.hover.bg.color: #00000000
 window.button.hover.bg.corner-radius: 11
 
-window.active.button.close.unpressed.image.color: #ff5f57
-window.active.button.iconify.unpressed.image.color: #febc2e
-window.active.button.max.unpressed.image.color: #28c840
+window.active.button.close.unpressed.image.color: ${colors_button_close}
+window.active.button.iconify.unpressed.image.color: ${colors_button_iconify}
+window.active.button.max.unpressed.image.color: ${colors_button_maximize}
 
-window.inactive.button.close.unpressed.image.color: #666666
-window.inactive.button.iconify.unpressed.image.color: #666666
-window.inactive.button.max.unpressed.image.color: #666666
+window.inactive.button.close.unpressed.image.color: ${colors_button_inactive}
+window.inactive.button.iconify.unpressed.image.color: ${colors_button_inactive}
+window.inactive.button.max.unpressed.image.color: ${colors_button_inactive}
 
 window.active.shadow.size: 24
 window.active.shadow.color: #00000050
