@@ -7,6 +7,10 @@ launcher, a consistent dark or light theme, Space-bar file preview in PCManFM, a
 window for a web-based AI agent. Install Ubuntu Server 26.04, clone this repository,
 run `./install`, and log in.
 
+Dark and light are both complete themes: the panel, launcher, file manager, notifications,
+window borders and app icons all follow the one you pick (only foot's terminal colours stay
+dark), and `scripts/check` holds both to WCAG 2.2's contrast minimums.
+
 It's made for laptops first: careful with the battery, with trackpad motion and scrolling
 modelled on a MacBook's.
 
@@ -20,6 +24,8 @@ modelled on a MacBook's.
 
 | | |
 | --- | --- |
+| ![The same desktop in the light theme](docs/screenshots/desktop-light.png) | ![Walker in the light theme, with app icons in their own colours](docs/screenshots/launcher-light.png) |
+| **Light theme:** the same first login with `mode = "light"`. | **Launcher, light:** app icons keep their own colours, shaded to suit each theme. |
 | ![Walker, the launcher, listing apps](docs/screenshots/launcher.png) | ![PCManFM with an image open in Space preview](docs/screenshots/files-preview.png) |
 | **Launcher:** Super+Space opens Walker for apps, files and sums. | **Files:** select a file in PCManFM and press Space to preview it. |
 | ![foot running htop, with a "Cut" notification at the top right](docs/screenshots/terminal-notification.png) | ![The swaylock lock screen](docs/screenshots/lock.png) |
