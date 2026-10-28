@@ -81,7 +81,12 @@ window {
 /* Icons share the clock size and inherit text/active-task highlight colors. */
 
 /* Bell and Wi-Fi: flat panel controls, not framed buttons. */
-/* No side padding, so these sit at the same spacing as the plain indicators. */
+/* Side padding matching the task buttons' highlight, cancelled by an equal negative
+   margin so the icons keep the plain indicators' spacing. */
+.panel-menu {
+    margin: 0 -7px;
+}
+
 .panel-menu,
 .panel-menu > button {
     min-height: 0;
@@ -93,6 +98,10 @@ window {
     color: ${colors_text};
     box-shadow: none;
     transition: none;
+}
+
+.panel-menu > button {
+    padding: 1px 7px;
 }
 
 .panel-menu > button:hover,
