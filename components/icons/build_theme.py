@@ -96,8 +96,15 @@ def main():
         ap.error('--name: letters, digits, - and _ only')
 
     colours = {}  # brand file key -> fitted colour
-    for group in tomllib.loads((HERE / 'brand-colours.toml').read_text()).values():
+    table = tomllib.loads((HERE / 'brand-colours.toml').read_text())
+    light = table.pop('light', {})
+    for rel, choice in light.items():
+        if choice != 'plain':
+            raise SystemExit(f'{rel}: [light] entries are "plain"')
+    for group in table.values():
         for rel, colour in group.items():
+            if args.mode == 'light' and rel in light:
+                continue
             fitted = contrast.fit(colour, backgrounds, also=lambda c: not args.selected or contrast.ratio(
                 contrast.brightness(c, args.selected_brightness), args.selected) >= contrast.GRAPHICS)
             if fitted is None:

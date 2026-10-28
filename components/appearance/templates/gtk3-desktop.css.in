@@ -1,5 +1,5 @@
 /* Shared GTK3 desktop colors over the installed dark widget foundation. */
-@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");
+@import url("resource:///org/gtk/libgtk/theme/Adwaita/${desktop_gtk3_base}");
 
 @define-color theme_bg_color ${colors_background};
 @define-color theme_fg_color ${colors_text};

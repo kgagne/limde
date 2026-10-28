@@ -93,6 +93,10 @@ def template_values(config):
     values['desktop_color_scheme'] = 'prefer-dark' if dark else 'prefer-light'
     values['desktop_prefer_dark'] = '1' if dark else '0'
     values['desktop_interface_scheme'] = 'dark' if dark else 'light'
+    # The built-in base each GTK theme builds on; a dark base under the light
+    # palette leaves its unstyled states (unfocused windows) dark.
+    values['desktop_gtk3_base'] = 'gtk-contained-dark.css' if dark else 'gtk-contained.css'
+    values['desktop_gtk4_base'] = 'Default-dark.css' if dark else 'Default-light.css'
     # Another theme's app icon, drawn edge to edge, is shrunk to limde's margin
     # (20.5 of 24 units) and centred in the same box.
     panel = config['icons']['panel_size']
