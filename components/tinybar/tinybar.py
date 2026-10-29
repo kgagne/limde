@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import time
 import tomllib
@@ -27,6 +28,7 @@ from tinybar_icons import (
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gtk4LayerShell", "1.0")
 gi.require_version("GioUnix", "2.0")
+gi.require_version("GLibUnix", "2.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Graphene", "1.0")
 gi.require_version("Gsk", "4.0")
@@ -36,6 +38,7 @@ from gi.repository import (
     Gio,
     GioUnix,
     GLib,
+    GLibUnix,
     Graphene,
     Gsk,
     Gtk,
@@ -60,6 +63,8 @@ RUNTIME_DIR = Path(
 )
 
 VOLUME_STATE = RUNTIME_DIR / "volume"
+# tinybar-idle reads this to signal the panel: SIGUSR1 hides, SIGUSR2 restores.
+PID_FILE = RUNTIME_DIR / "tinybar.pid"
 
 CONFIG_DIR = Path.home() / ".config/tinybar"
 STYLE_FILE = CONFIG_DIR / "style.css"
@@ -98,6 +103,15 @@ def load_settings():
 # often its window closes and reopens, and shows only its icon. Defaults to
 # limde's agent-web window; set first_app_id in settings.toml to change it.
 FIRST_APP_ID = load_settings().get("first_app_id", "limde.AgentWeb")
+
+# Idle hide: swayidle (autostart.d/20-idle.sh) runs `tinybar-idle hide` after 90 s without
+# input and `tinybar-idle restore` at the next input. Hiding minimises every window
+# except those in idle_hide_keep; restoring brings back only those, bottom of the stack
+# first, then focuses the window that had focus. The stack order is the order windows
+# last had focus (Labwc raises the focused window). By default it hides only on battery.
+IDLE_HIDE = load_settings().get("idle_hide", True)
+IDLE_HIDE_BATTERY_ONLY = load_settings().get("idle_hide_battery_only", True)
+IDLE_HIDE_KEEP = {app_id.casefold() for app_id in load_settings().get("idle_hide_keep", [])}
 
 # Tailscale button beside Wi-Fi: "auto" (the default) shows it when the tailscale
 # command is installed; false hides it; true shows it even when it is missing.
@@ -1321,6 +1335,34 @@ def visible_networks(access_points, current_ssid=None):
     )
 
 
+def on_mains_power():
+    """True when a mains supply is online, or there is no battery to save."""
+    supplies = Path("/sys/class/power_supply")
+    batteries = 0
+    for supply in supplies.glob("*"):
+        kind = read_path(supply / "type")
+        if kind == "Mains" and read_path(supply / "online") == "1":
+            return True
+        if kind == "Battery":
+            batteries += 1
+    return batteries == 0
+
+
+def idle_hide_order(windows, focus_order, keep):
+    """The windows idle hide minimises, bottom of the stack first: those never focused,
+    then by when they last had focus. Dialogs follow their parent; windows already
+    minimised and app IDs in keep are left alone."""
+    rank = {window_id: position for position, window_id in enumerate(focus_order)}
+    chosen = [
+        window for window in windows
+        if not window.get("parent")
+        and not window.get("minimized")
+        and str(window.get("app_id", "")).casefold() not in keep
+        and str(window.get("app_id", "")).casefold() not in {i.casefold() for i in TINYBAR_APP_IDS}
+    ]
+    return sorted(chosen, key=lambda window: rank.get(window["id"], -1))
+
+
 def tailscale_view(state, error=None):
     """Icon, tooltip and click action ("up", "down" or None) for a BackendState.
     state is None when tailscaled could not be asked (not installed or not running)."""
@@ -2225,6 +2267,10 @@ class TinyBar(Gtk.Application):
         self.toplevel_groups = OrderedDict()
         self.active_toplevel = None
         self.last_active_toplevel = {}
+        self.toplevel_windows = []
+        self.focus_order = []
+        self.idle_hidden = []
+        self.idle_active = None
         self.toplevel_helper = None
         self.toplevel_helper_watch = None
         self.toplevel_output_buffer = b""
@@ -2390,6 +2436,7 @@ class TinyBar(Gtk.Application):
         self.wifi.setup()
 
         self.setup_toplevel_helper()
+        self.setup_idle_hide()
 
         self.update_clock()
         self.notifications.refresh()
@@ -2536,6 +2583,15 @@ class TinyBar(Gtk.Application):
         active = None
         groups = OrderedDict()
 
+        self.toplevel_windows = windows
+        present = {window["id"] for window in windows}
+        self.focus_order = [i for i in self.focus_order if i in present]
+        for window in windows:
+            if window.get("active") and not window.get("minimized"):
+                if window["id"] in self.focus_order:
+                    self.focus_order.remove(window["id"])
+                self.focus_order.append(window["id"])
+
         for window in windows:
             app_id = str(window.get("app_id", "")).strip()
             title = str(window.get("title", "")).strip()
@@ -2661,6 +2717,45 @@ class TinyBar(Gtk.Application):
             return
 
         self.last_active_toplevel[app_id] = target["id"]
+
+    def send_toplevel_command(self, verb, window_id):
+        try:
+            self.toplevel_helper.stdin.write(f"{verb} {window_id}\n")
+            self.toplevel_helper.stdin.flush()
+        except (AttributeError, BrokenPipeError, OSError):
+            return False
+        return True
+
+    # ---------- idle hide ----------
+
+    def setup_idle_hide(self):
+        RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+        PID_FILE.write_text(f"{os.getpid()}\n")
+        GLibUnix.signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, self.idle_hide)
+        GLibUnix.signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR2, self.idle_restore)
+
+    def idle_hide(self):
+        if not IDLE_HIDE or self.idle_hidden:
+            return True
+        if IDLE_HIDE_BATTERY_ONLY and on_mains_power():
+            return True
+        hidden = idle_hide_order(self.toplevel_windows, self.focus_order, IDLE_HIDE_KEEP)
+        active = next((w["id"] for w in self.toplevel_windows if w.get("active")), None)
+        self.idle_hidden = [w["id"] for w in hidden if self.send_toplevel_command("minimize", w["id"])]
+        # Focus goes back to it on restore, even when it was kept visible (an RDP window).
+        self.idle_active = active if self.idle_hidden else None
+        return True
+
+    def idle_restore(self):
+        hidden, self.idle_hidden = self.idle_hidden, []
+        still_minimized = {w["id"] for w in self.toplevel_windows if w.get("minimized")}
+        for window_id in hidden:
+            if window_id in still_minimized:
+                self.send_toplevel_command("unminimize", window_id)
+        if self.idle_active in {w["id"] for w in self.toplevel_windows}:
+            self.send_toplevel_command("activate", self.idle_active)
+        self.idle_active = None
+        return True
 
     # ---------- clock ----------
 

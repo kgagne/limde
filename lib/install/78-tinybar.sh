@@ -16,13 +16,13 @@ step_tinybar() {
   install -D -m 644 "$work/tinybar_icons.py" "$stage/share/tinybar_icons.py"
   install -D -m 755 "$work/build/toplevel-helper" "$stage/share/toplevel-helper"
   local cmd
-  for cmd in tinybar tinybar-volume tinybar-brightness; do
+  for cmd in tinybar tinybar-volume tinybar-brightness tinybar-idle; do
     install -D -m 755 "$work/$cmd" "$stage/bin/$cmd"
   done
 
   local same=1
   diff -rq "$stage/share" "$TINYBAR_SHARE" >/dev/null 2>&1 || same=0
-  for cmd in tinybar tinybar-volume tinybar-brightness; do
+  for cmd in tinybar tinybar-volume tinybar-brightness tinybar-idle; do
     cmp -s "$stage/bin/$cmd" "/usr/local/bin/$cmd" || same=0
   done
   if ((same)); then
@@ -31,7 +31,7 @@ step_tinybar() {
     sudo rm -rf "$TINYBAR_SHARE"
     sudo install -d "$TINYBAR_SHARE"
     sudo cp -a "$stage/share/." "$TINYBAR_SHARE/"
-    for cmd in tinybar tinybar-volume tinybar-brightness; do
+    for cmd in tinybar tinybar-volume tinybar-brightness tinybar-idle; do
       sudo install -m 755 "$stage/bin/$cmd" "/usr/local/bin/$cmd"
     done
     changed "installed Tinybar"

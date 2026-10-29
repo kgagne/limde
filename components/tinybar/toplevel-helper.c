@@ -17,6 +17,7 @@ struct window {
     char *app_id;
     char *title;
     bool active;
+    bool minimized;
     bool ready;
     struct zwlr_foreign_toplevel_handle_v1 *handle;
     struct zwlr_foreign_toplevel_handle_v1 *parent;
@@ -74,8 +75,9 @@ static void emit_snapshot(void)
         json_string(window->app_id);
         fputs(",\"title\":", stdout);
         json_string(window->title);
-        printf(",\"active\":%s,\"parent\":%s}",
+        printf(",\"active\":%s,\"minimized\":%s,\"parent\":%s}",
             window->active ? "true" : "false",
+            window->minimized ? "true" : "false",
             window->parent ? "true" : "false");
         first = false;
     }
@@ -120,10 +122,13 @@ static void handle_state(void *data,
     uint32_t *value;
 
     window->active = false;
+    window->minimized = false;
 
     wl_array_for_each(value, state) {
         if (*value == ZWLR_FOREIGN_TOPLEVEL_HANDLE_V1_STATE_ACTIVATED)
             window->active = true;
+        if (*value == ZWLR_FOREIGN_TOPLEVEL_HANDLE_V1_STATE_MINIMIZED)
+            window->minimized = true;
     }
 }
 
@@ -228,27 +233,59 @@ static const struct wl_registry_listener registry_listener = {
     .global_remove = registry_remove,
 };
 
-static void process_command(void)
+static void run_command(const char *line)
 {
-    char line[64];
+    char verb[16];
     unsigned int id;
     struct window *window;
 
-    if (!fgets(line, sizeof(line), stdin)) {
-        manager = NULL;
-        return;
-    }
-
-    if (sscanf(line, "activate %u", &id) != 1)
+    /* activate ID, minimize ID or unminimize ID */
+    if (sscanf(line, "%15s %u", verb, &id) != 2)
         return;
 
     for (window = windows; window; window = window->next) {
-        if (window->id == id) {
+        if (window->id != id)
+            continue;
+        if (strcmp(verb, "activate") == 0)
             zwlr_foreign_toplevel_handle_v1_activate(window->handle, seat);
-            wl_display_flush(display);
+        else if (strcmp(verb, "minimize") == 0)
+            zwlr_foreign_toplevel_handle_v1_set_minimized(window->handle);
+        else if (strcmp(verb, "unminimize") == 0)
+            zwlr_foreign_toplevel_handle_v1_unset_minimized(window->handle);
+        else
             return;
-        }
+        wl_display_flush(display);
+        return;
     }
+}
+
+/* Read what is on stdin and run each complete line. Reading the descriptor directly
+   (not stdio) matters: Tinybar sends one line per window when it hides them all, and
+   a buffered fgets would take them in one read and leave the rest unseen by select. */
+static void process_command(void)
+{
+    static char pending[1024];
+    static size_t used;
+    ssize_t got = read(STDIN_FILENO, pending + used, sizeof(pending) - 1 - used);
+    char *line, *end;
+
+    if (got <= 0) {
+        manager = NULL;
+        return;
+    }
+    used += (size_t)got;
+    pending[used] = '\0';
+
+    line = pending;
+    while ((end = strchr(line, '\n'))) {
+        *end = '\0';
+        run_command(line);
+        line = end + 1;
+    }
+    used = strlen(line);
+    memmove(pending, line, used);
+    if (used == sizeof(pending) - 1)
+        used = 0;  /* a line this long is not a command */
 }
 
 int main(void)

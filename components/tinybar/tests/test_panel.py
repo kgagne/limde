@@ -219,5 +219,26 @@ class TailscaleViewTests(unittest.TestCase):
         self.assertEqual(tinybar.tailscale_error(""), "The tailscale command failed.")
 
 
+class IdleHideTests(unittest.TestCase):
+    def window(self, wid, app_id, **state):
+        return {"id": wid, "app_id": app_id, "title": "", **state}
+
+    def test_hides_bottom_of_the_stack_first(self):
+        windows = [self.window(1, "foot"), self.window(2, "firefox"), self.window(3, "pcmanfm")]
+        order = tinybar.idle_hide_order(windows, focus_order=[3, 1], keep=set())
+        self.assertEqual([w["id"] for w in order], [2, 3, 1])
+
+    def test_leaves_kept_minimised_dialog_and_panel_windows(self):
+        windows = [
+            self.window(1, "com.freerdp.client.sdl3"),
+            self.window(2, "foot", minimized=True),
+            self.window(3, "firefox", parent=True),
+            self.window(4, "tinybar"),
+            self.window(5, "firefox"),
+        ]
+        order = tinybar.idle_hide_order(windows, [], keep={"com.freerdp.client.sdl3"})
+        self.assertEqual([w["id"] for w in order], [5])
+
+
 if __name__ == "__main__":
     unittest.main()

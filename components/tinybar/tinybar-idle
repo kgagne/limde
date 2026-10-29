@@ -1,0 +1,19 @@
+#!/bin/sh
+# tinybar-idle hide|restore: ask the running Tinybar to minimise every window (idle)
+# or bring back the ones it minimised. swayidle runs it (labwc autostart); Tinybar
+# decides whether to act (idle_hide settings). Signals only the process that wrote
+# Tinybar's pid file and is still Tinybar.
+set -eu
+
+case ${1:-} in
+	hide) sig=USR1 ;;
+	restore) sig=USR2 ;;
+	*) echo "usage: tinybar-idle hide|restore" >&2; exit 2 ;;
+esac
+
+pid=$(cat "/run/user/$(id -u)/tinybar/tinybar.pid" 2>/dev/null) || exit 0
+case $pid in
+	'' | *[!0-9]*) exit 0 ;;
+esac
+grep -q 'tinybar\.py' "/proc/$pid/cmdline" 2>/dev/null || exit 0
+exec kill -"$sig" "$pid"

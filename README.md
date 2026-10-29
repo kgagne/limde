@@ -14,7 +14,7 @@ dark), and `scripts/check` holds both to WCAG 2.2's contrast minimums.
 It's made for laptops first: careful with the battery, with trackpad motion and scrolling
 modelled on a MacBook's.
 
-> **Status: beta (`v1.0.0-beta.2`).** It's in daily use on one laptop, and installs from
+> **Status: beta (`v1.0.0-beta.3`).** It's in daily use on one laptop, and installs from
 > scratch have only been tested in QEMU and from a USB stick on that same laptop. Expect
 > rough edges, and see [Known gaps](#known-gaps).
 

@@ -17,6 +17,16 @@ the wlr foreign-toplevel protocol.
   `sudo tailscale set --operator=$USER`. The state is read every 10 seconds; a click
   that has not connected after 15 seconds stops waiting and Tailscale keeps trying.
   The icons and their licensing are in `components/icons/brands/NOTICE.md`.
+- Idle hide: after 90 seconds without input (on battery, by default) every window is
+  minimised, which stops apps drawing while nobody is looking; the next touch of the
+  keyboard, mouse or touchpad brings them back in their stacking order and gives focus
+  back to the window that had it. Only the windows it hid come back. `swayidle`
+  (`config/autostart.d/20-idle.sh`) runs `tinybar-idle hide` and `tinybar-idle restore`;
+  settings in `settings.toml`: `idle_hide` (default `true`), `idle_hide_battery_only`
+  (`true`), and `idle_hide_keep`, app IDs never hidden, for windows you watch without
+  touching anything, e.g. `["com.freerdp.client.sdl3"]` for a remote desktop.
+  If Tinybar restarts while windows are hidden, it forgets them; bring them back from
+  the panel.
 - Windows: each one's desktop entry is found by its app ID, or, as Labwc's window
   switcher does, by the entry's `StartupWMClass` (FreeRDP's SDL client, for one).
 - Battery: the panel shows the time left; hover for the percentage, the live draw,
