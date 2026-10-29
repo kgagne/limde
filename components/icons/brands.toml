@@ -48,3 +48,8 @@
 "cc-by-sa/papers.svg" = ["org.gnome.Papers"]
 
 # PCManFM uses the generic "system-file-manager" name; aliases.toml covers it.
+
+# Tinybar's optional Tailscale button (on, off); not an app icon.
+[status]
+"tailscale.svg" = ["tailscale"]
+"tailscale-slash.svg" = ["tailscale-slash"]

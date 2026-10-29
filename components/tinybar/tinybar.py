@@ -4,6 +4,7 @@ import datetime
 import json
 import os
 import re
+import shutil
 import subprocess
 import time
 import tomllib
@@ -15,6 +16,7 @@ from tinybar_icons import (
     IconLibrary,
     StatusIndicator,
     brightness_glyph,
+    desktop_entry,
     glyph_widget,
     layered_glyph,
     set_layered_glyph,
@@ -96,6 +98,15 @@ def load_settings():
 # often its window closes and reopens, and shows only its icon. Defaults to
 # limde's agent-web window; set first_app_id in settings.toml to change it.
 FIRST_APP_ID = load_settings().get("first_app_id", "limde.AgentWeb")
+
+# Tailscale button beside Wi-Fi: "auto" (the default) shows it when the tailscale
+# command is installed; false hides it; true shows it even when it is missing.
+TAILSCALE = load_settings().get("tailscale", "auto")
+TAILSCALE_SAMPLE_SECONDS = 10
+# `tailscale up` waits until connected; the button stops waiting after this and
+# leaves tailscaled to keep trying. (A --timeout flag would make `up` demand every
+# non-default setting be repeated, so the bare command is used.)
+TAILSCALE_UP_SECONDS = 15
 
 HISTORY_BUCKET_SECONDS = 300
 HISTORY_WINDOW_SECONDS = 3 * 60 * 60
@@ -1310,6 +1321,130 @@ def visible_networks(access_points, current_ssid=None):
     )
 
 
+def tailscale_view(state, error=None):
+    """Icon, tooltip and click action ("up", "down" or None) for a BackendState.
+    state is None when tailscaled could not be asked (not installed or not running)."""
+    if state == "Running":
+        view = ("tailscale", "Tailscale: connected (click to turn off)", "down")
+    elif state == "Stopped":
+        view = ("tailscale-slash", "Tailscale: off (click to turn on)", "up")
+    elif state == "Starting":
+        view = ("tailscale-slash", "Tailscale: connecting… (click to turn off)", "down")
+    elif state == "NeedsLogin":
+        view = ("tailscale-slash", "Tailscale: signed out; sign in with `sudo tailscale up`", None)
+    elif state == "NeedsMachineAuth":
+        view = ("tailscale-slash", "Tailscale: waiting for an admin to approve this device", None)
+    elif state is None:
+        view = ("tailscale-slash", "Tailscale: not running (is tailscaled installed and started?)", None)
+    else:
+        view = ("tailscale-slash", f"Tailscale: {state}", None)
+    if error:
+        view = (view[0], f"{view[1]}\n{error}", view[2])
+    return view
+
+
+def tailscale_error(stderr, timed_out=False):
+    """A short reason for a failed `tailscale up`/`down`, for the tooltip."""
+    if timed_out:
+        return f"Not connected after {TAILSCALE_UP_SECONDS} s; Tailscale keeps trying."
+    text = (stderr or "").strip()
+    if "access denied" in text.casefold():
+        return "Not allowed: run `sudo tailscale set --operator=$USER` once."
+    return text.splitlines()[-1] if text else "The tailscale command failed."
+
+
+class TailscaleButton(Gtk.Box):
+    """Tailscale on/off beside Wi-Fi: `tailscale up` or `tailscale down`, which needs
+    the user to be Tailscale's operator (the tooltip says how). The state is read
+    with `tailscale status` every TAILSCALE_SAMPLE_SECONDS, without blocking."""
+
+    def __init__(self, library):
+        super().__init__()
+        self.library = library
+        self.action = None
+        self.busy = False
+        self.error = None
+        self.error_state = None
+        self.state = None
+        self.timed_out = False
+        self.add_css_class("panel-menu")
+        self.button = Gtk.Button()
+        self.button.set_has_frame(False)
+        self.image = glyph_widget("status-icon")
+        self.image.add_css_class("icon-only")
+        self.button.set_child(self.image)
+        self.button.connect("clicked", self.toggle)
+        self.append(self.button)
+        self.show_state(None)
+
+    def refresh(self):
+        if not self.busy:
+            try:
+                proc = Gio.Subprocess.new(
+                    ["tailscale", "status", "--json", "--peers=false"],
+                    Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE)
+            except GLib.Error:
+                self.show_state(None)
+            else:
+                proc.communicate_utf8_async(None, None, self.status_read)
+        return True
+
+    def status_read(self, proc, result):
+        try:
+            _ok, out, _err = proc.communicate_utf8_finish(result)
+            state = json.loads(out).get("BackendState") if out else None
+        except (GLib.Error, ValueError):
+            state = None
+        self.show_state(state)
+
+    def show_state(self, state):
+        if self.error and state != self.error_state:
+            self.error = None
+        name, tooltip, self.action = tailscale_view(state, self.error)
+        self.library.set_glyph(self.image, name)
+        self.button.set_tooltip_text(tooltip)
+        self.update_property([Gtk.AccessibleProperty.LABEL], [tooltip.splitlines()[0]])
+        self.set_opacity(1.0)
+        self.state = state
+
+    def toggle(self, _button):
+        if self.busy or self.action is None:
+            return
+        self.busy = True
+        self.set_opacity(0.4)
+        self.button.set_tooltip_text("Tailscale: switching…")
+        try:
+            proc = Gio.Subprocess.new(["tailscale", self.action],
+                                      Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_PIPE)
+        except GLib.Error as error:
+            self.finish(error.message)
+            return
+        timer = GLib.timeout_add_seconds(TAILSCALE_UP_SECONDS, self.give_up, proc)
+        proc.communicate_utf8_async(None, None, self.toggled, timer)
+
+    def give_up(self, proc):
+        proc.force_exit()
+        self.timed_out = True
+        return False
+
+    def toggled(self, proc, result, timer):
+        timed_out, self.timed_out = self.timed_out, False
+        if not timed_out:
+            GLib.source_remove(timer)
+        try:
+            _ok, _out, err = proc.communicate_utf8_finish(result)
+        except GLib.Error as error:
+            err = error.message
+        failed = timed_out or not proc.get_successful()
+        self.finish(tailscale_error(err, timed_out) if failed else None)
+
+    def finish(self, error):
+        self.busy = False
+        self.error = error
+        self.error_state = self.state
+        self.refresh()
+
+
 class NetworkMenu(Gtk.MenuButton):
     """Wi-Fi glyph whose popover shows the current and nearby networks.
 
@@ -2164,6 +2299,9 @@ class TinyBar(Gtk.Application):
         self.cpu = StatusIndicator(self.icons, "cpu")
         self.memory = StatusIndicator(self.icons, "memory")
         self.wifi = NetworkMenu(self.icons)
+        self.tailscale = None
+        if TAILSCALE is True or (TAILSCALE == "auto" and shutil.which("tailscale")):
+            self.tailscale = TailscaleButton(self.icons)
         self.brightness = StatusIndicator(
             self.icons,
             "brightness",
@@ -2185,6 +2323,9 @@ class TinyBar(Gtk.Application):
 
         if SHOW_USAGE:
             widgets += [self.cpu, self.memory]
+
+        if self.tailscale:
+            widgets.append(self.tailscale)
 
         widgets += [
             self.wifi,
@@ -2282,6 +2423,10 @@ class TinyBar(Gtk.Application):
             self.notifications.refresh
         )
 
+        if self.tailscale:
+            self.tailscale.refresh()
+            GLib.timeout_add_seconds(TAILSCALE_SAMPLE_SECONDS, self.tailscale.refresh)
+
         window.present()
 
     # ---------- running applications ----------
@@ -2376,23 +2521,11 @@ class TinyBar(Gtk.Application):
         return True
 
     def display_name_for_app(self, app_id):
-        candidates = (
-            app_id,
-            f"{app_id}.desktop",
-            f"{app_id.casefold()}.desktop",
-        )
+        desktop = desktop_entry(app_id)
+        name = desktop.get_display_name() if desktop else None
 
-        for candidate in candidates:
-            try:
-                desktop = GioUnix.DesktopAppInfo.new(candidate)
-            except TypeError:
-                desktop = None
-
-            if desktop is not None:
-                name = desktop.get_display_name()
-
-                if name:
-                    return name
+        if name:
+            return name
 
         name = app_id.rsplit(".", 1)[-1]
         name = name.replace("-", " ").replace("_", " ")

@@ -77,6 +77,26 @@ def set_layered_glyph(library, front, back, name):
     return rendered
 
 
+def desktop_entry(app_id):
+    """The desktop entry for a window: by file name (app_id[.desktop]), else, as Labwc's
+    window switcher does, by StartupWMClass, preferring entries in the user's own folder
+    (FreeRDP's SDL client, for one, has app ID com.freerdp.client.sdl3, which only matches
+    that way)."""
+    for candidate in (app_id, app_id + '.desktop', app_id.casefold() + '.desktop'):
+        try:
+            desktop = GioUnix.DesktopAppInfo.new(candidate)
+        except TypeError:
+            desktop = None
+        if desktop is not None:
+            return desktop
+    user = str(Path.home() / '.local/share/applications') + '/'
+    matches = [info for info in Gio.AppInfo.get_all()
+               if isinstance(info, GioUnix.DesktopAppInfo)
+               and (info.get_startup_wm_class() or '').casefold() == app_id.casefold()]
+    matches.sort(key=lambda info: not (info.get_filename() or '').startswith(user))
+    return matches[0] if matches else None
+
+
 class IconLibrary:
     def __init__(self):
         self.theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
@@ -110,22 +130,14 @@ class IconLibrary:
         if fallback:
             names.append(fallback)
         native_icon = None
-        for candidate in (app_id, app_id + '.desktop', app_id.casefold() + '.desktop'):
-            try:
-                desktop = GioUnix.DesktopAppInfo.new(candidate)
-            except TypeError:
-                desktop = None
-            if desktop is None:
-                continue
-            icon = desktop.get_icon()
-            if icon is None:
-                continue
-            if isinstance(icon, Gio.FileIcon) and not icon.get_file().query_exists(None):
-                continue
+        desktop = desktop_entry(app_id)
+        icon = desktop.get_icon() if desktop else None
+        if isinstance(icon, Gio.FileIcon) and not icon.get_file().query_exists(None):
+            icon = None
+        if icon is not None:
             if isinstance(icon, Gio.ThemedIcon):
                 names.extend(icon.get_names())
             native_icon = icon
-            break
         names += [app_id, app_id.casefold()]
 
         for name in dict.fromkeys(names):

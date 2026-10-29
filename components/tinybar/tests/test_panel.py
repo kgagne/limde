@@ -198,5 +198,26 @@ class GlyphTests(unittest.TestCase):
         self.assertEqual(signal_glyph(65), "wifi")
 
 
+class TailscaleViewTests(unittest.TestCase):
+    def test_connected_and_off_icons_and_actions(self):
+        self.assertEqual(tinybar.tailscale_view("Running")[::2], ("tailscale", "down"))
+        self.assertEqual(tinybar.tailscale_view("Stopped")[::2], ("tailscale-slash", "up"))
+
+    def test_states_a_click_cannot_fix_do_nothing(self):
+        for state in ("NeedsLogin", "NeedsMachineAuth", None, "NoState"):
+            self.assertIsNone(tinybar.tailscale_view(state)[2], state)
+
+    def test_error_follows_the_state_in_the_tooltip(self):
+        tooltip = tinybar.tailscale_view("Stopped", "Not allowed")[1]
+        self.assertEqual(tooltip.splitlines(), ["Tailscale: off (click to turn on)", "Not allowed"])
+
+    def test_error_reasons(self):
+        self.assertIn("--operator", tinybar.tailscale_error(
+            "Access denied: prefs write access denied\nUse 'sudo tailscale up'"))
+        self.assertIn("keeps trying", tinybar.tailscale_error("", timed_out=True))
+        self.assertEqual(tinybar.tailscale_error("a\nlast line"), "last line")
+        self.assertEqual(tinybar.tailscale_error(""), "The tailscale command failed.")
+
+
 if __name__ == "__main__":
     unittest.main()

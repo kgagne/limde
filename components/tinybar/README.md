@@ -7,7 +7,18 @@ the wlr foreign-toplevel protocol.
 
 - Icons come from the icon theme (limDE's), as SVG; no icon fonts.
 - Settings: `~/.config/tinybar/settings.toml`, optional. `first_app_id` picks the app
-  that always sits leftmost (default `limde.AgentWeb`).
+  that always sits leftmost (default `limde.AgentWeb`). `tailscale` controls the
+  Tailscale button: `"auto"` (default) shows it when the `tailscale` command is
+  installed, `false` hides it, `true` shows it even when it is missing.
+- Tailscale (optional, not installed by limDE): a button left of Wi-Fi turns Tailscale
+  on and off with `tailscale up` and `tailscale down`. Tailscale's logo means connected;
+  all nine dots greyed with a slash means off or not ready (Tailscale's own tray greys
+  the dots); the tooltip says which, and why a click failed. Your user must be Tailscale's operator, set once with
+  `sudo tailscale set --operator=$USER`. The state is read every 10 seconds; a click
+  that has not connected after 15 seconds stops waiting and Tailscale keeps trying.
+  The icons and their licensing are in `components/icons/brands/NOTICE.md`.
+- Windows: each one's desktop entry is found by its app ID, or, as Labwc's window
+  switcher does, by the entry's `StartupWMClass` (FreeRDP's SDL client, for one).
 - Battery: the panel shows the time left; hover for the percentage, the live draw,
   a 3-hour average, and CPU and RAM use (sampled with the battery every 5 seconds, not
   recorded). Click it for a graph of the draw over the last 3 hours, 24 hours or

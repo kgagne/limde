@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Draw line versions of the third-party app logos that Simple Icons does not have
-(darktable, RawTherapee, btop, foot, GNOME Papers); import_simple_icons.py brings in the
-rest as solid icons. Each is a simplified, single-colour redraw of the app's own logo,
+(darktable, RawTherapee, btop, foot, GNOME Papers), and Tinybar's two Tailscale state icons
+from Simple Icons' geometry; import_simple_icons.py brings in the rest as solid icons. Each is a simplified, single-colour redraw of the app's own logo,
 used only to identify that app. The logo owners' policies were checked on 2026-10-24 (see
 brands/NOTICE.md); owners who forbid redraws (Mozilla, Microsoft's VS Code, Signal,
 Valve, Anthropic, Canonical) are not drawn. Logos under CC BY-SA are adaptations and
@@ -52,3 +52,34 @@ mit('rawtherapee', circle(12, 12, 9.75), circle(12, 12, 4.75), path(_spokes))
 
 if __name__ == '__main__':
     print(f'{len(list(MIT.glob("*.svg")))} MIT brand icons, {len(list(SA.glob("*.svg")))} CC BY-SA')
+
+
+# --- Tailscale (Tinybar's optional Tailscale button) ----------------------------------
+# Simple Icons 16.35.0's "tailscale" geometry (CC0-1.0): nine dots of radius 3 on a 9-unit
+# grid, placed inside limDE's margin like the imported logos. Simple Icons draws the
+# grey dots as rings to stay one colour; Tailscale's brand toolkit (press kit, 2025) asks
+# for them as grey by opacity, so they are filled at 35 % here. Off follows Tailscale's
+# own tray (tailscale/tailscale client/systray/logo.go: "disconnected is all gray dots")
+# with limDE's Wi-Fi slash on top. Both are drawn at 75 % of the margin box, centred, so
+# the full-length slash reaches past the corner dots (Keith, 2026-10-29); on stays the
+# same size so the logo does not jump when toggled. Tailscale is a trademark of
+# Tailscale Inc.; see NOTICE.
+TAILSCALE_SIZE = 0.75
+
+
+def tailscale_dots(bright):
+    scale, grid = 0.854167 * TAILSCALE_SIZE, (3, 12, 21)
+    offset = 12 - 12 * scale
+    dots = []
+    for row, y in enumerate(grid):
+        for col, x in enumerate(grid):
+            faint = '' if (row, col) in bright else ' fill-opacity="0.35"'
+            dots.append(f'<circle cx="{f(offset + x * scale)}" cy="{f(offset + y * scale)}" '
+                        f'r="{f(3 * scale)}" fill="currentColor" stroke="none"{faint}/>')
+    return dots
+
+TAILSCALE_T = {(1, 0), (1, 1), (1, 2), (2, 1)}   # the bright "T" of the connected logo
+mit('tailscale', '<!-- Tailscale: Simple Icons 16.35.0 ("tailscale") geometry, CC0-1.0 -->',
+    *tailscale_dots(TAILSCALE_T))
+mit('tailscale-slash', '<!-- Tailscale, off: Simple Icons 16.35.0 geometry, CC0-1.0; slash as wifi-slash -->',
+    *tailscale_dots(set()), path('M3.5 3.5L20.5 20.5'))

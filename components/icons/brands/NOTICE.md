@@ -18,6 +18,14 @@ belongs to.
 - **Line drawings** (`btop`, `darktable`, `rawtherapee`, and `cc-by-sa/foot`,
   `cc-by-sa/papers`): simplified redraws made for limDE, for logos Simple Icons lacks.
 
+- **Tailscale** (`tailscale.svg`, `tailscale-slash.svg`): the state icons of Tinybar's
+  optional Tailscale button, not an app icon. Simple Icons 16.35.0's geometry (CC0-1.0),
+  with the grey dots as reduced opacity, as Tailscale's brand toolkit (its press kit) asks,
+  instead of Simple Icons' rings. Off is all dots grey, as Tailscale's own tray app shows
+  it (`client/systray/logo.go`, BSD-3-Clause), plus limDE's Wi-Fi slash. Tailscale
+  publishes no logo licence; the logo is used only to label the button that controls
+  Tailscale. Tailscale is a registered trademark of Tailscale Inc.
+
 ## Not included
 
 These owners do not allow modified or redrawn versions of their logos, so limDE
