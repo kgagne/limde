@@ -8,9 +8,10 @@
 #                                a bigger screen
 #   tests/vm/vm sync NAME [--no-restart]   copy this working tree into an installed VM, run
 #                                ./install there (only what changed), then reboot so the
-#                                session restarts with it
+#                                session restarts with it; a failed ./install stops there
 #   tests/vm/vm save NAME        save an installed VM as the installed image for `up
-#                                --installed` (test-install --save does this after a pass)
+#                                --installed` (test-install --save does this after a pass);
+#                                refused if the VM had to be forced off
 #   tests/vm/vm ssh NAME [CMD]   run a command (or a shell) in it as `tester`
 #   tests/vm/vm copy NAME SRC... DEST   rsync files into it (DEST is a guest path)
 #   tests/vm/vm shot NAME FILE   save a PNG of its screen
@@ -154,7 +155,7 @@ cmd_up() {
   fi
   local port; port=$(free_port); echo "$port" > "$d/ssh-port"
   local vnc; vnc=$(free_vnc_display); echo "$vnc" > "$d/vnc-display"
-  rm -f "$d/qmp.sock"
+  rm -f "$d/qmp.sock" "$d/forced-off"
   # shellcheck disable=SC2046
   qemu-system-x86_64 $(qemu_common "$d/disk.qcow2" "$d/vars.fd" "$d/qmp.sock") \
     -nic "user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:$port-:22" \
@@ -210,7 +211,12 @@ cmd_sync() {
   cmd_copy "$name" --exclude=/local --exclude=.git "$repo/" limde/
   ssh_vm 'test -f /usr/local/share/limde/labwc.commit' \
     || die "limDE is not installed in $name; start it with: up $name --installed"
-  ssh_vm 'cd limde && ./install --yes' | grep -E '^  (changed|failed)|change\(s\) made|No changes' || true
+  local log; log=$(vmdir "$name")/sync.log
+  if ! ssh_vm 'cd limde && ./install --yes' >"$log" 2>&1; then
+    tail -n 20 "$log" >&2
+    die "./install failed in $name, so it was not restarted (full log: $log)"
+  fi
+  grep -E '^  (changed|failed)|change\(s\) made|No changes' "$log" || true
   [[ ${2:-} == --no-restart ]] && return
   # A reboot restarts the whole session the way a login does, so Tinybar and the rest
   # run inside it (NetworkManager and logind refuse a panel restarted over SSH).
@@ -231,12 +237,23 @@ cmd_save() {
   if running "$1"; then
     cmd_ssh "$1" 'test -f /usr/local/share/limde/labwc.commit' \
       || die "limDE is not installed in $1; nothing worth saving"
-    cmd_down "$1" >/dev/null
+    power_off "$1" || true  # a forced stop leaves the forced-off mark checked below
   fi
-  # A new version each time, flattened onto base so it needs no older one.
+  [[ ! -f $d/forced-off ]] || die "$1 did not shut down within 60 s and was forced off, so" \
+    "its disk may miss writes; not saved. Start it, see what held up the shutdown, save again"
+  qemu_exited "$(cat "$d/qemu.pid" 2>/dev/null || true)" || die "$1's QEMU is still running"
+  # A new version each time, rebuilt onto base so it needs no older one. A VM started
+  # with `up --installed` is an overlay on an installed image that is an overlay on base:
+  # a safe rebase copies in every block that differs from base (convert -B would read
+  # only the top layer and lose the installed image's blocks).
   local image; image=installed-$(date -u +%Y%m%d%H%M%S).qcow2
-  qemu-img convert -q -O qcow2 -F qcow2 -B "$dir/base.qcow2" "$d/disk.qcow2" "$dir/$image.new"
-  mv "$dir/$image.new" "$dir/$image"
+  local new=$dir/$image.new
+  if ! { cp "$d/disk.qcow2" "$new" \
+      && qemu-img rebase -q -f qcow2 -F qcow2 -b "$dir/base.qcow2" "$new" \
+      && qemu-img compare -q "$d/disk.qcow2" "$new"; }; then
+    rm -f "$new"; die "could not rebuild $1's disk onto base; nothing saved"
+  fi
+  mv "$new" "$dir/$image"
   cp "$d/vars.fd" "$dir/${image%.qcow2}-vars.fd"
   chmod a-w "$dir/$image" "$dir/${image%.qcow2}-vars.fd"
   ln -sfn "$image" "$dir/installed.qcow2"
@@ -253,13 +270,34 @@ cmd_save() {
   done
 }
 
+# Waits up to 30 s for a QEMU process to exit and so let go of its disk. $1: its pid, read
+# before it stopped (QEMU removes its pid file as it exits); empty for none.
+qemu_exited() {
+  for _ in $(seq 150); do
+    [[ -n ${1:-} && $(cat "/proc/$1/comm" 2>/dev/null) == qemu-system* ]] || return 0
+    sleep 0.2
+  done
+  return 1
+}
+
+# Powers a running VM off and waits until its QEMU has exited. Returns 1, and marks the
+# VM forced-off until its next `up`, when the guest did not shut down within 60 s and
+# QEMU had to quit under it.
+power_off() {
+  local d pid forced=0; d=$(vmdir "$1"); pid=$(cat "$d/qemu.pid" 2>/dev/null || true)
+  "$here/qmp.py" "$d/qmp.sock" system_powerdown >/dev/null || true
+  for _ in $(seq 60); do running "$1" || break; sleep 1; done
+  if running "$1"; then
+    "$here/qmp.py" "$d/qmp.sock" quit >/dev/null 2>&1 || true
+    : > "$d/forced-off"; forced=1
+  fi
+  qemu_exited "$pid" || die "$1's QEMU (pid $pid) did not exit"
+  return "$forced"
+}
+
 cmd_down() {
   name_ok "${1:-}"; running "$1" || { echo "$1 is not running"; return; }
-  local d; d=$(vmdir "$1")
-  "$here/qmp.py" "$d/qmp.sock" system_powerdown >/dev/null || true
-  for _ in $(seq 60); do running "$1" || { echo "$1 stopped"; return; }; sleep 1; done
-  "$here/qmp.py" "$d/qmp.sock" quit >/dev/null 2>&1 || true
-  echo "$1 forced off"
+  if power_off "$1"; then echo "$1 stopped"; else echo "$1 forced off"; fi
 }
 
 cmd_rm() {

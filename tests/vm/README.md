@@ -38,12 +38,17 @@ Observed on the first build (2026-10-24):
 A full install takes about 20 minutes, almost all of it apt and the labwc build, so
 day-to-day work runs against a saved installed image instead:
 - `test-install NAME --save` saves the VM as `local/vm/installed.qcow2` when every check
-  passed (`vm save NAME` does it by hand; `vm list` shows what it holds).
+  passed (`vm save NAME` does it by hand; `vm list` shows what it holds). A save shuts
+  the VM down first and refuses one that had to be forced off after 60 s, since its disk
+  may miss writes. The image it writes holds the whole disk on top of the base image,
+  also for a VM that was itself started with `--installed`.
 - `vm up NAME --installed` starts a VM from it in about 10 seconds, with the session up
   about 30 seconds later.
 - `vm sync NAME` copies the working tree in, runs `./install` (only what changed, about
   50 seconds) and reboots so the session restarts with it (about a minute); then
-  `vm click` and `vm shot` for screenshots. `--no-restart` skips the reboot.
+  `vm click` and `vm shot` for screenshots. `--no-restart` skips the reboot. When
+  `./install` fails, `sync` shows its last lines and exits non-zero without rebooting;
+  the full output is in `local/vm/NAME/sync.log`.
 
 Run the full `test-install` (and `test-acceptance` for a release) as a separate pass:
 before every push, and whenever the install flow itself changes (`install`,
@@ -54,8 +59,10 @@ the newest good install.
 
 `test-wifi NAME` runs in a VM where limDE is installed (`test-install NAME --keep`). The
 VM has no Wi-Fi hardware, so it loads the kernel's simulated radios (`mac80211_hwsim`),
-installs `hostapd` (for the test only) and runs two access points, `limde-psk` (WPA2)
-and `limde-open`. `wifi-check` then drives Tinybar's `WifiControl`, the same calls the
+installs `hostapd` (for the test only, after an `apt-get update`) and runs two access
+points, `limde-psk` (WPA2) and `limde-open`. Before and after the check it deletes any
+saved test networks and turns Wi-Fi on, so a run that stopped part way does not spoil
+the next one. `wifi-check` then drives Tinybar's `WifiControl`, the same calls the
 Wi-Fi menu makes: a wrong password fails as such and is never written to disk; the
 right one connects and is saved; disconnect; a saved network reconnects; forget; an
 open network; Wi-Fi off and on.

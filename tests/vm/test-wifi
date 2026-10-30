@@ -24,12 +24,26 @@ type_text() {
   done
 }
 
+# Deletes the test networks a run saved and turns Wi-Fi back on, as root (NetworkManager
+# refuses an SSH login), so a run that stopped part way does not spoil the next one.
+reset_wifi() {
+  on_vm 'set -e
+for u in $(nmcli -g UUID,TYPE connection show | sed -n "s/:802-11-wireless\$//p"); do
+  case $(nmcli -g 802-11-wireless.ssid connection show uuid "$u") in
+    limde-psk|limde-open) sudo nmcli connection delete uuid "$u" >/dev/null ;;
+  esac
+done
+sudo nmcli radio wifi on'
+}
+
 on_vm 'test -f /usr/local/share/limde/tinybar/tinybar.py' \
   || { echo "limde is not installed in $name; run tests/vm/test-install $name --keep" >&2; exit 2; }
 "$vm" copy "$name" "$here/wifi-check" /tmp/
+reset_wifi || { echo "could not reset the VM's Wi-Fi settings" >&2; exit 2; }
 
 password=correct-horse-battery
 on_vm "set -e
+sudo apt-get update -qq
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq hostapd dnsmasq-base >/dev/null
 sudo pkill -x hostapd || true
 for f in /tmp/dnsmasq-wlan1.pid /tmp/dnsmasq-wlan2.pid; do [ -f \$f ] && sudo pkill -F \$f; done; true
@@ -64,6 +78,9 @@ for _ in $(seq 150); do on_vm 'grep -q "^exit " /tmp/wifi.out' 2>/dev/null && br
 on_vm 'cat /tmp/wifi.out' 2>&1 | tee "$out/wifi.txt"
 rc=$(sed -n 's/^exit //p' "$out/wifi.txt"); rc=${rc:-1}
 
+# A check still running after the wait would change the settings again after the reset.
+on_vm 'pkill -f "^python3 -I /tmp/[w]ifi-check"' >/dev/null 2>&1
+reset_wifi >/dev/null 2>&1 || echo "could not reset the VM's Wi-Fi settings" >&2
 on_vm 'sudo pkill -x hostapd; sudo pkill -F /tmp/dnsmasq-wlan1.pid; sudo pkill -F /tmp/dnsmasq-wlan2.pid; sudo modprobe -r mac80211_hwsim' >/dev/null 2>&1 || true
 if ((rc == 0)); then echo "All Wi-Fi checks passed"; else echo "Wi-Fi checks failed"; fi
 exit "$rc"
