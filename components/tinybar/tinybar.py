@@ -148,7 +148,8 @@ NOTIFICATION_SUMMARY_CHARS = 44
 NOTIFICATION_BODY_CHARS = 60
 NOTIFICATION_LIST_HEIGHT = 320
 
-# Space between the panel's bottom edge and a popover's top edge.
+# Space between the panel's bottom edge and a popover's top edge, and the least
+# between a popover and the screen's left or right edge.
 POPOVER_GAP = 4
 
 NM_NAME = "org.freedesktop.NetworkManager"
@@ -984,16 +985,25 @@ def shorten(text, limit):
     return text[:limit - 1].rstrip() + "\u2026"
 
 
+def clickable(widget):
+    """Show the hand cursor over a widget that does something when clicked."""
+
+    widget.set_cursor_from_name("pointer")
+    return widget
+
+
 def open_below_panel(button):
     """Open a panel button's popover without an arrow, clear of the panel.
 
     GTK anchors a popover to the button itself, so by default its arrow and top
     edge sit over the lower part of the bar. The offset is measured when the
-    popover opens, so it follows font and margin changes.
+    popover opens, so it follows font and margin changes. The button gets the hand
+    cursor: on its inner button, so the popover keeps the normal one.
     """
 
     popover = button.get_popover()
     popover.set_has_arrow(False)
+    clickable(button.get_first_child())
 
     def on_show(_popover):
         root = button.get_root()
@@ -1009,6 +1019,13 @@ def open_below_panel(button):
         popover.set_offset(0, round(below) + POPOVER_GAP)
 
     popover.connect("show", on_show)
+
+    # The compositor slides a popover that would cross the screen edge until it
+    # touches the edge. A side margin on the card (the popover's "contents" node)
+    # counts as part of the popup, so the card stops POPOVER_GAP short of it.
+    contents = popover.get_first_child()
+    contents.set_margin_start(POPOVER_GAP)
+    contents.set_margin_end(POPOVER_GAP)
 
 
 def panel_row(library, glyph, title, detail=None, trailing=None):
@@ -1121,7 +1138,7 @@ class NotificationCenter(Gtk.MenuButton):
         self.empty = Gtk.Label(label="No notifications")
         self.empty.add_css_class("notification-empty")
 
-        self.clear = Gtk.Button(label="Clear all")
+        self.clear = clickable(Gtk.Button(label="Clear all"))
         self.clear.add_css_class("notification-clear")
         self.clear.connect("clicked", self.on_clear_clicked)
 
@@ -1304,7 +1321,7 @@ class NotificationCenter(Gtk.MenuButton):
             body.add_css_class("notification-body")
             text.append(body)
 
-        close = Gtk.Button()
+        close = clickable(Gtk.Button())
         close.set_has_frame(False)
         close.add_css_class("notification-close")
         close.set_valign(Gtk.Align.START)
@@ -1788,7 +1805,7 @@ class TailscaleButton(Gtk.Box):
         self.state = None
         self.timed_out = False
         self.add_css_class("panel-menu")
-        self.button = Gtk.Button()
+        self.button = clickable(Gtk.Button())
         self.button.set_has_frame(False)
         self.image = glyph_widget("status-icon")
         self.image.add_css_class("icon-only")
@@ -1918,7 +1935,7 @@ class NetworkMenu(Gtk.MenuButton):
         title.set_hexpand(True)
         title.add_css_class("notification-summary")
 
-        self.switch = Gtk.Switch()
+        self.switch = clickable(Gtk.Switch())
         self.switch.set_valign(Gtk.Align.CENTER)
         self.switch.connect("state-set", self.on_switch_set)
 
@@ -1947,7 +1964,7 @@ class NetworkMenu(Gtk.MenuButton):
 
         self.available = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
-            spacing=2
+            spacing=4
         )
 
         scroller = Gtk.ScrolledWindow()
@@ -1998,7 +2015,7 @@ class NetworkMenu(Gtk.MenuButton):
         self.form.append(entry_row)
         self.form.append(self.status)
 
-        other = Gtk.Button()
+        other = clickable(Gtk.Button())
         other.set_has_frame(False)
         other.add_css_class("network-row")
         other.set_child(
@@ -2030,7 +2047,7 @@ class NetworkMenu(Gtk.MenuButton):
         open_below_panel(self)
 
     def action_button(self, label, handler):
-        button = Gtk.Button(label=label)
+        button = clickable(Gtk.Button(label=label))
         button.add_css_class("network-action")
         button.connect("clicked", handler)
         return button
@@ -2394,7 +2411,7 @@ class NetworkMenu(Gtk.MenuButton):
         if network["ssid"] in self.saved:
             detail.append("Saved")
 
-        button = Gtk.Button()
+        button = clickable(Gtk.Button())
         button.set_has_frame(False)
         button.add_css_class("network-row")
         button.set_child(
@@ -2797,7 +2814,7 @@ class BatteryMenu(Gtk.MenuButton):
         open_below_panel(self)
 
     def arrow(self, glyph, fallback, direction, label):
-        button = Gtk.Button()
+        button = clickable(Gtk.Button())
         button.set_has_frame(False)
         button.add_css_class("power-arrow")
         button.set_tooltip_text(label)
@@ -2898,7 +2915,7 @@ class SystemMenu(Gtk.MenuButton):
 
         content = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
-            spacing=2
+            spacing=4
         )
 
         content.add_css_class("system-popover")
@@ -2924,7 +2941,7 @@ class SystemMenu(Gtk.MenuButton):
         self.set_tooltip_text("System")
 
     def action_row(self):
-        button = Gtk.Button()
+        button = clickable(Gtk.Button())
         button.add_css_class("system-action")
 
         row = Gtk.Box(
@@ -3075,7 +3092,7 @@ class VolumeMenu(Gtk.MenuButton):
         self.indicator = StatusIndicator(library, "volume", show_value=False)
         self.set_child(self.indicator)
 
-        self.mute = Gtk.ToggleButton()
+        self.mute = clickable(Gtk.ToggleButton())
         self.mute.set_has_frame(False)
         self.mute.add_css_class("volume-mute")
         self.mute_icon = glyph_widget()
@@ -3097,7 +3114,7 @@ class VolumeMenu(Gtk.MenuButton):
         self.heading = Gtk.Label(label="Output")
         self.heading.set_xalign(0)
         self.heading.add_css_class("panel-heading")
-        self.outputs = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        self.outputs = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         content.add_css_class("notification-popover")
         for widget in (controls, self.heading, self.outputs):
@@ -3194,7 +3211,7 @@ class VolumeMenu(Gtk.MenuButton):
         clear_box(self.outputs)
         outputs = audio_outputs(self.audio)
         for key, description, default in outputs:
-            button = Gtk.Button()
+            button = clickable(Gtk.Button())
             button.set_has_frame(False)
             button.add_css_class("network-row")
             button.set_child(panel_row(self.library, "speaker", description, None,
@@ -3744,7 +3761,7 @@ class TinyBar(Gtk.Application):
             button = self.task_buttons.get(app_id)
 
             if button is None:
-                button = Gtk.Button()
+                button = clickable(Gtk.Button())
                 button.add_css_class("task-label")
                 button.connect(
                     "clicked",

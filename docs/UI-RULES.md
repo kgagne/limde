@@ -12,19 +12,21 @@ Check any change with a screenshot (`tests/vm/vm shot`) of the popover before an
 
 | Role | Size | Line height |
 |---|---|---|
-| Panel text (clock), tooltips | 16 px | 22 |
-| Panel labels (task names, values) | 13 px | 18 |
+| Panel text (clock) | 16 px | 22 |
+| Panel labels (task names, values), tooltips | 13 px | 18 |
 | Popover text: titles, rows, buttons, entries, empty states | 13 px | 18 |
+| Popover detail lines, section headings, small text links ("Clear all") | 12 px | 17 |
 | Graph labels | 11 px | — |
 
 Set a size on the label itself (a class on the `Gtk.Label`, or `selector > label`), not on
 its container: the base `* { font-size: 16px }` rule matches every node, so a size on a
 button or box never reaches the text inside.
 
-Today every label in a panel popover renders at 13 px, because
-`.system-info label:not(.status-icon)` reaches into popovers (a popover is a CSS child of
-its panel button). The 12 px meant for detail lines and section headings never applies.
-Whether those should drop to 12 px is open; until then, use 13 px.
+A popover is a CSS child of its panel button, so a descendant rule on a panel widget
+reaches into its popover. Rules for the bar itself use child combinators
+(`.system-info > button label`); popover text gets its sizes from `popover label` and
+the 12 px roles above. Give a new detail line the `notification-body` class and a new
+section heading `panel-heading`.
 
 ## Spacing
 
@@ -35,6 +37,10 @@ Scale: 1, 2, 4, 6, 8, 12, 16 px.
 - 1 only between a title and its detail line.
 - Panel: margins 12 at the sides and 5 top and bottom, 12 between groups, 4 between
   items. Panel buttons use `1px 7px` with a `-7px` margin so their highlight lines up.
+- Popovers: 4 below the panel and at least 4 from the screen's left and right edges
+  (`POPOVER_GAP`). Section headings start 8 px in, like the Wi-Fi header.
+- Tooltips: padding `6px 8px`, card 16 below its widget (GTK's 4 plus a 12 margin) so
+  a 24 px pointer never covers the text.
 
 ## Controls in popovers
 
@@ -55,6 +61,12 @@ Every control must fit the 18 px line of 13 px text, so rows stay 30 px (one lin
 Sizing rules for switches and entries already apply to every popover; reuse the classes
 above for buttons and sliders instead of new values.
 
+## Cursor
+
+Anything that does something when clicked shows the hand cursor: wrap it in
+`clickable()` when you create it. Panel menu buttons get it from `open_below_panel` (on
+their inner button, so the popover keeps the normal cursor).
+
 ## Icons
 
 16 px in the panel, for a row's leading icon (in a 20 px column) and in menus
@@ -69,6 +81,5 @@ border numbers.
 
 ## Known differences, not yet settled
 
-- The power menu uses card padding 6 and a row gap of 2 (ported as is).
 - The panel grows 2 px when the bell shows a count; its height is not fixed.
 - Walker, Mako and labwc have their own sizes (10 px paddings, 10–11 pt text).

@@ -3,16 +3,31 @@ window {
     color: ${colors_text};
 }
 
-/* Base size for icons, date/time, menus, and hover tooltips. */
+/* Base size for icons, date/time and menus. */
 * {
     font-size: 16px;
     -gtk-icon-size: ${icons_panel_size}px;
 }
 
-/* Smaller app names and metric values; icon glyphs retain the base size. */
+/* Smaller app names and metric values; icon glyphs retain the base size. Only
+   the bar's own labels: a popover is a CSS child of its panel button, and a
+   descendant rule would reach into it. */
 .task-label label:not(.task-icon),
-.system-info label:not(.status-icon) {
+.system-info > label:not(.status-icon),
+.system-info > button label:not(.status-icon) {
     font-size: 13px;
+}
+
+/* Popover text (docs/UI-RULES.md): 13 px; detail lines, section headings and
+   small text links 12 px. */
+popover label {
+    font-size: 13px;
+}
+
+popover label.notification-body,
+popover label.panel-heading,
+popover .notification-clear label {
+    font-size: 12px;
 }
 
 /* Add to the existing 4 px box spacing for an 8 px icon/text gap. */
@@ -176,7 +191,6 @@ popover > contents {
 
 .notification-clear {
     padding: 4px 8px;
-    font-size: 12px;
     color: ${colors_secondary};
 }
 
@@ -209,7 +223,7 @@ popover > contents {
 
 /* System menu: plain rows that highlight on hover. */
 .system-popover {
-    padding: 6px;
+    padding: 8px;
     min-width: 180px;
 }
 
@@ -242,7 +256,7 @@ popover > contents {
 }
 
 .panel-heading {
-    padding: 4px 4px 0;
+    padding: 4px 8px 0;
     font-size: 12px;
     color: ${colors_secondary};
 }
@@ -357,6 +371,19 @@ popover entry placeholder {
 
 popover entry > image {
     -gtk-icon-size: ${icons_small_size}px;
+}
+
+/* Hover tooltips: popover text in a one-line row's padding. GTK puts a tooltip
+   4 px below its widget, where a 24 px pointer (16-20 px below its tip) covers
+   the text when the tip is low on the widget; the margin, outside the card,
+   moves it clear. */
+tooltip {
+    margin-top: 12px;
+    padding: 6px 8px;
+}
+
+tooltip label {
+    font-size: 13px;
 }
 
 /* The line, band, gridlines and labels are drawn in this colour at set opacities. */
