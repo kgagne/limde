@@ -274,8 +274,9 @@ popover > contents {
 }
 
 /* Wi-Fi popover: the on/off header, network rows that join on click, the join form. */
+/* 6 + the 18 px switch + 6 keeps the header row 30 px, like a one-line row. */
 .network-header {
-    padding: 2px 4px 2px 8px;
+    padding: 6px 4px 6px 8px;
 }
 
 .network-row {
@@ -323,6 +324,39 @@ popover > contents {
     border-radius: 50%;
     background: ${colors_text};
     box-shadow: none;
+}
+
+/* GTK controls in popovers fit the 18 px line of 13 px text (docs/UI-RULES.md); left
+   alone they take GTK's own sizes (a 50x26 switch, a 34 px entry). */
+popover switch {
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    border-radius: 9px;
+}
+
+/* Knob plus margins stay at least 16 px, the size of the switch's on/off images. */
+popover switch > slider {
+    min-width: 14px;
+    min-height: 14px;
+    margin: 1px;
+    border: 0;
+    box-shadow: none;
+}
+
+popover entry {
+    min-height: 0;
+    padding: 3px 8px;
+}
+
+/* The placeholder is its own label, so the base 16 px rule reaches it directly. */
+popover entry > text,
+popover entry placeholder {
+    font-size: 13px;
+}
+
+popover entry > image {
+    -gtk-icon-size: ${icons_small_size}px;
 }
 
 /* The line, band, gridlines and labels are drawn in this colour at set opacities. */

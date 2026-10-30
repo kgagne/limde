@@ -31,7 +31,7 @@ Test: `python3 -m unittest discover -s components/tinybar/tests`. Installed by
 - **notifications** — bell, Mako over D-Bus every 2 s, per-row dismiss: `components/tinybar/tinybar.py::NotificationCenter`. Trap: Mako's history can't be cleared; dismissed rows are hidden in memory and return after a restart.
 - **idle hide** — swayidle runs `components/tinybar/tinybar-idle`, which signals the pid file (USR1 hide, USR2 restore): `components/tinybar/tinybar.py::TinyBar.setup_idle_hide`, `components/tinybar/tinybar.py::idle_hide_order`. Trap: hidden windows are remembered in memory only.
 - **settings** — optional `~/.config/tinybar/settings.toml`, read once at start: `components/tinybar/tinybar.py::load_settings`. Trap: broken TOML silently resets every setting.
-- **panel style** — `components/appearance/templates/tinybar.css.in` (rendered to `~/.config/tinybar/style.css`; edit the template). Loaded at USER+1 priority so the user's GTK CSS can't restyle the panel.
+- **panel style, sizes** — how big to make text, rows and controls: `docs/UI-RULES.md`. CSS in `components/appearance/templates/tinybar.css.in` (rendered to `~/.config/tinybar/style.css`; edit the template). Loaded at USER+1 priority so the user's GTK CSS can't restyle the panel.
 
 ## Installer: `install`, `lib/install/`
 Test: `scripts/check`; `./install --plan` shows the plan without changing anything.
