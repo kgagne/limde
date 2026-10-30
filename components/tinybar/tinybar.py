@@ -135,6 +135,13 @@ MAKO_INTERFACE = "fr.emersion.Mako"
 # stalling the panel's main loop on every poll.
 MAKO_TIMEOUT_MS = 500
 
+# The standard notification interface, which Mako serves under the same bus name;
+# the battery warnings are posted through it.
+NOTIFICATIONS_PATH = "/org/freedesktop/Notifications"
+NOTIFICATIONS_INTERFACE = "org.freedesktop.Notifications"
+NOTIFY_URGENCY_NORMAL = 1
+NOTIFY_URGENCY_CRITICAL = 2
+
 NOTIFICATION_SUMMARY_CHARS = 44
 NOTIFICATION_BODY_CHARS = 60
 NOTIFICATION_LIST_HEIGHT = 320
@@ -193,6 +200,11 @@ BATTERY_LOAD_LEVELS = (
     (20.0, "load-high"),
     (12.0, "load-moderate"),
 )
+
+# Battery percentages that raise a notification, each at most once per discharge.
+# The critical one is urgent: Mako keeps it on screen until it is dismissed.
+BATTERY_LOW_PERCENT = 10
+BATTERY_CRITICAL_PERCENT = 5
 
 # The battery popover's graph views, cycled with its arrows: name, span, bin
 # size, and hours between gridlines (24 puts them at local midnight).
@@ -273,6 +285,44 @@ def battery_load(watts):
             return name
 
     return None
+
+
+def battery_warning(percent, status, warned):
+    """The low-battery threshold to announce now (or None), and the warned state to
+    keep: the lowest threshold already announced this discharge, None for none.
+
+    Each threshold is announced once per discharge, and a reading already below both
+    announces only the critical one. Charging, full or plugged in ("Not charging")
+    starts over; an unknown status keeps the state, so a flicker cannot repeat one.
+    """
+
+    if status in ("Charging", "Full", "Not charging"):
+        return None, None
+
+    if status != "Discharging" or percent is None:
+        return None, warned
+
+    for threshold in (BATTERY_CRITICAL_PERCENT, BATTERY_LOW_PERCENT):
+        if percent <= threshold:
+            if warned is None or threshold < warned:
+                return threshold, threshold
+
+            break
+
+    return None, warned
+
+
+def battery_warning_text(percent, threshold, runtime_text):
+    """Summary and body of a low-battery notification."""
+
+    if runtime_text:
+        body = f"About {runtime_text} left."
+    elif threshold == BATTERY_CRITICAL_PERCENT:
+        body = "Plug in now."
+    else:
+        body = "Plug in soon."
+
+    return f"Battery at {percent} %", body
 
 
 def format_coverage(seconds):
@@ -2903,6 +2953,8 @@ class TinyBar(Gtk.Application):
         )
 
         self.last_battery_status = None
+        # Lowest warning threshold announced this discharge (see battery_warning).
+        self.battery_warned = None
 
         self.previous_cpu = None
         self.battery_cpu = None
@@ -3928,6 +3980,20 @@ class TinyBar(Gtk.Application):
                     runtime_text
                 )
 
+        # Low-battery notifications, each threshold once per discharge.
+        warning, self.battery_warned = battery_warning(
+            int(capacity) if capacity.isdigit() else None,
+            status,
+            self.battery_warned
+        )
+
+        if warning is not None:
+            self.send_battery_warning(
+                capacity,
+                warning,
+                runtime_text
+            )
+
         # CPU and RAM ride along in the hover text, sampled with the battery,
         # so they need no timer of their own and are not recorded. CPU is the
         # average since the previous battery sample.
@@ -3971,6 +4037,62 @@ class TinyBar(Gtk.Application):
                 self.battery.icon.remove_css_class(name)
 
         return True
+
+    def send_battery_warning(self, percent, threshold, runtime_text):
+        """Post a low-battery notification through the session's notification
+        service (Mako). Asynchronous, so a missing or slow service never stalls
+        the panel; a failure is only logged."""
+
+        urgent = threshold == BATTERY_CRITICAL_PERCENT
+        summary, body = battery_warning_text(percent, threshold, runtime_text)
+
+        def finished(bus, result):
+            try:
+                bus.call_finish(result)
+            except GLib.Error as error:
+                print(
+                    f"tinybar: battery warning not shown: {error.message}",
+                    flush=True
+                )
+
+        try:
+            bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        except GLib.Error as error:
+            print(
+                f"tinybar: battery warning not shown: {error.message}",
+                flush=True
+            )
+            return
+
+        bus.call(
+            MAKO_NAME,
+            NOTIFICATIONS_PATH,
+            NOTIFICATIONS_INTERFACE,
+            "Notify",
+            GLib.Variant(
+                "(susssasa{sv}i)",
+                (
+                    "Tinybar",
+                    0,
+                    "battery-caution" if urgent else "battery-low",
+                    summary,
+                    body,
+                    [],
+                    {
+                        "urgency": GLib.Variant(
+                            "y",
+                            NOTIFY_URGENCY_CRITICAL if urgent else NOTIFY_URGENCY_NORMAL
+                        )
+                    },
+                    -1
+                )
+            ),
+            GLib.VariantType.new("(u)"),
+            Gio.DBusCallFlags.NONE,
+            -1,
+            None,
+            finished
+        )
 
 
 # Guarded so the tests can import the pure helpers without starting a panel.

@@ -90,6 +90,53 @@ class BatteryTests(unittest.TestCase):
         self.assertEqual(tinybar.usage_lines(None, None), [])
 
 
+def warnings_over(readings, warned=None):
+    """The thresholds announced over a run of (percent, status) battery readings."""
+    announced = []
+    for percent, status in readings:
+        level, warned = tinybar.battery_warning(percent, status, warned)
+        if level is not None:
+            announced.append(level)
+    return announced
+
+
+class BatteryWarningTests(unittest.TestCase):
+    def test_thresholds(self):
+        self.assertEqual(tinybar.battery_warning(11, "Discharging", None), (None, None))
+        self.assertEqual(tinybar.battery_warning(10, "Discharging", None), (10, 10))
+        self.assertEqual(tinybar.battery_warning(6, "Discharging", 10), (None, 10))
+        self.assertEqual(tinybar.battery_warning(5, "Discharging", 10), (5, 5))
+
+    def test_once_per_discharge(self):
+        steps = [(12, "Discharging"), (10, "Discharging"), (10, "Discharging"),
+                 (9, "Discharging"), (5, "Discharging"), (4, "Discharging"),
+                 (6, "Discharging"), (1, "Discharging")]
+        self.assertEqual(warnings_over(steps), [10, 5])
+
+    def test_reset_on_charge(self):
+        steps = [(9, "Discharging"), (9, "Charging"), (9, "Discharging")]
+        self.assertEqual(warnings_over(steps), [10, 10])
+        for status in ("Charging", "Full", "Not charging"):
+            self.assertEqual(tinybar.battery_warning(4, status, 5), (None, None))
+
+    def test_jump_below_both_gives_only_the_critical_one(self):
+        self.assertEqual(warnings_over([(12, "Discharging"), (4, "Discharging")]), [5])
+
+    def test_unknown_status_or_percent_keeps_the_state(self):
+        self.assertEqual(tinybar.battery_warning(4, "Unknown", 10), (None, 10))
+        self.assertEqual(tinybar.battery_warning(None, "Discharging", 10), (None, 10))
+        steps = [(9, "Discharging"), (9, "Unknown"), (9, "Discharging")]
+        self.assertEqual(warnings_over(steps), [10])
+
+    def test_text(self):
+        self.assertEqual(tinybar.battery_warning_text("10", 10, "25m"),
+                         ("Battery at 10 %", "About 25m left."))
+        self.assertEqual(tinybar.battery_warning_text("10", 10, None),
+                         ("Battery at 10 %", "Plug in soon."))
+        self.assertEqual(tinybar.battery_warning_text("4", 5, None),
+                         ("Battery at 4 %", "Plug in now."))
+
+
 def power_record(start, avg, low=None, high=None, coverage=300):
     return {
         "start_epoch": start,
