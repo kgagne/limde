@@ -1,5 +1,6 @@
 """Check Tinybar's pure display helpers. Imports the panel without starting it."""
 from pathlib import Path
+import shutil
 import sys
 import unittest
 from unittest import mock
@@ -8,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import tinybar  # noqa: E402
 from tinybar_icons import IconLibrary, brightness_glyph, signal_glyph, volume_glyph  # noqa: E402
+from gi.repository import Gio, GLib  # noqa: E402
 
 
 def point(ssid, strength, secured=False, frequency=2437):
@@ -685,6 +687,151 @@ class TooltipTests(unittest.TestCase):
         ]
         for kind, state, icon in cases:
             self.assertEqual(library.status_name(kind, state), icon, state)
+
+
+HCI0, HCI1 = "/org/bluez/hci0", "/org/bluez/hci1"
+DEVICE, BATTERY = tinybar.BLUEZ_DEVICE, tinybar.BLUEZ_BATTERY
+
+
+def bluez_device(adapter, alias, name=True, **values):
+    return {DEVICE: {"Adapter": adapter, "Alias": alias, **({"Name": alias} if name else {}),
+                     **values}}
+
+
+class BluetoothTests(unittest.TestCase):
+    def tree(self):
+        return {
+            HCI1: {tinybar.BLUEZ_ADAPTER: {"Powered": True}},
+            HCI0: {tinybar.BLUEZ_ADAPTER: {"Powered": True}},
+            HCI0 + "/dev_A": bluez_device(HCI0, "Zed phones", Paired=True, Icon="audio-headphones"),
+            HCI0 + "/dev_B": {**bluez_device(HCI0, "keyboard", Paired=True, Connected=True),
+                              BATTERY: {"Percentage": 80}},
+            HCI0 + "/dev_C": bluez_device(HCI0, "Speaker"),
+            HCI0 + "/dev_D": bluez_device(HCI0, "11-22-33-44-55-66", name=False),
+            HCI1 + "/dev_E": bluez_device(HCI1, "On the other adapter", Paired=True),
+        }
+
+    def names(self, devices):
+        return [device["name"] for device in devices]
+
+    def test_the_first_adapter_is_used(self):
+        self.assertEqual(tinybar.bluetooth_adapter(self.tree()), HCI0)
+        self.assertIsNone(tinybar.bluetooth_adapter({}))
+
+    def test_connected_first_and_nearby_only_with_a_name(self):
+        paired, nearby = tinybar.bluetooth_devices(self.tree(), HCI0)
+        self.assertEqual(self.names(paired), ["keyboard", "Zed phones"])
+        self.assertEqual(self.names(nearby), ["Speaker"])
+        self.assertEqual(tinybar.bluetooth_detail(paired[0]), "Connected · 80% battery")
+        self.assertEqual(tinybar.bluetooth_detail(paired[1]), "Not connected")
+        self.assertEqual([paired[1]["icon"], nearby[0]["icon"]], ["audio-headphones", "bluetooth"])
+
+    def test_signals_keep_the_tree_current(self):
+        tree, apply = self.tree(), tinybar.apply_bluez_signal
+        apply(tree, "InterfacesAdded", "/", (HCI0 + "/dev_F", bluez_device(HCI0, "Mouse")))
+        apply(tree, "PropertiesChanged", HCI0 + "/dev_A", (DEVICE, {"Connected": True}, ["Icon"]))
+        apply(tree, "PropertiesChanged", HCI0 + "/dev_X", (DEVICE, {"Connected": True}, []))
+        apply(tree, "InterfacesRemoved", "/", (HCI0 + "/dev_B", [DEVICE, BATTERY]))
+        apply(tree, "InterfacesRemoved", "/", (HCI0 + "/dev_C", [BATTERY]))
+        paired, nearby = tinybar.bluetooth_devices(tree, HCI0)
+        self.assertEqual(self.names(paired), ["Zed phones"])
+        self.assertEqual((paired[0]["connected"], paired[0]["icon"]), (True, "bluetooth"))
+        self.assertEqual(self.names(nearby), ["Mouse", "Speaker"])
+        self.assertNotIn(HCI0 + "/dev_B", tree)
+        self.assertNotIn(HCI0 + "/dev_X", tree)
+
+    def test_panel_view(self):
+        paired = tinybar.bluetooth_devices(self.tree(), HCI0)[0]
+        view = tinybar.bluetooth_view
+        self.assertEqual(view(None, []), ("bluetooth-slash", "Bluetooth: no adapter"))
+        self.assertEqual(view({"Powered": False}, paired), ("bluetooth-slash", "Bluetooth: off"))
+        self.assertEqual(view({"Powered": True}, paired), ("bluetooth", "Bluetooth: connected to keyboard"))
+        self.assertEqual(view({"Powered": True}, paired[1:])[1], "Bluetooth: on")
+        both = [dict(device, connected=True) for device in paired]
+        self.assertEqual(view({"Powered": True}, both)[1], "Bluetooth: 2 devices connected")
+
+    def test_words(self):
+        failure, prompt = tinybar.bluetooth_failure, tinybar.pairing_prompt
+        self.assertEqual(failure("org.bluez.Error.AuthenticationRejected", "x"), "Pairing was refused")
+        self.assertEqual(failure("org.bluez.Error.BREDR.ProfileUnavailable", "x"),
+                         "Nothing on this device to connect to")
+        self.assertEqual(failure("org.bluez.Error.Failed", "Could not connect"), "Could not connect")
+        self.assertEqual(prompt("confirm", "Phones", 42), "Does Phones show 000042?")
+        self.assertEqual(prompt("display", "Keys", 123456), "Type 123456 on Keys, then press Enter")
+        self.assertEqual(prompt("display", "Keys", "0000"), "Type 0000 on Keys, then press Enter")
+        self.assertEqual(prompt("pin", "Old mouse"), "Old mouse needs a PIN. Use Other device… below.")
+
+
+@unittest.skipUnless(shutil.which("dbus-daemon"), "needs dbus-daemon")
+class BluetoothAgentTests(unittest.TestCase):
+    """The pairing agent's D-Bus side, called as BlueZ would on a private bus."""
+
+    PATH = HCI0 + "/dev_A"
+    REFUSED = "org.bluez.Error.Rejected"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dbus = Gio.TestDBus.new(Gio.TestDBusFlags.NONE)
+        cls.dbus.up()
+        cls.bus = Gio.DBusConnection.new_for_address_sync(
+            cls.dbus.get_bus_address(),
+            Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT
+            | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION, None, None)
+        cls.requests, cls.yes = [], True
+        cls.control = tinybar.BluetoothControl(cls.bus, lambda: None, cls.on_request)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.bus.close_sync(None)
+        cls.dbus.down()
+
+    @classmethod
+    def on_request(cls, kind, device, code, answer):
+        cls.requests.append((kind, device, code))
+        if answer:
+            answer(cls.yes)
+
+    def ask(self, method, signature, *args):
+        """The D-Bus error name the agent answers with, or None for a yes."""
+        result = []
+
+        def finished(bus, reply):
+            try:
+                bus.call_finish(reply)
+                result.append(None)
+            except GLib.Error as error:
+                result.append(Gio.DBusError.get_remote_error(error))
+
+        self.bus.call(self.bus.get_unique_name(), tinybar.BLUEZ_AGENT_PATH, "org.bluez.Agent1",
+                      method, GLib.Variant(signature, args), None, Gio.DBusCallFlags.NONE,
+                      2000, None, finished)
+        while not result:  # The call times out after 2 s at most.
+            GLib.MainContext.default().iteration(True)
+        return result[0]
+
+    def test_a_number_to_compare_follows_the_answer(self):
+        type(self).yes = True
+        self.assertIsNone(self.ask("RequestConfirmation", "(ou)", self.PATH, 123456))
+        type(self).yes = False
+        self.assertEqual(self.ask("RequestConfirmation", "(ou)", self.PATH, 123456), self.REFUSED)
+        self.assertEqual(self.requests[-1], ("confirm", self.PATH, 123456))
+
+    def test_a_pin_to_type_here_is_refused_and_said_so(self):
+        self.requests.clear()
+        self.assertEqual(self.ask("RequestPinCode", "(o)", self.PATH), self.REFUSED)
+        self.assertEqual(self.ask("RequestPasskey", "(o)", self.PATH), self.REFUSED)
+        self.assertEqual(self.requests, [("pin", self.PATH, None)] * 2)
+
+    def test_a_passkey_to_type_on_the_device_is_shown(self):
+        self.assertIsNone(self.ask("DisplayPasskey", "(ouq)", self.PATH, 1234, 0))
+        self.assertEqual(self.requests[-1], ("display", self.PATH, 1234))
+
+    def test_only_paired_devices_connect_by_themselves(self):
+        uuid = "0000110b"  # A2DP sink, short form
+        self.control.objects = {self.PATH: {DEVICE: {"Paired": True}}}
+        self.assertIsNone(self.ask("AuthorizeService", "(os)", self.PATH, uuid))
+        self.control.objects = {}
+        self.assertEqual(self.ask("AuthorizeService", "(os)", self.PATH, uuid), self.REFUSED)
 
 
 if __name__ == "__main__":

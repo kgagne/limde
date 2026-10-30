@@ -67,6 +67,22 @@ Wi-Fi menu makes: a wrong password fails as such and is never written to disk; t
 right one connects and is saved; disconnect; a saved network reconnects; forget; an
 open network; Wi-Fi off and on.
 
+## Bluetooth
+
+`test-bluetooth NAME` runs in a VM where limDE is installed (the installed image is
+enough). The VM has no Bluetooth hardware, so it installs the optional `bluetooth` group
+and, for the test only, `bluez-test-tools`, whose emulator `btvirt -l2` (with the kernel's
+`hci_vhci`) makes two virtual controllers that see each other: the first is the
+computer's adapter, the second plays a device. `bluetooth-check` then drives Tinybar's
+`BluetoothControl`: on and off, the search lists the device by name, pairing asks to
+compare a number and connects, disconnect, reconnect, forget. (PipeWire then lists the
+device, but no sound output for it.)
+BlueZ lets any local user call it, so unlike Wi-Fi this runs over SSH. `--keep` leaves
+the controllers up with `bluetooth-check --device` answering the device's side of
+pairing, for trying the menu by hand; start it after any Tinybar restart, because BlueZ
+sends the device side's question to the newest default agent. The agent's refusals
+(typed PINs) are tested on a private bus in `components/tinybar/tests`.
+
 ## Release acceptance
 
 `test-install NAME` checks a clean install, a second run and a reboot. `test-acceptance

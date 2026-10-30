@@ -3,7 +3,7 @@
 #
 #   ./install                 show the plan, ask about optional parts, then install
 #   ./install --plan          show the plan and stop; changes nothing
-#   ./install --yes [--with=papers,printing,laptop]
+#   ./install --yes [--with=papers,printing,laptop,bluetooth]
 #                             no questions; optional parts only when named
 #
 # Safe to run again: every step checks first and only changes what is missing.

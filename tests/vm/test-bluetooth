@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Bluetooth test for Tinybar's pairing, connect, disconnect, forget and on/off, in a VM
+# with limde installed (tests/vm/test-install NAME --keep, or vm up NAME --installed).
+# The VM has no Bluetooth hardware, so it installs the optional `bluetooth` group and,
+# for the test only, BlueZ's emulator (btvirt, in bluez-test-tools), which makes two
+# virtual controllers that can see each other: the first is the computer's adapter,
+# the second plays a device. bluetooth-check then drives Tinybar's BluetoothControl.
+#   tests/vm/test-bluetooth [VM_NAME] [--keep]
+# --keep leaves the controllers running, with bluetooth-check --device answering the
+# device's side of pairing, for trying the menu by hand. Saves the output
+# under local/vm/results/<VM_NAME>/bluetooth.txt. Exit 0 = all passed.
+set -uo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+repo=$(cd "$here/../.." && pwd)
+vm=$here/vm
+name=${1:-itest}
+out=${LIMDE_VM_DIR:-$repo/local/vm}/results/$name
+mkdir -p "$out"
+on_vm() { "$vm" ssh "$name" "$@"; }
+
+on_vm 'test -f /usr/local/share/limde/tinybar/tinybar.py' \
+  || { echo "limde is not installed in $name; run tests/vm/test-install $name --keep" >&2; exit 2; }
+"$vm" copy "$name" "$here/bluetooth-check" /tmp/
+
+packages=$(sed -e 's/#.*//' "$repo/packages/optional/bluetooth.list" | xargs)
+on_vm "set -e
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+  $packages bluez-test-tools >/dev/null
+adapters() { busctl --system tree org.bluez 2>/dev/null | grep -c '/org/bluez/hci[0-9]*\$'; }
+pkill -f '^python3 -I /tmp/bluetooth-check' || true  # a --keep run's device side
+sudo pkill -x btvirt && for _ in \$(seq 20); do ((\$(adapters) == 0)) && break; sleep 0.5; done
+sudo modprobe hci_vhci
+sudo setsid btvirt -l2 >/tmp/btvirt.log 2>&1 </dev/null &
+for _ in \$(seq 40); do ((\$(adapters) == 2)) && break; sleep 0.5; done
+((\$(adapters) == 2))
+" || { echo "could not start the virtual Bluetooth controllers" >&2; exit 2; }
+
+# BlueZ lets any local user call it (its D-Bus policy), so unlike Wi-Fi this runs over
+# SSH. Tinybar stays the default agent's fallback; the check takes over while it runs.
+on_vm 'python3 -I /tmp/bluetooth-check "limde test device"; echo "exit $?"' 2>&1 \
+  | tee "$out/bluetooth.txt"
+rc=$(sed -n 's/^exit //p' "$out/bluetooth.txt"); rc=${rc:-1}
+
+if [[ ${2:-} == --keep ]]; then
+  on_vm 'setsid python3 -I /tmp/bluetooth-check "limde test device" --device \
+    >/tmp/bluetooth-device.log 2>&1 </dev/null &'
+else
+  on_vm 'sudo pkill -x btvirt' >/dev/null 2>&1 || true
+fi
+if ((rc == 0)); then echo "All Bluetooth checks passed"; else echo "Bluetooth checks failed"; fi
+exit "$rc"

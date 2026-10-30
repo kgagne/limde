@@ -11,6 +11,7 @@ group_title() { sed -n '1s/^#\s*//p' "$OPTIONAL_DIR/$1.list"; }
 suggested() {
   case $1 in
     laptop) compgen -G '/sys/class/backlight/*' >/dev/null ;;
+    bluetooth) compgen -G '/sys/class/bluetooth/*' >/dev/null ;;
     *) return 1 ;;
   esac
 }

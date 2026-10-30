@@ -1,15 +1,17 @@
 # Tinybar
 
 limDE's panel: open windows (with the agent-web window always leftmost), Wi-Fi,
-volume, brightness, battery, a power menu, notifications and the clock. Python with
-GTK 4 and gtk4-layer-shell, plus a small C helper (`toplevel-helper`) that lists
-windows through the wlr foreign-toplevel protocol.
+Bluetooth, volume, brightness, battery, a power menu, notifications and the clock.
+Python with GTK 4 and gtk4-layer-shell, plus a small C helper (`toplevel-helper`) that
+lists windows through the wlr foreign-toplevel protocol.
 
 - Icons come from the icon theme (limDE's), as SVG; no icon fonts.
 - Settings: `~/.config/tinybar/settings.toml`, optional. `first_app_id` picks the app
   that always sits leftmost (default `limde.AgentWeb`). `tailscale` controls the
   Tailscale button: `"auto"` (default) shows it when the `tailscale` command is
   installed, `false` hides it, `true` shows it even when it is missing.
+  `bluetooth` works the same way for the Bluetooth menu: `"auto"` shows it while BlueZ
+  runs with an adapter.
 - Wi-Fi: click the icon for the current and nearby networks. Click a network to join
   it: a saved or open one connects at once, one with a password opens a field under its
   row (a wrong password is said so, and never saved). Disconnect and Forget act on the
@@ -18,6 +20,17 @@ windows through the wlr foreign-toplevel protocol.
   kept the way NetworkManager keeps them by default: readable only by root, with the
   connection. NetworkManager's calls are in `WifiControl`; `tests/vm/test-wifi` runs
   them against simulated access points in a VM.
+- Bluetooth (with the optional `bluetooth` install group): click the Bluetooth icon
+  for paired devices, connected ones first; click one for Connect or Disconnect and
+  Forget. "Pair new device" searches while the menu stays open and lists nearby devices
+  by name; click one to pair, trust and connect it. When the device shows a number,
+  the menu asks "Does <device> show 123456?" under its row; for a keyboard it shows the
+  number to type on it. Devices that want a PIN typed on the computer are refused and
+  go through "Other device…", which opens `bluetoothctl` in foot. The switch powers the
+  adapter. Tinybar is BlueZ's pairing agent and follows BlueZ's D-Bus signals, so
+  nothing polls; the calls are in `BluetoothControl`, and `tests/vm/test-bluetooth`
+  runs them against BlueZ's virtual controllers in a VM. Only the first adapter is
+  shown.
 - Volume: click the speaker for a mute toggle, a slider (up to 100 %, like the keys)
   and the list of outputs; click an output to make it the default. Only the volume keys
   show the level overlay. Changes made elsewhere, such as another app or a new default

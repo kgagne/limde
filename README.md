@@ -118,12 +118,13 @@ and pick one. NetworkManager remembers it after that.
 
 | Group | Adds | Pick it when |
 | --- | --- | --- |
+| `bluetooth` | BlueZ, PipeWire's Bluetooth audio | you use Bluetooth headphones, speakers, keyboards or mice; the panel then shows a Bluetooth menu |
 | `laptop` | `brightnessctl` | the machine has a screen backlight; without it the brightness keys do nothing |
 | `papers` | GNOME Papers | you want a PDF and document viewer |
 | `printing` | CUPS, Avahi | you print, including to network printers |
 
-The interactive installer suggests `laptop` when it finds a backlight. For unattended
-installs, name the groups yourself:
+The interactive installer suggests `laptop` when it finds a backlight, and `bluetooth`
+when it finds a Bluetooth adapter. For unattended installs, name the groups yourself:
 
 ```
 ./install --yes --with=laptop,papers
@@ -251,6 +252,9 @@ or out of date, including the pinned source builds in `pins/`.
 - Tinybar joins WPA/WPA2/WPA3 networks with a password and open networks. Hidden
   networks and work (802.1X) logins still go through `nmtui` ("Other network…" in the
   Wi-Fi menu).
+- Tinybar's Bluetooth menu has been tested only against BlueZ's virtual controllers in a
+  VM, not real devices. Devices that want a PIN typed on the computer go through
+  `bluetoothctl` ("Other device…" in the Bluetooth menu).
 - On NVIDIA laptops, the desktop runs on the integrated GPU. The NVIDIA card is left to
   Ubuntu's open nouveau driver; limDE doesn't set up NVIDIA's driver.
 - The light theme doesn't change foot's terminal colours, which stay dark.

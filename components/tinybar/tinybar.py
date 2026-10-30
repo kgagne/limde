@@ -127,6 +127,10 @@ TAILSCALE_SAMPLE_SECONDS = 10
 # non-default setting be repeated, so the bare command is used.)
 TAILSCALE_UP_SECONDS = 15
 
+# Bluetooth menu beside Wi-Fi: "auto" (the default) shows it while BlueZ runs with an
+# adapter; false hides it; true shows it even without one.
+BLUETOOTH = load_settings().get("bluetooth", "auto")
+
 HISTORY_BUCKET_SECONDS = 300
 HISTORY_WINDOW_SECONDS = 3 * 60 * 60
 HISTORY_RETENTION_SECONDS = 7 * 24 * 60 * 60
@@ -193,6 +197,43 @@ OTHER_NETWORK_COMMAND = ["foot", "nmtui"]
 NM_TIMEOUT_MS = 1000
 
 NETWORK_LIST_HEIGHT = 320
+
+BLUEZ_NAME = "org.bluez"
+BLUEZ_ADAPTER = "org.bluez.Adapter1"
+BLUEZ_DEVICE = "org.bluez.Device1"
+BLUEZ_BATTERY = "org.bluez.Battery1"
+BLUEZ_AGENT_MANAGER = "org.bluez.AgentManager1"
+# Tinybar is the pairing agent. It can show a number and take a yes or no in the
+# popover, so its capability is DisplayYesNo; it never asks for a typed PIN.
+BLUEZ_AGENT_PATH = "/limde/tinybar/agent"
+BLUEZ_AGENT_XML = """<node><interface name="org.bluez.Agent1">
+<method name="Release"/><method name="Cancel"/>
+<method name="RequestPinCode"><arg type="o"/><arg type="s" direction="out"/></method>
+<method name="RequestPasskey"><arg type="o"/><arg type="u" direction="out"/></method>
+<method name="DisplayPinCode"><arg type="o"/><arg type="s"/></method>
+<method name="DisplayPasskey"><arg type="o"/><arg type="u"/><arg type="q"/></method>
+<method name="RequestConfirmation"><arg type="o"/><arg type="u"/></method>
+<method name="RequestAuthorization"><arg type="o"/></method>
+<method name="AuthorizeService"><arg type="o"/><arg type="s"/></method>
+</interface></node>"""
+# Pairing waits for the person to compare numbers or type one on a keyboard.
+BLUEZ_PAIR_TIMEOUT_MS = 90000
+BLUEZ_CONNECT_TIMEOUT_MS = 30000
+# Changes several times a second while searching, and nothing shows them.
+BLUEZ_QUIET = {"RSSI", "TxPower", "ManufacturerData", "ServiceData"}
+# BlueZ error names (org.bluez.Error.*) in words.
+BLUEZ_FAILURES = {
+    "AuthenticationFailed": "Pairing failed; try again",
+    "AuthenticationCanceled": "Pairing was cancelled",
+    "AuthenticationRejected": "Pairing was refused",
+    "AuthenticationTimeout": "The device did not answer in time",
+    "ConnectionAttemptFailed": "The device did not answer",
+    "InProgress": "Busy; try again in a moment",
+    "NotReady": "Bluetooth is off",
+    "ProfileUnavailable": "Nothing on this device to connect to",
+}
+# "Other device…": devices that want a PIN typed, and anything else bluetoothctl does.
+OTHER_DEVICE_COMMAND = ["foot", "bluetoothctl"]
 
 WPCTL = "/usr/bin/wpctl"
 # Reports every PipeWire change as JSON; from pipewire-bin, which pipewire needs.
@@ -2738,6 +2779,566 @@ class NetworkMenu(Gtk.MenuButton):
             self.close_form()
 
 
+def apply_bluez_signal(objects, member, path, args):
+    """Bring a GetManagedObjects tree ({path: {interface: {name: value}}}) up to date
+    with one InterfacesAdded, InterfacesRemoved or PropertiesChanged signal."""
+    if member == "InterfacesAdded":
+        for interface, values in args[1].items():
+            objects.setdefault(args[0], {}).setdefault(interface, {}).update(values)
+    elif member == "InterfacesRemoved":
+        for interface in args[1]:
+            objects.get(args[0], {}).pop(interface, None)
+        if not objects.get(args[0], True):
+            del objects[args[0]]
+    elif member == "PropertiesChanged" and args[0] in objects.get(path, {}):
+        objects[path][args[0]].update(args[1])
+        for name in args[2]:
+            objects[path][args[0]].pop(name, None)
+
+
+def bluetooth_adapter(objects):
+    """The first adapter's path, or None."""
+    return min((path for path, interfaces in objects.items() if BLUEZ_ADAPTER in interfaces),
+               default=None)
+
+
+def bluetooth_devices(objects, adapter):
+    """(paired, nearby) devices of an adapter: paired ones connected first, then by name;
+    nearby ones are unpaired devices that sent a name (an address means nothing to the
+    person), by name, so rows stay put while signal strengths change."""
+    paired, nearby = [], []
+    for path, interfaces in objects.items():
+        values = interfaces.get(BLUEZ_DEVICE)
+        if values is None or values.get("Adapter") != adapter:
+            continue
+        device = {
+            "path": path,
+            "name": values.get("Alias") or values.get("Address", ""),
+            "icon": values.get("Icon") or "bluetooth",
+            "paired": bool(values.get("Paired")),
+            "connected": bool(values.get("Connected")),
+            "battery": interfaces.get(BLUEZ_BATTERY, {}).get("Percentage"),
+        }
+        if device["paired"]:
+            paired.append(device)
+        elif values.get("Name"):
+            nearby.append(device)
+    paired.sort(key=lambda device: (not device["connected"], device["name"].casefold()))
+    nearby.sort(key=lambda device: device["name"].casefold())
+    return paired, nearby
+
+
+def bluetooth_view(adapter, paired):
+    """Panel icon and tooltip for an adapter's properties (None: no adapter)."""
+    if adapter is None:
+        return "bluetooth-slash", "Bluetooth: no adapter"
+    if not adapter.get("Powered"):
+        return "bluetooth-slash", "Bluetooth: off"
+    connected = [device["name"] for device in paired if device["connected"]]
+    if len(connected) == 1:
+        return "bluetooth", f"Bluetooth: connected to {connected[0]}"
+    if connected:
+        return "bluetooth", f"Bluetooth: {len(connected)} devices connected"
+    return "bluetooth", "Bluetooth: on"
+
+
+def bluetooth_detail(device):
+    detail = ["Connected" if device["connected"] else "Not connected"]
+    if device["battery"] is not None:
+        detail.append(f"{device['battery']}% battery")
+    return " · ".join(detail)
+
+
+def bluetooth_failure(error, fallback):
+    """Words for a failed BlueZ call, from its D-Bus error name."""
+    return BLUEZ_FAILURES.get((error or "").rsplit(".", 1)[-1], fallback)
+
+
+def pairing_prompt(kind, name, code=None):
+    """What the popover says when pairing needs the person: "confirm" a number the
+    device shows, "display" one to type on it, or "pin" (refused; bluetoothctl asks)."""
+    if isinstance(code, int):
+        code = f"{code:06d}"
+    if kind == "confirm":
+        return f"Does {name} show {code}?"
+    if kind == "display":
+        return f"Type {code} on {name}, then press Enter"
+    return f"{name} needs a PIN. Use Other device… below."
+
+
+class BluetoothControl:
+    """What the Bluetooth popover asks BlueZ to do, apart from any widgets, so the VM
+    test (tests/vm/bluetooth-check) can drive the same calls.
+
+    BlueZ's object tree is kept in self.objects from its ObjectManager and
+    PropertiesChanged signals, and on_change() runs after each change; nothing polls.
+    It is also the pairing agent: on_request(kind, device, code, answer) passes on what
+    pairing asks, kind being "confirm" (answer(True) if the device shows code),
+    "authorize" (pair without a number), "display" (code to type on the device) or
+    "pin" (a PIN to type here, already refused); answer is None for the last two.
+    Every action is asynchronous and ends with on_done(ok, message).
+    """
+
+    def __init__(self, bus, on_change, on_request):
+        self.bus = bus
+        self.on_change = on_change
+        self.on_request = on_request
+        self.objects = {}
+        agent = Gio.DBusNodeInfo.new_for_xml(BLUEZ_AGENT_XML).interfaces[0]
+        bus.register_object_with_closures2(BLUEZ_AGENT_PATH, agent, self.on_agent_call,
+                                           None, None)
+        for interface, member in (
+            ("org.freedesktop.DBus.ObjectManager", "InterfacesAdded"),
+            ("org.freedesktop.DBus.ObjectManager", "InterfacesRemoved"),
+            ("org.freedesktop.DBus.Properties", "PropertiesChanged"),
+        ):
+            bus.signal_subscribe(BLUEZ_NAME, interface, member, None, None,
+                                 Gio.DBusSignalFlags.NONE, self.on_signal)
+        # BlueZ starts with the first adapter (bluetooth.target) and may restart.
+        Gio.bus_watch_name_on_connection(bus, BLUEZ_NAME, Gio.BusNameWatcherFlags.NONE,
+                                         self.on_appeared, self.on_vanished)
+
+    def call(self, path, interface, method, parameters, on_reply, reply_type=None,
+             timeout=NM_ACTION_TIMEOUT_MS):
+        """Call a BlueZ method; on_reply(error name or None, result or None)."""
+
+        def finished(bus, result):
+            try:
+                value = bus.call_finish(result)
+            except GLib.Error as error:
+                print(f"tinybar: bluetooth {method}: {error.message}", flush=True)
+                on_reply(Gio.DBusError.get_remote_error(error) or error.message, None)
+                return
+            on_reply(None, value.unpack() if value is not None else None)
+
+        self.bus.call(
+            BLUEZ_NAME, path, interface, method, parameters,
+            GLib.VariantType.new(reply_type) if reply_type else None,
+            Gio.DBusCallFlags.NONE, timeout, None, finished
+        )
+
+    def on_appeared(self, _bus, _name, _owner):
+        self.call("/", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects", None,
+                  self.on_objects, "(a{oa{sa{sv}}})")
+        # BlueZ forgets the agent when it restarts; it handles calls in order.
+        self.call("/org/bluez", BLUEZ_AGENT_MANAGER, "RegisterAgent",
+                  GLib.Variant("(os)", (BLUEZ_AGENT_PATH, "DisplayYesNo")), lambda *_: None)
+        self.call("/org/bluez", BLUEZ_AGENT_MANAGER, "RequestDefaultAgent",
+                  GLib.Variant("(o)", (BLUEZ_AGENT_PATH,)), lambda *_: None)
+
+    def on_objects(self, _error, result):
+        self.objects = result[0] if result else {}
+        self.on_change()
+
+    def on_vanished(self, _bus, _name):
+        self.objects = {}
+        self.on_change()
+
+    def on_signal(self, _bus, _sender, path, _interface, member, parameters):
+        args = parameters.unpack()
+        apply_bluez_signal(self.objects, member, path, args)
+        if member != "PropertiesChanged" or args[2] or not set(args[1]) <= BLUEZ_QUIET:
+            self.on_change()
+
+    def on_agent_call(self, _bus, _sender, _path, _interface, method, parameters, invocation):
+        args = parameters.unpack()
+        answered = []
+
+        def answer(yes):
+            if not answered:  # once: the popover closing also says no
+                answered.append(yes)
+                if yes:
+                    invocation.return_value(None)
+                else:
+                    invocation.return_dbus_error("org.bluez.Error.Rejected", "Refused")
+
+        if method in ("RequestConfirmation", "RequestAuthorization"):
+            kind = "confirm" if method == "RequestConfirmation" else "authorize"
+            self.on_request(kind, args[0], args[1] if len(args) > 1 else None, answer)
+        elif method in ("DisplayPasskey", "DisplayPinCode"):
+            self.on_request("display", args[0], args[1], None)
+            invocation.return_value(None)
+        elif method in ("RequestPinCode", "RequestPasskey"):
+            answer(False)
+            self.on_request("pin", args[0], None, None)
+        elif method == "AuthorizeService":
+            # A paired device that is not trusted, connecting by itself.
+            device = self.objects.get(args[0], {}).get(BLUEZ_DEVICE, {})
+            answer(bool(device.get("Paired")))
+        else:  # Release, Cancel
+            invocation.return_value(None)
+
+    def done(self, on_done, fallback):
+        """An on_reply that ends an action with on_done(ok, words for the failure)."""
+        return lambda error, _result: on_done(not error,
+                                              error and bluetooth_failure(error, fallback))
+
+    def set_property(self, path, interface, name, value, on_reply):
+        self.call(path, "org.freedesktop.DBus.Properties", "Set",
+                  GLib.Variant("(ssv)", (interface, name, value)), on_reply)
+
+    def set_powered(self, adapter, powered, on_done):
+        self.set_property(adapter, BLUEZ_ADAPTER, "Powered", GLib.Variant("b", powered),
+                          self.done(on_done, "Could not switch Bluetooth"))
+
+    def search(self, adapter, on):
+        """Start or stop looking for nearby devices; BlueZ stops by itself if Tinybar
+        quits."""
+        self.call(adapter, BLUEZ_ADAPTER, "StartDiscovery" if on else "StopDiscovery", None,
+                  lambda *_: None)
+
+    def pair(self, device, on_done):
+        """Pair a nearby device, trust it (so it may reconnect by itself) and connect."""
+
+        def paired(error, _result):
+            if error and not error.endswith(".AlreadyExists"):
+                on_done(False, bluetooth_failure(error, "Could not pair"))
+                return
+            self.set_property(device, BLUEZ_DEVICE, "Trusted", GLib.Variant("b", True),
+                              lambda *_: self.connect(device, on_done))
+
+        self.call(device, BLUEZ_DEVICE, "Pair", None, paired, timeout=BLUEZ_PAIR_TIMEOUT_MS)
+
+    def connect(self, device, on_done):
+        self.call(device, BLUEZ_DEVICE, "Connect", None,
+                  self.done(on_done, "Could not connect"), timeout=BLUEZ_CONNECT_TIMEOUT_MS)
+
+    def disconnect(self, device, on_done):
+        self.call(device, BLUEZ_DEVICE, "Disconnect", None,
+                  self.done(on_done, "Could not disconnect"))
+
+    def forget(self, adapter, device, on_done):
+        self.call(adapter, BLUEZ_ADAPTER, "RemoveDevice", GLib.Variant("(o)", (device,)),
+                  self.done(on_done, "Could not forget it"))
+
+
+class BluetoothMenu(Gtk.MenuButton):
+    """Bluetooth glyph whose popover lists paired devices and pairs new ones.
+
+    The switch powers the adapter. Clicking a paired device opens Connect or Disconnect
+    and Forget under its row. "Pair new device" searches while the popover stays open
+    and lists nearby devices by name; clicking one pairs, trusts and connects it, and a
+    question such as "Does <device> show 123456?" comes up under its row. Devices that
+    want a PIN typed go through "Other device…", which opens bluetoothctl. BlueZ
+    reports every change over D-Bus (BluetoothControl), so nothing polls.
+    """
+
+    def __init__(self, library):
+        super().__init__()
+        self.library = library
+        self.control = None
+        self.adapter = None
+        self.refresh_source = None
+        self.searching = False
+        # The device whose row shows the form: {"device", "row", "answer", "pin"}.
+        self.target = None
+        self.busy = False
+        self.updating_switch = False
+
+        self.set_has_frame(False)
+        self.add_css_class("panel-menu")
+        self.set_visible(BLUETOOTH is True)
+        self.indicator = StatusIndicator(library, "bluetooth", show_value=False)
+        self.set_child(self.indicator)
+
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        header.add_css_class("network-header")
+        title = Gtk.Label(label="Bluetooth")
+        title.set_xalign(0)
+        title.set_hexpand(True)
+        title.add_css_class("notification-summary")
+        self.switch = clickable(Gtk.Switch())
+        self.switch.set_valign(Gtk.Align.CENTER)
+        self.switch.connect("state-set", self.on_switch_set)
+        header.append(title)
+        header.append(self.switch)
+
+        # "Off" or "No Bluetooth adapter", in place of the lists.
+        self.state_row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.heading = self.text_label("Devices", "panel-heading")
+        self.none = self.text_label("No paired devices", "notification-empty")
+        self.paired = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.pair_new = self.row_button(
+            panel_row(library, "plus", "Pair new device", "Searches while this menu is open"),
+            self.on_pair_new_clicked
+        )
+        self.nearby_heading = self.text_label("Nearby devices", "panel-heading")
+        self.searching_label = self.text_label("Searching…", "notification-empty")
+        self.nearby = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.scroller = Gtk.ScrolledWindow()
+        self.scroller.set_propagate_natural_height(True)
+        self.scroller.set_max_content_height(NETWORK_LIST_HEIGHT)
+        self.scroller.set_child(self.nearby)
+
+        self.other = self.row_button(
+            panel_row(library, "gear", "Other device…",
+                      "Devices that want a PIN, in bluetoothctl"),
+            self.on_other_clicked
+        )
+
+        # The form, moved under whichever row is being acted on.
+        self.form = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.form.add_css_class("network-form")
+        self.status = self.text_label("", "notification-body")
+        self.status.set_wrap(True)
+        self.buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.buttons.set_halign(Gtk.Align.END)
+        self.connect_button = self.action_button("Connect", self.on_connect_clicked)
+        self.forget_button = self.action_button("Forget", self.on_forget_clicked)
+        self.yes_button = self.action_button("Yes", self.on_answer, True)
+        self.no_button = self.action_button("No", self.on_answer, False)
+        self.form.append(self.status)
+        self.form.append(self.buttons)
+
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        content.add_css_class("notification-popover")
+        for widget in (header, self.state_row, self.heading, self.none, self.paired,
+                       self.pair_new, self.nearby_heading, self.searching_label,
+                       self.scroller, self.other):
+            content.append(widget)
+
+        popover = Gtk.Popover()
+        popover.set_child(content)
+        popover.connect("show", lambda _popover: self.refresh())
+        popover.connect("hide", self.on_popover_hidden)
+        self.set_popover(popover)
+        open_below_panel(self)
+
+    def text_label(self, text, css_class):
+        label = Gtk.Label(label=text)
+        label.set_xalign(0)
+        label.add_css_class(css_class)
+        return label
+
+    def action_button(self, label, handler, *args):
+        button = clickable(Gtk.Button(label=label))
+        button.add_css_class("network-action")
+        button.connect("clicked", handler, *args)
+        self.buttons.append(button)
+        return button
+
+    def row_button(self, child, handler, *args):
+        button = clickable(Gtk.Button())
+        button.set_has_frame(False)
+        button.add_css_class("network-row")
+        button.set_child(child)
+        button.connect("clicked", handler, *args)
+        return button
+
+    def setup(self):
+        try:
+            bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+            self.control = BluetoothControl(bus, self.on_change, self.on_request)
+        except GLib.Error as error:
+            print(f"tinybar: no Bluetooth: {error.message}", flush=True)
+        self.refresh()
+
+    def on_change(self):
+        # BlueZ sends bursts of changes; coalesce them.
+        if self.refresh_source is None:
+            self.refresh_source = GLib.timeout_add(100, self.refresh_after_event)
+
+    def refresh_after_event(self):
+        self.refresh_source = None
+        self.refresh()
+        return False
+
+    # ---------- panel ----------
+
+    def refresh(self):
+        objects = self.control.objects if self.control else {}
+        self.adapter = bluetooth_adapter(objects)
+        adapter = objects.get(self.adapter, {}).get(BLUEZ_ADAPTER)
+        paired, nearby = bluetooth_devices(objects, self.adapter)
+        self.set_visible(BLUETOOTH is True or adapter is not None)
+        icon, text = bluetooth_view(adapter, paired)
+        self.indicator.set_text(text, icon=icon)
+        if self.get_popover().get_visible():
+            self.rebuild(adapter, paired, nearby)
+
+    def rebuild(self, adapter, paired, nearby):
+        powered = bool(adapter and adapter.get("Powered"))
+        self.searching = self.searching and powered
+        if not powered:
+            self.close_form()  # BlueZ ends whatever it was doing for the form.
+
+        self.updating_switch = True
+        self.switch.set_active(powered)
+        self.switch.set_sensitive(adapter is not None)
+        self.updating_switch = False
+
+        clear_box(self.state_row)
+        if adapter is None:
+            detail = "No Bluetooth adapter"
+        elif adapter.get("PowerState") == "off-blocked":
+            detail = "Blocked by a wireless switch or rfkill"
+        else:
+            detail = "Off"
+        self.state_row.append(panel_row(self.library, "bluetooth-slash", "Bluetooth", detail))
+        self.state_row.set_visible(not powered)
+        for widget in (self.heading, self.other):
+            widget.set_visible(powered)
+        self.pair_new.set_visible(powered and not self.searching)
+        self.nearby_heading.set_visible(self.searching)
+
+        # Leave the lists alone while a device's form is open, so rows do not jump
+        # under the pointer.
+        if self.target is not None:
+            return
+
+        clear_box(self.paired)
+        clear_box(self.nearby)
+        for device in paired:
+            self.paired.append(self.device_button(device))
+        nearby = nearby if self.searching else []
+        for device in nearby:
+            self.nearby.append(self.device_button(device))
+        self.paired.set_visible(powered and bool(paired))
+        self.none.set_visible(powered and not paired)
+        # A short list goes without a scrollbar, whose minimum height would pad it out;
+        # one-line rows are 30 px with 4 between (docs/UI-RULES.md).
+        tall = len(nearby) * 34 > NETWORK_LIST_HEIGHT
+        self.scroller.set_policy(Gtk.PolicyType.NEVER,
+                                 Gtk.PolicyType.AUTOMATIC if tall else Gtk.PolicyType.NEVER)
+        self.scroller.set_visible(bool(nearby))
+        self.searching_label.set_visible(self.searching and not nearby)
+
+    def device_button(self, device):
+        glyph = device["icon"] if self.library.has(device["icon"]) else "bluetooth"
+        detail = bluetooth_detail(device) if device["paired"] else None
+        row = panel_row(self.library, glyph, device["name"], detail)
+        return self.row_button(row, self.on_device_clicked, device)
+
+    # ---------- devices ----------
+
+    def show_form(self, message=None, buttons=()):
+        """Show the form under the target's row: a message and some of its buttons."""
+        row = self.target["row"]
+        parent = self.form.get_parent()
+        if parent is not None:
+            parent.remove(self.form)
+        row.get_parent().insert_child_after(self.form, row)
+        self.status.set_label(message or "")
+        self.status.set_visible(bool(message))
+        self.buttons.set_visible(bool(buttons))
+        for button in self.buttons:
+            button.set_visible(button in buttons)
+
+    def close_form(self):
+        parent = self.form.get_parent()
+        if parent is not None:
+            parent.remove(self.form)
+        self.target = None
+
+    def on_device_clicked(self, row, device):
+        if self.busy:
+            return
+        if self.target is not None and self.target["device"]["path"] == device["path"]:
+            # A second click folds the form away; the rows stay put under the pointer.
+            self.close_form()
+            return
+        self.close_form()
+        self.target = {"device": device, "row": row, "answer": None, "pin": False}
+        if device["paired"]:
+            self.connect_button.set_label("Disconnect" if device["connected"] else "Connect")
+            self.show_form(None, (self.connect_button, self.forget_button))
+            return
+        self.busy = True
+        self.show_form(f"Pairing with {device['name']}…")
+        self.control.pair(device["path"], self.on_done)
+
+    def on_connect_clicked(self, _button):
+        if self.busy or self.target is None:
+            return
+        device = self.target["device"]
+        self.busy = True
+        if device["connected"]:
+            self.show_form("Disconnecting…")
+            self.control.disconnect(device["path"], self.on_done)
+        else:
+            self.show_form(f"Connecting to {device['name']}…")
+            self.control.connect(device["path"], self.on_done)
+
+    def on_forget_clicked(self, _button):
+        if self.busy or self.target is None:
+            return
+        self.busy = True
+        self.control.forget(self.adapter, self.target["device"]["path"], self.on_done)
+
+    def on_done(self, ok, message):
+        self.busy = False
+        if self.target is None:
+            return  # The popover closed; the panel glyph shows the outcome.
+        if ok:
+            self.close_form()
+            self.refresh()
+            return
+        device = self.target["device"]
+        if self.target["pin"]:
+            message = pairing_prompt("pin", device["name"])
+        buttons = (self.connect_button, self.forget_button) if device["paired"] else ()
+        self.show_form(message, buttons)
+
+    def on_request(self, kind, device, code, answer):
+        """A pairing question from BlueZ: shown under the row of the device being
+        paired here; refused for any other device."""
+        target = self.target
+        if target is None or target["device"]["path"] != device:
+            if answer:
+                answer(False)
+            return
+        if kind == "authorize":
+            answer(True)  # The person chose this device; there is nothing to compare.
+            return
+        if target["answer"]:
+            target["answer"](False)  # Superseded: BlueZ asks one thing at a time.
+        target["pin"] = kind == "pin"
+        target["answer"] = answer
+        buttons = (self.yes_button, self.no_button) if answer else ()
+        self.show_form(pairing_prompt(kind, target["device"]["name"], code), buttons)
+
+    def on_answer(self, _button, yes):
+        answer = self.target and self.target["answer"]
+        if answer:
+            self.target["answer"] = None
+            answer(yes)
+            self.show_form(f"Pairing with {self.target['device']['name']}…")
+
+    # ---------- switch and popover ----------
+
+    def on_switch_set(self, _switch, enabled):
+        if self.updating_switch or self.control is None or self.adapter is None:
+            return False
+        self.close_form()
+        self.control.set_powered(self.adapter, enabled, lambda _ok, _message: self.refresh())
+        return False
+
+    def on_pair_new_clicked(self, _button):
+        if self.control is None or self.adapter is None:
+            return
+        self.searching = True
+        self.control.search(self.adapter, True)
+        self.refresh()
+
+    def on_other_clicked(self, _button):
+        self.popdown()
+        try:
+            Gio.Subprocess.new(OTHER_DEVICE_COMMAND, Gio.SubprocessFlags.NONE)
+        except GLib.Error as error:
+            print(f"tinybar: could not open bluetoothctl: {error}", flush=True)
+
+    def on_popover_hidden(self, _popover):
+        if self.searching and self.adapter:
+            self.control.search(self.adapter, False)
+        self.searching = False
+        # A question nobody can answer now is a no; a pairing or connection already
+        # running carries on, and its result shows in the panel glyph.
+        if self.target and self.target["answer"]:
+            self.target["answer"](False)
+        self.close_form()
+        self.busy = False
+
+
 def with_alpha(color, alpha):
     faded = color.copy()
     faded.alpha = color.alpha * alpha
@@ -3653,6 +4254,7 @@ class TinyBar(Gtk.Application):
         self.cpu = StatusIndicator(self.icons, "cpu")
         self.memory = StatusIndicator(self.icons, "memory")
         self.wifi = NetworkMenu(self.icons)
+        self.bluetooth = BluetoothMenu(self.icons) if BLUETOOTH is not False else None
         self.tailscale = None
         if TAILSCALE is True or (TAILSCALE == "auto" and shutil.which("tailscale")):
             self.tailscale = TailscaleButton(self.icons)
@@ -3678,8 +4280,12 @@ class TinyBar(Gtk.Application):
         if self.tailscale:
             widgets.append(self.tailscale)
 
+        widgets.append(self.wifi)
+
+        if self.bluetooth:
+            widgets.append(self.bluetooth)
+
         widgets += [
-            self.wifi,
             self.brightness,
             self.volume,
             self.battery,
@@ -3741,6 +4347,9 @@ class TinyBar(Gtk.Application):
         self.volume.setup()
         self.setup_brightness_monitor()
         self.wifi.setup()
+
+        if self.bluetooth:
+            self.bluetooth.setup()
 
         self.setup_toplevel_helper()
         self.setup_idle_hide()

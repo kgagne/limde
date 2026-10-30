@@ -1,0 +1,3 @@
+# Bluetooth: headphones, speakers, keyboards and mice, from the panel.
+bluez                 # the Bluetooth service, and bluetoothctl for "Other device…"
+libspa-0.2-bluetooth  # sound through Bluetooth headphones and speakers (PipeWire)

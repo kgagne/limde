@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+"""Drive Tinybar's Bluetooth calls (BluetoothControl) against the two virtual
+controllers test-bluetooth sets up in the VM: the first is the computer's adapter and
+the second plays a device named argv[1] (with --device, it only plays the device and
+keeps running, for trying the menu by hand). Runs inside the VM against the installed Tinybar; its
+agent answers yes to every pairing question, for both sides. (The agent's refusals are
+tested on a private bus in components/tinybar/tests.) Prints PASS/FAIL lines; exit 0
+when all pass.
+"""
+import sys
+
+sys.path.insert(0, "/usr/local/share/limde/tinybar")
+
+import tinybar  # noqa: E402
+from gi.repository import Gio, GLib  # noqa: E402
+
+NAME = sys.argv[1]
+bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+asked = []
+fails = 0
+
+
+def on_request(kind, device, code, answer):
+    asked.append((kind, device, code))
+    if answer:
+        answer(True)
+
+
+control = tinybar.BluetoothControl(bus, lambda: None, on_request)
+
+
+def check(what, ok):
+    global fails
+    print(("PASS  " if ok else "FAIL  ") + what, flush=True)
+    fails += 0 if ok else 1
+
+
+def run(seconds, until=None, start=None):
+    """Run the main loop until until() is true or start(on_done) has ended; the result."""
+    loop, result = GLib.MainLoop(), []
+
+    def on_done(*args):
+        result.append(args)
+        loop.quit()
+
+    def poll():
+        if until and until():
+            result.append(True)
+            loop.quit()
+        return True
+
+    def give_up():
+        loop.quit()
+        return True
+
+    if start:
+        start(on_done)
+    sources = [GLib.timeout_add(200, poll), GLib.timeout_add_seconds(seconds, give_up)]
+    if not result:
+        loop.run()
+    for source in sources:
+        GLib.source_remove(source)
+    return result[0] if result else (None, "no answer")
+
+
+def device(name):
+    paired, nearby = tinybar.bluetooth_devices(control.objects, adapter)
+    return next((d for d in paired + nearby if d["name"] == name), None)
+
+
+def powered():
+    return control.objects.get(adapter, {}).get(tinybar.BLUEZ_ADAPTER, {}).get("Powered")
+
+
+def adapters():
+    return sorted(p for p, interfaces in control.objects.items()
+                  if tinybar.BLUEZ_ADAPTER in interfaces)
+
+
+def device_side(name, value):
+    control.set_property(adapters()[1], tinybar.BLUEZ_ADAPTER, name, value, lambda *_: None)
+
+
+def device_side_forgets():
+    """The device forgets the computer too, or its old key spoils the next pairing."""
+    for path, interfaces in list(control.objects.items()):
+        if interfaces.get(tinybar.BLUEZ_DEVICE, {}).get("Adapter") == adapters()[1]:
+            control.forget(adapters()[1], path, lambda *_: None)
+
+
+run(10, lambda: len(adapters()) == 2)
+DEVICE_ON = (("Powered", GLib.Variant("b", True)), ("Alias", GLib.Variant("s", NAME)),
+             ("Pairable", GLib.Variant("b", True)), ("DiscoverableTimeout", GLib.Variant("u", 0)),
+             ("Discoverable", GLib.Variant("b", True)))
+if sys.argv[2:] == ["--device"]:
+    # Only play the device, for trying the menu by hand: answer its side of pairing.
+    device_side_forgets()
+    for name, value in DEVICE_ON:
+        device_side(name, value)
+    GLib.MainLoop().run()
+
+adapter = tinybar.bluetooth_adapter(control.objects)
+check(f"two adapters; the first is the computer's (got {adapters()}, {adapter})",
+      len(adapters()) == 2 and adapter == adapters()[0])
+if fails:
+    sys.exit(1)
+
+ok, _ = run(10, start=lambda done: control.set_powered(adapter, False, done))
+check("Bluetooth switches off", ok is True and run(5, lambda: powered() is False) is True)
+ok, _ = run(10, start=lambda done: control.set_powered(adapter, True, done))
+check("Bluetooth switches back on", ok is True and run(5, lambda: powered() is True) is True)
+
+for name, value in DEVICE_ON:
+    device_side(name, value)
+control.search(adapter, True)
+found = run(30, lambda: device(NAME) is not None)
+check(f"the search lists {NAME} by name, unpaired", found is True and not device(NAME)["paired"])
+if fails:
+    sys.exit(1)
+
+path = device(NAME)["path"]
+ok, message = run(60, start=lambda done: control.pair(path, done))
+check(f"pairing asks to compare a number (asked {asked})", any(k == "confirm" for k, *_ in asked))
+check(f"pairing connects (got {ok}, {message})", ok is True)
+run(5, lambda: device(NAME)["connected"])
+values = control.objects.get(path, {}).get(tinybar.BLUEZ_DEVICE, {})
+check("the device is paired, trusted and connected",
+      values.get("Paired") and values.get("Trusted") and values.get("Connected"))
+control.search(adapter, False)
+
+ok, message = run(20, start=lambda done: control.disconnect(path, done))
+check(f"disconnect (got {ok}, {message})",
+      ok is True and run(10, lambda: not device(NAME)["connected"]) is True)
+ok, message = run(40, start=lambda done: control.connect(path, done))
+check(f"a paired device connects again (got {ok}, {message})",
+      ok is True and run(10, lambda: device(NAME)["connected"]) is True)
+check("the panel says what is connected",
+      tinybar.bluetooth_view(control.objects[adapter][tinybar.BLUEZ_ADAPTER],
+                             tinybar.bluetooth_devices(control.objects, adapter)[0])[1]
+      == f"Bluetooth: connected to {NAME}")
+
+ok, message = run(20, start=lambda done: control.forget(adapter, path, done))
+check(f"forget removes the device (got {ok}, {message})",
+      ok is True and run(10, lambda: path not in control.objects) is True)
+
+device_side_forgets()
+for name in ("Discoverable", "Pairable"):
+    device_side(name, GLib.Variant("b", False))
+run(1)
+sys.exit(1 if fails else 0)
