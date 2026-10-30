@@ -240,5 +240,54 @@ class IdleHideTests(unittest.TestCase):
         self.assertEqual([w["id"] for w in order], [5])
 
 
+class WifiJoinTests(unittest.TestCase):
+    def test_security_kinds(self):
+        security = tinybar.wifi_security
+        self.assertEqual(security(0, 0, 0), "open")
+        self.assertEqual(security(1, 0, 0), "wep")
+        self.assertEqual(security(1, 0, 0x100), "psk")
+        self.assertEqual(security(1, 0, 0x500), "psk")  # WPA2/WPA3 transition
+        self.assertEqual(security(1, 0, 0x400), "sae")
+        self.assertEqual(security(1, 0, 0x200), "enterprise")
+        self.assertEqual(security(0, 0, 0x800), "owe")
+
+    def test_settings_for_new_networks(self):
+        self.assertEqual(tinybar.wifi_settings("open"), {})
+        self.assertEqual(
+            tinybar.wifi_settings("psk", "hunter22"),
+            {"802-11-wireless-security": {"key-mgmt": "wpa-psk", "psk": "hunter22"}},
+        )
+        self.assertEqual(
+            tinybar.wifi_settings("sae", "x")["802-11-wireless-security"]["key-mgmt"], "sae"
+        )
+        self.assertIsNone(tinybar.wifi_settings("enterprise", "x"))
+        self.assertIsNone(tinybar.wifi_settings("wep", "x"))
+
+    def test_password_checks(self):
+        problem = tinybar.password_problem
+        self.assertEqual(problem("psk", ""), "Enter the password")
+        self.assertIsNotNone(problem("psk", "short"))
+        self.assertIsNone(problem("psk", "eight888"))
+        self.assertIsNone(problem("psk", "a" * 64))  # a raw 64-hex-digit key
+        self.assertIsNotNone(problem("psk", "g" * 64))
+        self.assertIsNone(problem("sae", "short"))
+
+    def test_failure_words(self):
+        self.assertEqual(tinybar.connect_failure(9), "Wrong password")
+        self.assertEqual(tinybar.connect_failure(10), "Wrong password")
+        self.assertEqual(tinybar.connect_failure(6), "The network did not answer")
+        self.assertEqual(tinybar.connect_failure(3), "Could not connect")
+        self.assertEqual(tinybar.device_failure(7), "Wrong password")
+        self.assertEqual(tinybar.device_failure(53), "The network is out of range")
+        self.assertEqual(tinybar.device_failure(8), "Could not connect")
+
+    def test_strongest_access_point_is_the_one_joined(self):
+        weak = dict(point("Home", 30, secured=True), path="/ap/1", security="psk")
+        strong = dict(point("Home", 70, secured=False), path="/ap/2", security="psk")
+        found = tinybar.visible_networks([weak, strong])
+        self.assertEqual(found[0]["path"], "/ap/2")
+        self.assertTrue(found[0]["secured"])
+
+
 if __name__ == "__main__":
     unittest.main()

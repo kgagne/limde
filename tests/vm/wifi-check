@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+"""Drive Tinybar's Wi-Fi calls (WifiControl) against the fake networks test-wifi sets
+up in the VM: limde-psk (WPA2, password in argv[1]) and limde-open. Runs as the
+session user inside the VM, against the installed Tinybar. Prints PASS/FAIL lines;
+exit 0 when all pass.
+"""
+import subprocess
+import sys
+
+sys.path.insert(0, "/usr/local/share/limde/tinybar")
+
+import tinybar  # noqa: E402
+from gi.repository import Gio, GLib  # noqa: E402
+
+PASSWORD = sys.argv[1]
+bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+control = tinybar.WifiControl(bus)
+fails = 0
+
+
+def check(what, ok):
+    global fails
+    print(("PASS  " if ok else "FAIL  ") + what, flush=True)
+    fails += 0 if ok else 1
+
+
+def wait(start, seconds=60):
+    """Run start(on_done) and the main loop until on_done fires; (ok, message)."""
+    loop = GLib.MainLoop()
+    result = []
+
+    def on_done(ok, message):
+        result.append((ok, message))
+        loop.quit()
+
+    def give_up():
+        loop.quit()
+        return GLib.SOURCE_REMOVE
+
+    start(on_done)
+    if not result:
+        source = GLib.timeout_add_seconds(seconds, give_up)
+        loop.run()
+        if result:
+            GLib.source_remove(source)
+    return result[0] if result else (None, "no answer")
+
+
+def get(path, interface, name):
+    return bus.call_sync(
+        tinybar.NM_NAME, path, "org.freedesktop.DBus.Properties", "Get",
+        GLib.Variant("(ss)", (interface, name)), GLib.VariantType.new("(v)"),
+        Gio.DBusCallFlags.NONE, 2000, None
+    ).unpack()[0]
+
+
+def client_device():
+    devices = bus.call_sync(
+        tinybar.NM_NAME, tinybar.NM_PATH, tinybar.NM_NAME, "GetDevices", None,
+        GLib.VariantType.new("(ao)"), Gio.DBusCallFlags.NONE, 2000, None
+    ).unpack()[0]
+    for path in devices:
+        if (get(path, tinybar.NM_DEVICE, "DeviceType") == tinybar.NM_DEVICE_TYPE_WIFI
+                and get(path, tinybar.NM_DEVICE, "Managed")):
+            return path
+    sys.exit("FAIL  no managed Wi-Fi device")
+
+
+def networks(device):
+    found = {}
+    for path in get(device, tinybar.NM_WIRELESS, "AccessPoints"):
+        try:
+            ssid = tinybar.decode_ssid(get(path, tinybar.NM_ACCESS_POINT, "Ssid"))
+            found[ssid] = (path, tinybar.wifi_security(
+                get(path, tinybar.NM_ACCESS_POINT, "Flags"),
+                get(path, tinybar.NM_ACCESS_POINT, "WpaFlags"),
+                get(path, tinybar.NM_ACCESS_POINT, "RsnFlags"),
+            ))
+        except GLib.Error:
+            pass
+    return found
+
+
+def connected_to(device):
+    if get(device, tinybar.NM_DEVICE, "State") != tinybar.NM_DEVICE_STATE_ACTIVATED:
+        return None
+    point = get(device, tinybar.NM_WIRELESS, "ActiveAccessPoint")
+    return tinybar.decode_ssid(get(point, tinybar.NM_ACCESS_POINT, "Ssid")) if point != "/" else None
+
+
+def on_disk(ssid):
+    """True if a saved connection file anywhere names ssid."""
+    return subprocess.run(
+        ["sudo", "grep", "-rqs", ssid, "/etc/netplan", "/etc/NetworkManager/system-connections"]
+    ).returncode == 0
+
+
+device = client_device()
+subprocess.run(["nmcli", "device", "wifi", "rescan"], capture_output=True)
+for _ in range(20):
+    seen = networks(device)
+    if "limde-psk" in seen and "limde-open" in seen:
+        break
+    GLib.usleep(1_000_000)
+check("both test networks are listed", "limde-psk" in seen and "limde-open" in seen)
+if fails:
+    sys.exit(1)
+psk_path, psk_security = seen["limde-psk"]
+open_path, open_security = seen["limde-open"]
+check(f"limde-psk is a password network (got {psk_security})", psk_security == "psk")
+check(f"limde-open is open (got {open_security})", open_security == "open")
+
+ok, message = wait(lambda done: control.connect(
+    device, psk_path, settings=tinybar.wifi_settings("psk", "wrong-password"), on_done=done))
+check(f"a wrong password fails as 'Wrong password' (got {ok}, {message})",
+      ok is False and message == "Wrong password")
+GLib.usleep(1_000_000)  # the in-memory profile's Delete is asynchronous
+check("a wrong password leaves no saved network", "limde-psk" not in control.saved_networks())
+check("a wrong password is never written to disk", not on_disk("limde-psk"))
+
+ok, message = wait(lambda done: control.connect(
+    device, psk_path, settings=tinybar.wifi_settings("psk", PASSWORD), on_done=done))
+check(f"the right password connects (got {ok}, {message})", ok is True)
+check("connected to limde-psk", connected_to(device) == "limde-psk")
+GLib.usleep(1_000_000)
+check("the network is saved", "limde-psk" in control.saved_networks())
+check("the saved network is on disk", on_disk("limde-psk"))
+
+ok, _ = wait(lambda done: control.disconnect(device, done))
+GLib.usleep(2_000_000)
+check("disconnect", ok is True and connected_to(device) is None)
+
+saved = control.saved_networks().get("limde-psk")
+if not saved:
+    check("a saved network to reconnect to", False)
+    sys.exit(1)
+ok, message = wait(lambda done: control.connect(device, psk_path, saved_path=saved, on_done=done))
+check(f"a saved network reconnects without the password (got {ok}, {message})",
+      ok is True and connected_to(device) == "limde-psk")
+
+ok, _ = wait(lambda done: control.forget(saved, done))
+GLib.usleep(2_000_000)
+check("forget removes the saved network",
+      ok is True and "limde-psk" not in control.saved_networks() and not on_disk("limde-psk"))
+check("forgetting the current network disconnects it", connected_to(device) is None)
+
+ok, message = wait(lambda done: control.connect(
+    device, open_path, settings=tinybar.wifi_settings("open"), on_done=done))
+check(f"an open network connects (got {ok}, {message})",
+      ok is True and connected_to(device) == "limde-open")
+saved = control.saved_networks().get("limde-open")
+if saved:
+    wait(lambda done: control.forget(saved, done))
+
+ok, _ = wait(lambda done: control.set_enabled(False, done))
+GLib.usleep(1_000_000)
+check("Wi-Fi switches off", ok is True and not get(tinybar.NM_PATH, tinybar.NM_NAME, "WirelessEnabled"))
+ok, _ = wait(lambda done: control.set_enabled(True, done))
+GLib.usleep(1_000_000)
+check("Wi-Fi switches back on", ok is True and get(tinybar.NM_PATH, tinybar.NM_NAME, "WirelessEnabled"))
+
+sys.exit(1 if fails else 0)

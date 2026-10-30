@@ -111,8 +111,8 @@ network connection. Choose no extra snaps or server roles in Ubuntu's installer.
 
 4. Log out and back in on tty1. labwc starts by itself; there is no display manager.
 
-Wi-Fi: if Ubuntu's installer didn't join a network, run `nmtui` in a terminal once.
-NetworkManager remembers it after that.
+Wi-Fi: if Ubuntu's installer didn't join a network, click the Wi-Fi icon in the panel
+and pick one. NetworkManager remembers it after that.
 
 ### Optional parts
 
@@ -242,7 +242,9 @@ or out of date, including the pinned source builds in `pins/`.
   `/etc/xdg/labwc/rc.xml` into `~/.config/labwc/rc.xml` and edit it there; your block
   replaces limDE's entirely. For libinput's default motion, use
   `<accelProfile>adaptive</accelProfile>` and remove the curve lines.
-- Tinybar's Wi-Fi list is display-only. Join networks with `nmtui`.
+- Tinybar joins WPA/WPA2/WPA3 networks with a password and open networks. Hidden
+  networks and work (802.1X) logins still go through `nmtui` ("Other network…" in the
+  Wi-Fi menu).
 - On NVIDIA laptops, the desktop runs on the integrated GPU. The NVIDIA card is left to
   Ubuntu's open nouveau driver; limDE doesn't set up NVIDIA's driver.
 - The light theme doesn't change foot's terminal colours, which stay dark.

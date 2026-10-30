@@ -236,6 +236,43 @@ popover > contents {
     color: ${colors_text};
 }
 
+/* Wi-Fi popover: the on/off header, network rows that join on click, the join form. */
+.network-header {
+    padding: 2px 4px 2px 8px;
+}
+
+.network-row {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: ${shape_control_radius}px;
+    background: transparent;
+    box-shadow: none;
+    transition: none;
+}
+
+.network-row:hover > .panel-row {
+    background: ${colors_hover};
+}
+
+.network-form {
+    padding: 4px 8px 6px;
+}
+
+.network-action {
+    min-height: 0;
+    padding: 3px 10px;
+    border: ${shape_border_width}px solid ${colors_border};
+    border-radius: ${shape_control_radius}px;
+    background: ${colors_background};
+    color: ${colors_text};
+    box-shadow: none;
+}
+
+.network-action:hover {
+    background: ${colors_hover};
+}
+
 /* The line, band, gridlines and labels are drawn in this colour at set opacities. */
 .power-graph {
     font-size: 11px;

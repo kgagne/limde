@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Wi-Fi test for Tinybar's join, disconnect, forget and on/off, in a VM with limde
+# installed (tests/vm/test-install NAME --keep first). It loads the kernel's simulated
+# Wi-Fi radios (mac80211_hwsim), runs two test access points with hostapd (installed in
+# the VM for the test only) and drives Tinybar's WifiControl through wifi-check.
+#   tests/vm/test-wifi [VM_NAME]
+# Saves the output under local/vm/results/<VM_NAME>/wifi.txt. Exit 0 = all passed.
+set -uo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+repo=$(cd "$here/../.." && pwd)
+vm=$here/vm
+name=${1:-itest}
+out=$repo/local/vm/results/$name
+mkdir -p "$out"
+vmd=$repo/local/vm/$name
+on_vm() { "$vm" ssh "$name" "$@"; }
+# Type plain text on the VM's keyboard: lowercase letters, digits, space, / . and -.
+type_text() {
+  local i c keys=()
+  for ((i = 0; i < ${#1}; i++)); do
+    c=${1:i:1}
+    case $c in ' ') c=spc ;; /) c=slash ;; .) c=dot ;; -) c=minus ;; esac
+    "$here/qmp.py" "$vmd/qmp.sock" send-key "{\"keys\": [{\"type\": \"qcode\", \"data\": \"$c\"}]}" >/dev/null
+  done
+}
+
+on_vm 'test -f /usr/local/share/limde/tinybar/tinybar.py' \
+  || { echo "limde is not installed in $name; run tests/vm/test-install $name --keep" >&2; exit 2; }
+"$vm" copy "$name" "$here/wifi-check" /tmp/
+
+password=correct-horse-battery
+on_vm "set -e
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq hostapd dnsmasq-base >/dev/null
+sudo pkill -x hostapd || true
+for f in /tmp/dnsmasq-wlan1.pid /tmp/dnsmasq-wlan2.pid; do [ -f \$f ] && sudo pkill -F \$f; done; true
+sudo modprobe -r mac80211_hwsim 2>/dev/null || true
+sudo modprobe mac80211_hwsim radios=3
+for _ in 1 2 3 4 5 6 7 8 9 10; do [ -e /sys/class/net/wlan2 ] && break; sleep 0.5; done
+sleep 2
+# wlan0 stays with NetworkManager as the client; wlan1 and wlan2 are the access points.
+for i in 1 2; do sudo nmcli device set wlan\$i managed no; done
+printf '%s\n' interface=wlan1 driver=nl80211 ssid=limde-psk hw_mode=g channel=1 \
+  wpa=2 wpa_key_mgmt=WPA-PSK rsn_pairwise=CCMP wpa_passphrase=$password > /tmp/ap-psk.conf
+printf '%s\n' interface=wlan2 driver=nl80211 ssid=limde-open hw_mode=g channel=6 > /tmp/ap-open.conf
+sudo hostapd -B /tmp/ap-psk.conf >/dev/null
+sudo hostapd -B /tmp/ap-open.conf >/dev/null
+# Each access point hands out addresses, as a router would.
+for i in 1 2; do
+  sudo ip addr add 10.99.\$i.1/24 dev wlan\$i
+  sudo dnsmasq --conf-file=/dev/null --interface=wlan\$i --bind-interfaces --port=0 \\
+    --dhcp-range=10.99.\$i.10,10.99.\$i.50,1h --pid-file=/tmp/dnsmasq-wlan\$i.pid
+done
+" || { echo "could not set up the test access points" >&2; exit 2; }
+
+# NetworkManager lets only the local desktop session control the network (polkit), as
+# it does Tinybar; an SSH login is refused. So the check runs in a terminal on the VM's
+# screen, opened and typed into through QMP like a person would.
+on_vm "rm -f /tmp/wifi.out; printf '%s\n' 'python3 -I /tmp/wifi-check $password >/tmp/wifi.out 2>&1; echo \"exit \$?\" >>/tmp/wifi.out; exit' >/tmp/w.sh"
+"$here/qmp.py" "$vmd/qmp.sock" send-key '{"keys": [{"type": "qcode", "data": "meta_l"}, {"type": "qcode", "data": "ret"}]}' >/dev/null
+sleep 3
+type_text "sh /tmp/w.sh"
+"$here/qmp.py" "$vmd/qmp.sock" send-key '{"keys": [{"type": "qcode", "data": "ret"}]}' >/dev/null
+for _ in $(seq 150); do on_vm 'grep -q "^exit " /tmp/wifi.out' 2>/dev/null && break; sleep 2; done
+on_vm 'cat /tmp/wifi.out' 2>&1 | tee "$out/wifi.txt"
+rc=$(sed -n 's/^exit //p' "$out/wifi.txt"); rc=${rc:-1}
+
+on_vm 'sudo pkill -x hostapd; sudo pkill -F /tmp/dnsmasq-wlan1.pid; sudo pkill -F /tmp/dnsmasq-wlan2.pid; sudo modprobe -r mac80211_hwsim' >/dev/null 2>&1 || true
+if ((rc == 0)); then echo "All Wi-Fi checks passed"; else echo "Wi-Fi checks failed"; fi
+exit "$rc"

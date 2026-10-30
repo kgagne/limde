@@ -152,6 +152,31 @@ NM_DEVICE_TYPE_ETHERNET = 1
 NM_DEVICE_TYPE_WIFI = 2
 NM_DEVICE_STATE_ACTIVATED = 100
 NM_AP_FLAGS_PRIVACY = 0x1
+# Key management bits of an access point's WpaFlags/RsnFlags (NM80211ApSecurityFlags).
+NM_AP_SEC_KEY_MGMT_PSK = 0x100
+NM_AP_SEC_KEY_MGMT_802_1X = 0x200
+NM_AP_SEC_KEY_MGMT_SAE = 0x400
+NM_AP_SEC_KEY_MGMT_OWE = 0x800
+NM_AP_SEC_KEY_MGMT_OWE_TM = 0x1000
+NM_AP_SEC_KEY_MGMT_EAP_SUITE_B_192 = 0x2000
+NM_SETTINGS = "org.freedesktop.NetworkManager.Settings"
+NM_SETTINGS_PATH = "/org/freedesktop/NetworkManager/Settings"
+NM_CONNECTION = "org.freedesktop.NetworkManager.Settings.Connection"
+NM_ACTIVE = "org.freedesktop.NetworkManager.Connection.Active"
+NM_ACTIVE_STATE_ACTIVATED = 2
+NM_ACTIVE_STATE_DEACTIVATED = 4
+NM_ACTIVE_REASON_CONNECT_TIMEOUT = 6
+NM_ACTIVE_REASON_NO_SECRETS = 9
+NM_ACTIVE_REASON_LOGIN_FAILED = 10
+NM_DEVICE_STATE_FAILED = 120
+# Device failure reasons (NMDeviceStateReason) that mean the password was not accepted.
+NM_DEVICE_REASON_NO_SECRETS = 7
+NM_DEVICE_REASON_SSID_NOT_FOUND = 53
+# Joining a network: NetworkManager's own attempt rarely runs past half a minute.
+NM_CONNECT_SECONDS = 45
+NM_ACTION_TIMEOUT_MS = 10000
+# "Other network…": hidden networks, enterprise logins and anything else nmtui handles.
+OTHER_NETWORK_COMMAND = ["foot", "nmtui"]
 NM_TIMEOUT_MS = 1000
 
 NETWORK_LIST_HEIGHT = 320
@@ -1326,13 +1351,306 @@ def visible_networks(access_points, current_ssid=None):
         known["secured"] = known["secured"] or point["secured"]
 
         if point["strength"] > known["strength"]:
-            known["strength"] = point["strength"]
-            known["frequency"] = point["frequency"]
+            secured = known["secured"]
+            known.update(point)
+            known["secured"] = secured
 
     return sorted(
         networks.values(),
         key=lambda network: (-network["strength"], network["ssid"].casefold())
     )
+
+
+def wifi_security(flags, wpa_flags, rsn_flags):
+    """How an access point is secured: "open", "owe" (encrypted, no password), "psk"
+    (WPA/WPA2 password, also WPA3 transition networks), "sae" (WPA3-only password),
+    "enterprise" (802.1X login) or "wep"."""
+
+    key_mgmt = wpa_flags | rsn_flags
+
+    if key_mgmt & (NM_AP_SEC_KEY_MGMT_802_1X | NM_AP_SEC_KEY_MGMT_EAP_SUITE_B_192):
+        return "enterprise"
+
+    if key_mgmt & NM_AP_SEC_KEY_MGMT_PSK:
+        return "psk"
+
+    if key_mgmt & NM_AP_SEC_KEY_MGMT_SAE:
+        return "sae"
+
+    if key_mgmt & (NM_AP_SEC_KEY_MGMT_OWE | NM_AP_SEC_KEY_MGMT_OWE_TM):
+        return "owe"
+
+    if flags & NM_AP_FLAGS_PRIVACY:
+        return "wep"
+
+    return "open"
+
+
+def needs_password(security):
+    return security in ("psk", "sae")
+
+
+def wifi_settings(security, password=None):
+    """Settings for a new connection to a network NetworkManager can see; it fills in
+    the rest from the access point. None when the panel cannot set this kind up."""
+
+    if security == "open":
+        return {}
+
+    if security == "owe":
+        return {"802-11-wireless-security": {"key-mgmt": "owe"}}
+
+    if security == "psk":
+        return {"802-11-wireless-security": {"key-mgmt": "wpa-psk", "psk": password}}
+
+    if security == "sae":
+        return {"802-11-wireless-security": {"key-mgmt": "sae", "psk": password}}
+
+    return None
+
+
+def password_problem(security, password):
+    """Why a password cannot be right before trying it, or None."""
+
+    if not password:
+        return "Enter the password"
+
+    if security == "psk" and len(password) < 8:
+        return "Wi-Fi passwords are at least 8 characters"
+
+    if security == "psk" and len(password) > 63 and not (
+        len(password) == 64 and all(c in "0123456789abcdefABCDEF" for c in password)
+    ):
+        return "Too long for a Wi-Fi password"
+
+    return None
+
+
+def connect_failure(reason):
+    """Words for why NetworkManager gave up on a connection (its state reason)."""
+
+    if reason in (NM_ACTIVE_REASON_NO_SECRETS, NM_ACTIVE_REASON_LOGIN_FAILED):
+        return "Wrong password"
+
+    if reason == NM_ACTIVE_REASON_CONNECT_TIMEOUT:
+        return "The network did not answer"
+
+    return "Could not connect"
+
+
+def device_failure(reason):
+    """Words for why the Wi-Fi device gave up joining (its state reason)."""
+
+    if reason == NM_DEVICE_REASON_NO_SECRETS:
+        return "Wrong password"
+
+    if reason == NM_DEVICE_REASON_SSID_NOT_FOUND:
+        return "The network is out of range"
+
+    return "Could not connect"
+
+
+def as_settings_variant(settings):
+    """{"group": {"key": str}} as NetworkManager's a{sa{sv}}."""
+
+    return {
+        group: {key: GLib.Variant("s", value) for key, value in values.items()}
+        for group, values in settings.items()
+    }
+
+
+def clear_box(box):
+    child = box.get_first_child()
+
+    while child is not None:
+        following = child.get_next_sibling()
+        box.remove(child)
+        child = following
+
+
+class WifiControl:
+    """What the Wi-Fi popover asks NetworkManager to do, apart from any widgets, so
+    the VM test (tests/vm/wifi-check) can drive the same calls.
+
+    Every change is asynchronous and ends with on_done(ok, message). A new network is
+    added in memory only and written to disk once it has connected, so a mistyped
+    password is never saved.
+    """
+
+    def __init__(self, bus):
+        self.bus = bus
+
+    def call(self, path, interface, method, parameters, reply_type, on_reply):
+        """Call a NetworkManager method; on_reply(result or None, error text or None)."""
+
+        def finished(bus, result):
+            try:
+                value = bus.call_finish(result)
+            except GLib.Error as error:
+                on_reply(None, error.message)
+                return
+            on_reply(value.unpack() if value is not None else None, None)
+
+        self.bus.call(
+            NM_NAME, path, interface, method, parameters,
+            GLib.VariantType.new(reply_type) if reply_type else None,
+            Gio.DBusCallFlags.NONE, NM_ACTION_TIMEOUT_MS, None, finished
+        )
+
+    def saved_networks(self):
+        """{ssid: connection path} for saved Wi-Fi connections. Blocking; quick, and
+        only run when the popover opens or after a change."""
+
+        paths = self.bus.call_sync(
+            NM_NAME, NM_SETTINGS_PATH, NM_SETTINGS, "ListConnections", None,
+            GLib.VariantType.new("(ao)"), Gio.DBusCallFlags.NONE, NM_TIMEOUT_MS, None
+        ).unpack()[0]
+
+        saved = {}
+
+        for path in paths:
+            try:
+                settings = self.bus.call_sync(
+                    NM_NAME, path, NM_CONNECTION, "GetSettings", None,
+                    GLib.VariantType.new("(a{sa{sv}})"), Gio.DBusCallFlags.NONE,
+                    NM_TIMEOUT_MS, None
+                ).unpack()[0]
+            except GLib.Error:
+                continue  # Removed between the two calls.
+
+            wireless = settings.get("802-11-wireless")
+
+            if settings.get("connection", {}).get("type") != "802-11-wireless" or not wireless:
+                continue
+
+            ssid = decode_ssid(wireless.get("ssid", b""))
+
+            if ssid:
+                saved.setdefault(ssid, path)
+
+        return saved
+
+    def connect(self, device, point_path, saved_path=None, settings=None,
+                replaces=None, on_done=None):
+        """Join a network: a saved connection (saved_path), or a new one from settings
+        (wifi_settings()). replaces is a saved connection to delete once the new one
+        works (the old password was wrong)."""
+
+        on_done = on_done or (lambda ok, message: None)
+
+        if settings is None:
+            self.call(
+                NM_PATH, NM_NAME, "ActivateConnection",
+                GLib.Variant("(ooo)", (saved_path, device, point_path or "/")),
+                "(o)",
+                lambda result, error: self.watch(
+                    device, result and result[0], None, None, error, on_done
+                )
+            )
+            return
+
+        self.call(
+            NM_PATH, NM_NAME, "AddAndActivateConnection2",
+            GLib.Variant("(a{sa{sv}}ooa{sv})", (
+                as_settings_variant(settings), device, point_path or "/",
+                {"persist": GLib.Variant("s", "memory")}
+            )),
+            "(ooa{sv})",
+            lambda result, error: self.watch(
+                device, result and result[1], result and result[0], replaces, error, on_done
+            )
+        )
+
+    def watch(self, device, active, added, replaces, error, on_done):
+        """Follow an activation to its end: connected, failed or timed out. The device
+        says why a join failed (a rejected password shows only there); the active
+        connection says when it has finished."""
+
+        if error or not active:
+            print(f"tinybar: joining failed: {error}", flush=True)
+            on_done(False, "Could not connect")
+            return
+
+        watch = {"done": False, "signals": [], "timeout": None}
+
+        def finish(ok, message):
+            if watch["done"]:
+                return
+            watch["done"] = True
+            for signal_id in watch["signals"]:
+                self.bus.signal_unsubscribe(signal_id)
+            if watch["timeout"]:
+                GLib.source_remove(watch["timeout"])
+
+            if ok and added:
+                self.call(added, NM_CONNECTION, "Save", None, None,
+                          lambda _result, _error: None)
+            if ok and replaces and replaces != added:
+                self.call(replaces, NM_CONNECTION, "Delete", None, None,
+                          lambda _result, _error: None)
+            if not ok and added:
+                self.call(added, NM_CONNECTION, "Delete", None, None,
+                          lambda _result, _error: None)
+
+            on_done(ok, message)
+
+        def on_state(_bus, _sender, _path, _interface, _signal, parameters):
+            state, reason = parameters.unpack()
+            if state == NM_ACTIVE_STATE_ACTIVATED:
+                finish(True, None)
+            elif state == NM_ACTIVE_STATE_DEACTIVATED:
+                finish(False, connect_failure(reason))
+
+        def on_device_state(_bus, _sender, _path, _interface, _signal, parameters):
+            new_state, _old_state, reason = parameters.unpack()
+            if new_state == NM_DEVICE_STATE_FAILED:
+                finish(False, device_failure(reason))
+
+        def on_timeout():
+            watch["timeout"] = None
+            self.call(NM_PATH, NM_NAME, "DeactivateConnection",
+                      GLib.Variant("(o)", (active,)), None,
+                      lambda _result, _error: None)
+            finish(False, "The network did not answer")
+            return GLib.SOURCE_REMOVE
+
+        watch["signals"] = [
+            self.bus.signal_subscribe(
+                NM_NAME, NM_ACTIVE, "StateChanged", active, None,
+                Gio.DBusSignalFlags.NONE, on_state
+            ),
+            self.bus.signal_subscribe(
+                NM_NAME, NM_DEVICE, "StateChanged", device, None,
+                Gio.DBusSignalFlags.NONE, on_device_state
+            ),
+        ]
+        watch["timeout"] = GLib.timeout_add_seconds(NM_CONNECT_SECONDS, on_timeout)
+
+        # It may have finished before the subscription started.
+        def on_current(result, error):
+            if error:
+                finish(False, "Could not connect")
+            elif result[0] == NM_ACTIVE_STATE_ACTIVATED:
+                finish(True, None)
+
+        self.call(active, "org.freedesktop.DBus.Properties", "Get",
+                  GLib.Variant("(ss)", (NM_ACTIVE, "State")), "(v)", on_current)
+
+    def disconnect(self, device, on_done):
+        self.call(device, NM_DEVICE, "Disconnect", None, None,
+                  lambda _result, error: on_done(not error, error and "Could not disconnect"))
+
+    def forget(self, connection, on_done):
+        self.call(connection, NM_CONNECTION, "Delete", None, None,
+                  lambda _result, error: on_done(not error, error and "Could not forget it"))
+
+    def set_enabled(self, enabled, on_done):
+        self.call(
+            NM_PATH, "org.freedesktop.DBus.Properties", "Set",
+            GLib.Variant("(ssv)", (NM_NAME, "WirelessEnabled", GLib.Variant("b", enabled))),
+            None,
+            lambda _result, error: on_done(not error, error and "Could not switch Wi-Fi")
+        )
 
 
 def on_mains_power():
@@ -1488,11 +1806,15 @@ class TailscaleButton(Gtk.Box):
 
 
 class NetworkMenu(Gtk.MenuButton):
-    """Wi-Fi glyph whose popover shows the current and nearby networks.
+    """Wi-Fi glyph whose popover shows the current and nearby networks and joins them.
 
-    Display only: rows do nothing when clicked. NetworkManager pushes property
-    changes over D-Bus, so nothing polls. Opening the popover asks for a fresh
-    scan, and the list updates when NetworkManager reports the new results.
+    Clicking a saved or open network connects at once; a network with a password opens
+    a password field under its row. The current network can be disconnected or
+    forgotten, and a switch turns Wi-Fi off. Networks the panel cannot set up (hidden,
+    enterprise logins, WEP) go through "Other network…", which opens nmtui.
+    NetworkManager pushes property changes over D-Bus, so nothing polls. Opening the
+    popover asks for a fresh scan, and the list updates when NetworkManager reports
+    the new results.
     """
 
     def __init__(self, library):
@@ -1500,10 +1822,17 @@ class NetworkMenu(Gtk.MenuButton):
 
         self.library = library
         self.bus = None
+        self.control = None
         self.signal_ids = []
         self.refresh_source = None
         self.active_access_point = None
         self.wireless_paths = []
+        self.state = None
+        self.saved = {}
+        # The network being joined: its row shows the form below it.
+        self.target = None
+        self.busy = False
+        self.updating_switch = False
 
         self.set_has_frame(False)
         self.add_css_class("panel-menu")
@@ -1517,14 +1846,44 @@ class NetworkMenu(Gtk.MenuButton):
 
         self.set_child(self.indicator)
 
+        header = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=8
+        )
+
+        header.add_css_class("network-header")
+
+        title = Gtk.Label(label="Wi-Fi")
+        title.set_xalign(0)
+        title.set_hexpand(True)
+        title.add_css_class("notification-summary")
+
+        self.switch = Gtk.Switch()
+        self.switch.set_valign(Gtk.Align.CENTER)
+        self.switch.connect("state-set", self.on_switch_set)
+
+        header.append(title)
+        header.append(self.switch)
+
         self.current = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
             spacing=4
         )
 
-        heading = Gtk.Label(label="Available networks")
-        heading.set_xalign(0)
-        heading.add_css_class("panel-heading")
+        self.actions = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=6
+        )
+
+        self.actions.set_halign(Gtk.Align.END)
+        self.disconnect_button = self.action_button("Disconnect", self.on_disconnect)
+        self.forget_button = self.action_button("Forget", self.on_forget)
+        self.actions.append(self.disconnect_button)
+        self.actions.append(self.forget_button)
+
+        self.heading = Gtk.Label(label="Available networks")
+        self.heading.set_xalign(0)
+        self.heading.add_css_class("panel-heading")
 
         self.available = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
@@ -1546,23 +1905,75 @@ class NetworkMenu(Gtk.MenuButton):
         self.none = Gtk.Label(label="No other networks found")
         self.none.add_css_class("notification-empty")
 
+        # The join form, moved under whichever row is being joined.
+        self.form = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=4
+        )
+
+        self.form.add_css_class("network-form")
+
+        entry_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=6
+        )
+
+        self.password = Gtk.PasswordEntry()
+        self.password.set_show_peek_icon(True)
+        self.password.set_hexpand(True)
+        self.password.set_property("placeholder-text", "Password")
+        self.password.connect("activate", self.on_join_clicked)
+
+        self.join_button = self.action_button("Connect", self.on_join_clicked)
+
+        entry_row.append(self.password)
+        entry_row.append(self.join_button)
+        self.entry_row = entry_row
+
+        self.status = Gtk.Label()
+        self.status.set_xalign(0)
+        self.status.set_wrap(True)
+        self.status.add_css_class("notification-body")
+
+        self.form.append(entry_row)
+        self.form.append(self.status)
+
+        other = Gtk.Button()
+        other.set_has_frame(False)
+        other.add_css_class("network-row")
+        other.set_child(
+            panel_row(library, "gear", "Other network…", "Hidden or work networks, in nmtui")
+        )
+        other.connect("clicked", self.on_other_clicked)
+        self.other = other
+
         content = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
             spacing=6
         )
 
         content.add_css_class("notification-popover")
+        content.append(header)
         content.append(self.current)
-        content.append(heading)
+        content.append(self.actions)
+        content.append(self.heading)
         content.append(self.none)
         content.append(scroller)
+        content.append(other)
 
         popover = Gtk.Popover()
         popover.set_child(content)
         popover.connect("show", self.on_popover_shown)
+        popover.connect("hide", self.on_popover_hidden)
 
         self.set_popover(popover)
         open_below_panel(self)
+
+    def action_button(self, label, handler):
+        button = Gtk.Button(label=label)
+        button.add_css_class("network-action")
+        button.connect("clicked", handler)
+        return button
 
     # ---------- NetworkManager ----------
 
@@ -1576,6 +1987,8 @@ class NetworkMenu(Gtk.MenuButton):
         except GLib.Error:
             self.indicator.set_text("WIFI ?")
             return
+
+        self.control = WifiControl(self.bus)
 
         # Access points report strength changes; those matter only for the
         # connected one, or while the list is open (filtered in on_signal).
@@ -1639,16 +2052,19 @@ class NetworkMenu(Gtk.MenuButton):
 
     def access_point(self, path):
         values = self.properties(path, NM_ACCESS_POINT)
+        security = wifi_security(
+            values.get("Flags", 0),
+            values.get("WpaFlags", 0),
+            values.get("RsnFlags", 0)
+        )
 
         return {
+            "path": path,
             "ssid": decode_ssid(values.get("Ssid", b"")),
             "strength": int(values.get("Strength", 0)),
             "frequency": int(values.get("Frequency", 0)),
-            "secured": bool(
-                values.get("Flags", 0) & NM_AP_FLAGS_PRIVACY
-                or values.get("WpaFlags", 0)
-                or values.get("RsnFlags", 0)
-            ),
+            "security": security,
+            "secured": security not in ("open", "owe"),
         }
 
     def address(self, device):
@@ -1682,8 +2098,12 @@ class NetworkMenu(Gtk.MenuButton):
             None
         ).unpack()[0]
 
+        manager = self.properties(NM_PATH, NM_NAME)
+
         state = {
-            "wifi_device": False,
+            "enabled": bool(manager.get("WirelessEnabled", True)),
+            "hardware_enabled": bool(manager.get("WirelessHardwareEnabled", True)),
+            "wifi_device": None,
             "wifi": None,
             "wifi_connected": False,
             "wired": None,
@@ -1705,12 +2125,15 @@ class NetworkMenu(Gtk.MenuButton):
             if kind != NM_DEVICE_TYPE_WIFI:
                 continue
 
-            state["wifi_device"] = True
+            if state["wifi_device"] is None:
+                state["wifi_device"] = path
+
             wireless_paths.append(path)
             wireless = self.properties(path, NM_WIRELESS)
 
             if activated and state["wifi"] is None:
                 state["wifi_connected"] = True
+                state["wifi_device"] = path
                 point_path = wireless.get("ActiveAccessPoint", "/")
 
                 if point_path != "/":
@@ -1730,10 +2153,13 @@ class NetworkMenu(Gtk.MenuButton):
 
             for point_path in wireless.get("AccessPoints", []):
                 try:
-                    state["nearby"].append(self.access_point(point_path))
+                    point = self.access_point(point_path)
 
                 except GLib.Error:
-                    pass  # Access points come and go with every scan.
+                    continue  # Access points come and go with every scan.
+
+                point["device"] = path
+                state["nearby"].append(point)
 
         self.wireless_paths = wireless_paths
         self.active_access_point = active_access_point
@@ -1762,6 +2188,13 @@ class NetworkMenu(Gtk.MenuButton):
         except GLib.Error:
             pass  # Refused while a scan is running or too recent; the list stays current.
 
+    def read_saved(self):
+        try:
+            self.saved = self.control.saved_networks()
+
+        except GLib.Error:
+            self.saved = {}
+
     # ---------- panel ----------
 
     def refresh(self):
@@ -1777,6 +2210,7 @@ class NetworkMenu(Gtk.MenuButton):
             self.indicator.set_text("WIFI ?")
             return
 
+        self.state = state
         wifi = state["wifi"]
 
         if wifi and wifi["ssid"]:
@@ -1799,13 +2233,12 @@ class NetworkMenu(Gtk.MenuButton):
             self.rebuild(state)
 
     def rebuild(self, state):
-        for box in (self.current, self.available):
-            child = box.get_first_child()
+        clear_box(self.current)
 
-            while child is not None:
-                following = child.get_next_sibling()
-                box.remove(child)
-                child = following
+        self.updating_switch = True
+        self.switch.set_active(state["enabled"])
+        self.switch.set_sensitive(state["hardware_enabled"] and state["wifi_device"] is not None)
+        self.updating_switch = False
 
         wifi = state["wifi"]
 
@@ -1834,14 +2267,24 @@ class NetworkMenu(Gtk.MenuButton):
                 panel_row(self.library, "wifi", "Wi-Fi", "Connected")
             )
 
-        elif state["wifi_device"]:
+        elif not state["wifi_device"]:
             self.current.append(
-                panel_row(self.library, "wifi-slash", "Wi-Fi", "Not connected")
+                panel_row(self.library, "wifi-slash", "Wi-Fi", "No Wi-Fi device")
+            )
+
+        elif not state["hardware_enabled"]:
+            self.current.append(
+                panel_row(self.library, "wifi-slash", "Wi-Fi", "Off by the hardware switch")
+            )
+
+        elif not state["enabled"]:
+            self.current.append(
+                panel_row(self.library, "wifi-slash", "Wi-Fi", "Off")
             )
 
         else:
             self.current.append(
-                panel_row(self.library, "wifi-slash", "Wi-Fi", "No Wi-Fi device")
+                panel_row(self.library, "wifi-slash", "Wi-Fi", "Not connected")
             )
 
         if state["wired"]:
@@ -1854,34 +2297,244 @@ class NetworkMenu(Gtk.MenuButton):
                 panel_row(self.library, "network-wired", "Wired", detail)
             )
 
+        self.actions.set_visible(state["wifi_connected"])
+        self.forget_button.set_visible(bool(wifi and wifi["ssid"] in self.saved))
+        self.disconnect_button.set_sensitive(not self.busy)
+        self.forget_button.set_sensitive(not self.busy)
+
+        listing = state["enabled"] and state["wifi_device"] is not None
+        self.heading.set_visible(listing)
+        self.other.set_visible(listing)
+
+        # Leave the list alone while a password is typed or a join runs, so rows do
+        # not jump under the pointer or take the field away.
+        if self.target is not None:
+            return
+
+        clear_box(self.available)
+
         networks = visible_networks(
             state["nearby"],
             wifi["ssid"] if wifi else None
-        )
+        ) if listing else []
 
         for network in networks:
-            detail = [f"{network['strength']}%"]
-            band = describe_frequency(network["frequency"])
+            self.available.append(self.network_button(network))
 
-            if band:
-                detail.append(band)
-
-            self.available.append(
-                panel_row(
-                    self.library,
-                    signal_glyph(network["strength"]),
-                    network["ssid"],
-                    " · ".join(detail),
-                    "lock" if network["secured"] else None
-                )
-            )
-
-        self.none.set_visible(not networks)
+        self.none.set_visible(listing and not networks)
         self.scroller.set_visible(bool(networks))
 
+    def network_button(self, network):
+        detail = [f"{network['strength']}%"]
+        band = describe_frequency(network["frequency"])
+
+        if band:
+            detail.append(band)
+
+        if network["ssid"] in self.saved:
+            detail.append("Saved")
+
+        button = Gtk.Button()
+        button.set_has_frame(False)
+        button.add_css_class("network-row")
+        button.set_child(
+            panel_row(
+                self.library,
+                signal_glyph(network["strength"]),
+                network["ssid"],
+                " · ".join(detail),
+                "lock" if network["secured"] else None
+            )
+        )
+        button.connect("clicked", self.on_network_clicked, network)
+        return button
+
+    # ---------- joining ----------
+
+    def show_form(self, row, asking, message=None):
+        """Show the form under row: the password field if asking, and a message."""
+
+        parent = self.form.get_parent()
+
+        if parent is not None:
+            parent.remove(self.form)
+
+        self.available.insert_child_after(self.form, row)
+        self.entry_row.set_visible(asking)
+        self.status.set_label(message or "")
+        self.status.set_visible(bool(message))
+        self.password.set_sensitive(not self.busy)
+        self.join_button.set_sensitive(not self.busy)
+
+        if asking and not self.busy:
+            self.password.grab_focus()
+
+    def close_form(self):
+        parent = self.form.get_parent()
+
+        if parent is not None:
+            # Let the field lose focus before it goes, or GTK warns of a lost focus-out.
+            root = self.form.get_root()
+
+            if root is not None and self.password.get_focus_child() is not None:
+                root.set_focus(None)
+
+            parent.remove(self.form)
+
+        self.password.set_text("")
+        self.target = None
+
+    def on_network_clicked(self, row, network):
+        if self.busy:
+            return
+
+        if self.target is not None and self.target["network"]["ssid"] == network["ssid"]:
+            # A second click folds the form away; the rows stay put under the pointer.
+            self.close_form()
+            return
+
+        self.close_form()
+        self.target = {"network": network, "row": row, "replaces": None}
+        saved = self.saved.get(network["ssid"])
+
+        if saved:
+            self.join(saved_path=saved)
+
+        elif wifi_settings(network["security"], "") is None:
+            self.show_form(row, False, "This network needs Other network… below.")
+
+        elif needs_password(network["security"]):
+            self.show_form(row, True)
+
+        else:
+            self.join(settings=wifi_settings(network["security"]))
+
+    def on_join_clicked(self, _widget):
+        if self.busy or self.target is None:
+            return
+
+        network = self.target["network"]
+        password = self.password.get_text()
+        problem = password_problem(network["security"], password)
+
+        if problem:
+            self.show_form(self.target["row"], True, problem)
+            return
+
+        self.join(settings=wifi_settings(network["security"], password))
+
+    def join(self, saved_path=None, settings=None):
+        network = self.target["network"]
+        self.busy = True
+        self.show_form(
+            self.target["row"],
+            settings is not None and needs_password(network["security"]),
+            f"Connecting to {network['ssid']}…"
+        )
+
+        self.control.connect(
+            network.get("device") or self.state["wifi_device"],
+            network["path"],
+            saved_path=saved_path,
+            settings=settings,
+            replaces=self.target["replaces"],
+            on_done=lambda ok, message: self.on_joined(ok, message, saved_path)
+        )
+
+    def on_joined(self, ok, message, saved_path):
+        self.busy = False
+
+        if self.target is None:
+            return
+
+        if ok:
+            self.close_form()
+            self.read_saved()
+            self.refresh()
+            return
+
+        network = self.target["network"]
+
+        if saved_path and message == "Wrong password":
+            # The saved password no longer works: ask, and replace it once it does.
+            self.target["replaces"] = saved_path
+            message = "The saved password did not work. Enter the new one."
+
+        # A saved network that failed for another reason (out of range) asks for nothing.
+        asking = needs_password(network["security"]) and (
+            saved_path is None or self.target["replaces"] is not None
+        )
+
+        self.show_form(self.target["row"], asking, message)
+
+    # ---------- current network and switch ----------
+
+    def on_disconnect(self, _button):
+        if self.busy or not self.state or not self.state["wifi_device"]:
+            return
+
+        self.busy = True
+        self.control.disconnect(self.state["wifi_device"], self.on_action_done)
+
+    def on_forget(self, _button):
+        wifi = self.state and self.state["wifi"]
+        connection = wifi and self.saved.get(wifi["ssid"])
+
+        if self.busy or not connection:
+            return
+
+        self.busy = True
+        self.control.forget(connection, self.on_action_done)
+
+    def on_action_done(self, ok, message):
+        self.busy = False
+
+        if not ok:
+            print(f"tinybar: {message}", flush=True)
+
+        self.read_saved()
+        self.refresh()
+
+    def on_switch_set(self, _switch, enabled):
+        if self.updating_switch or self.control is None:
+            return False
+
+        self.close_form()
+        self.control.set_enabled(enabled, self.on_action_done)
+        return False
+
+    def on_other_clicked(self, _button):
+        self.popdown()
+
+        try:
+            Gio.Subprocess.new(OTHER_NETWORK_COMMAND, Gio.SubprocessFlags.NONE)
+        except GLib.Error as error:
+            print(f"tinybar: could not open nmtui: {error}", flush=True)
+
+    # ---------- popover ----------
+
     def on_popover_shown(self, _popover):
+        # The password field needs the keyboard; the panel takes it only while open.
+        Gtk4LayerShell.set_keyboard_mode(
+            self.get_root(),
+            Gtk4LayerShell.KeyboardMode.ON_DEMAND
+        )
+
+        if self.control is not None:
+            self.read_saved()
+
         self.refresh()
         self.request_scan()
+
+    def on_popover_hidden(self, _popover):
+        Gtk4LayerShell.set_keyboard_mode(
+            self.get_root(),
+            Gtk4LayerShell.KeyboardMode.NONE
+        )
+
+        # A join in progress carries on and its result shows in the panel glyph.
+        self.close_form()
+        self.busy = False
 
 
 def with_alpha(color, alpha):

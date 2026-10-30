@@ -12,6 +12,8 @@ KVM access and `qemu-system-x86 qemu-utils ovmf`, and never needs root. Run
   clean. SSH is forwarded to a free loopback port.
 - `vm shot NAME FILE.png` captures the guest screen through QMP (`qmp.py`). It works
   for the text console and for labwc.
+- `vm click NAME X Y` clicks at a screen position through a virtual tablet, for
+  pressing panel buttons; keys go through QMP `send-key`.
 
 - `vm view NAME` opens the VM's screen in a window through QEMU's built-in VNC server,
   which listens on the loopback interface only (`127.0.0.1`, display 10 and up). Nothing
@@ -30,6 +32,16 @@ Observed on the first build (2026-10-24):
   The EGL device-query errors in its log are expected without GPU acceleration.
 - The CD-ROM I/O errors during the installer's power-off are harmless: the media is
   ejected after the install has finished.
+
+## Wi-Fi
+
+`test-wifi NAME` runs in a VM where limDE is installed (`test-install NAME --keep`). The
+VM has no Wi-Fi hardware, so it loads the kernel's simulated radios (`mac80211_hwsim`),
+installs `hostapd` (for the test only) and runs two access points, `limde-psk` (WPA2)
+and `limde-open`. `wifi-check` then drives Tinybar's `WifiControl`, the same calls the
+Wi-Fi menu makes: a wrong password fails as such and is never written to disk; the
+right one connects and is saved; disconnect; a saved network reconnects; forget; an
+open network; Wi-Fi off and on.
 
 ## Release acceptance
 

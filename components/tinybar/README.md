@@ -10,6 +10,14 @@ the wlr foreign-toplevel protocol.
   that always sits leftmost (default `limde.AgentWeb`). `tailscale` controls the
   Tailscale button: `"auto"` (default) shows it when the `tailscale` command is
   installed, `false` hides it, `true` shows it even when it is missing.
+- Wi-Fi: click the icon for the current and nearby networks. Click a network to join
+  it: a saved or open one connects at once, one with a password opens a field under its
+  row (a wrong password is said so, and never saved). Disconnect and Forget act on the
+  current network; the switch turns Wi-Fi off. Hidden networks and work (802.1X)
+  logins go through "Other network…", which opens `nmtui` in foot. Saved passwords are
+  kept the way NetworkManager keeps them by default: readable only by root, with the
+  connection. NetworkManager's calls are in `WifiControl`; `tests/vm/test-wifi` runs
+  them against simulated access points in a VM.
 - Tailscale (optional, not installed by limDE): a button left of Wi-Fi turns Tailscale
   on and off with `tailscale up` and `tailscale down`. Tailscale's logo means connected;
   all nine dots greyed with a slash means off or not ready (Tailscale's own tray greys

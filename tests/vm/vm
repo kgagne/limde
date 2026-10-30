@@ -7,6 +7,7 @@
 #   tests/vm/vm ssh NAME [CMD]   run a command (or a shell) in it as `tester`
 #   tests/vm/vm copy NAME SRC... DEST   rsync files into it (DEST is a guest path)
 #   tests/vm/vm shot NAME FILE   save a PNG of its screen
+#   tests/vm/vm click NAME X Y   left-click at screen pixel X,Y (virtual tablet)
 #   tests/vm/vm down NAME        power it off (forced after 60 s)
 #   tests/vm/vm rm NAME          delete its overlay
 #   tests/vm/vm list             show VMs and whether they run
@@ -55,6 +56,7 @@ qemu_common() {  # $1: disk, $2: vars file, $3: qmp socket
     -drive "if=pflash,format=raw,file=$2" \
     -drive "if=virtio,format=qcow2,file=$1" \
     -device "virtio-vga${res:+,xres=${res%x*},yres=${res#*x}}" -display none \
+    -device virtio-tablet-pci \
     -qmp "unix:$3,server=on,wait=off"
 }
 
@@ -170,6 +172,20 @@ cmd_shot() {
   echo "$out"
 }
 
+cmd_click() {  # absolute pointer, so a test can press a panel button by its position
+  name_ok "${1:-}"; running "$1" || die "$1 is not running"
+  [[ ${2:-} =~ ^[0-9]+$ && ${3:-} =~ ^[0-9]+$ ]] || die "usage: click NAME X Y (screen pixels)"
+  local sock size w h; sock="$(vmdir "$1")/qmp.sock"
+  size=${LIMDE_VM_RES:-1280x800}; w=${size%x*}; h=${size#*x}
+  local x=$(( $2 * 32767 / (w - 1) )) y=$(( $3 * 32767 / (h - 1) ))
+  "$here/qmp.py" "$sock" input-send-event "{\"events\": [{\"type\": \"abs\", \"data\": {\"axis\": \"x\", \"value\": $x}}, {\"type\": \"abs\", \"data\": {\"axis\": \"y\", \"value\": $y}}]}" >/dev/null
+  sleep 0.1
+  for down in true false; do
+    "$here/qmp.py" "$sock" input-send-event "{\"events\": [{\"type\": \"btn\", \"data\": {\"button\": \"left\", \"down\": $down}}]}" >/dev/null
+    sleep 0.05
+  done
+}
+
 cmd_down() {
   name_ok "${1:-}"; running "$1" || { echo "$1 is not running"; return; }
   local d; d=$(vmdir "$1")
@@ -226,6 +242,6 @@ cmd_clean() {
 
 sub=${1:-}; shift || true
 case $sub in
-  base|up|ssh|copy|shot|down|rm|list|view|du|clean) "cmd_$sub" "$@" ;;
-  *) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  base|up|ssh|copy|shot|click|down|rm|list|view|du|clean) "cmd_$sub" "$@" ;;
+  *) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
