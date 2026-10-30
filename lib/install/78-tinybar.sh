@@ -22,6 +22,9 @@ step_tinybar() {
 
   local same=1
   diff -rq "$stage/share" "$TINYBAR_SHARE" >/dev/null 2>&1 || same=0
+  # Root's, so the session cannot change the panel's code (or leave a __pycache__
+  # that reads as a change on every update); older installs were the user's.
+  [[ -z $(find "$TINYBAR_SHARE" \( ! -user root -o ! -perm -o+r \) -print -quit 2>/dev/null) ]] || same=0
   for cmd in tinybar tinybar-volume tinybar-brightness tinybar-idle; do
     cmp -s "$stage/bin/$cmd" "/usr/local/bin/$cmd" || same=0
   done
@@ -31,6 +34,8 @@ step_tinybar() {
     sudo rm -rf "$TINYBAR_SHARE"
     sudo install -d "$TINYBAR_SHARE"
     sudo cp -a "$stage/share/." "$TINYBAR_SHARE/"
+    sudo chown -R root:root "$TINYBAR_SHARE"
+    sudo chmod -R u+rwX,go+rX,go-w "$TINYBAR_SHARE"
     for cmd in tinybar tinybar-volume tinybar-brightness tinybar-idle; do
       sudo install -m 755 "$stage/bin/$cmd" "/usr/local/bin/$cmd"
     done

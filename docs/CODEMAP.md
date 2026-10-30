@@ -75,6 +75,7 @@ Test: `scripts/check` (icons, both themes, contrast); `python3 components/appear
 - **super+w, super+q** — `components/shortcuts/app-shortcut.c::native_key`, built by `components/shortcuts/build.sh`.
 
 ## VM tests: `tests/vm/` (needs KVM; details in `tests/vm/README.md`)
+- **fast bench** — `tests/vm/vm::cmd_save` (installed image), `up NAME --installed`, `tests/vm/vm::cmd_sync` (working tree in, `./install`, reboot). Full install tests are a separate pass before a push (`tests/vm/README.md`).
 - **vm tool** — `tests/vm/vm::cmd_base`, `tests/vm/vm::cmd_up`, `tests/vm/vm::cmd_copy`, `tests/vm/vm::cmd_shot`, `tests/vm/vm::cmd_click`. Trap: `copy` is `rsync --delete`; `click` assumes the same `LIMDE_VM_RES` as `up`.
 - **install test** — `tests/vm/test-install NAME [--keep]`: two runs ("No changes"), reboot, session checks.
 - **release check** — `tests/vm/test-acceptance` (about 40 min): power cut and Ctrl+C mid-install, first login, baseline, update over user changes.

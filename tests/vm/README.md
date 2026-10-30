@@ -33,6 +33,23 @@ Observed on the first build (2026-10-24):
 - The CD-ROM I/O errors during the installer's power-off are harmless: the media is
   ejected after the install has finished.
 
+## Fast iteration: the installed image
+
+A full install takes about 20 minutes, almost all of it apt and the labwc build, so
+day-to-day work runs against a saved installed image instead:
+- `test-install NAME --save` saves the VM as `local/vm/installed.qcow2` when every check
+  passed (`vm save NAME` does it by hand; `vm list` shows what it holds).
+- `vm up NAME --installed` starts a VM from it in about 10 seconds, with the session up
+  about 30 seconds later.
+- `vm sync NAME` copies the working tree in, runs `./install` (only what changed, about
+  50 seconds) and reboots so the session restarts with it (about a minute); then
+  `vm click` and `vm shot` for screenshots. `--no-restart` skips the reboot.
+
+Run the full `test-install` (and `test-acceptance` for a release) as a separate pass:
+before every push, and whenever the install flow itself changes (`install`,
+`lib/install/`, `packages/`, `pins/`). Save its VM with `--save` so the bench starts from
+the newest good install.
+
 ## Wi-Fi
 
 `test-wifi NAME` runs in a VM where limDE is installed (`test-install NAME --keep`). The

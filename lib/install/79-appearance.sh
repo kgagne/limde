@@ -10,13 +10,17 @@ step_appearance() {
   install -D -m 644 "$src/appearance.toml" "$stage/appearance.toml"
   install -D -m 644 "$src/manifest.toml" "$stage/manifest.toml"
   mkdir -p "$stage/templates"; cp "$src"/templates/*.in "$stage/templates/"
+  # Root's, as everything under /usr/local; older installs were the user's.
   if diff -rq "$stage" "$APPEARANCE_SHARE" >/dev/null 2>&1 \
+     && [[ -z $(find "$APPEARANCE_SHARE" \( ! -user root -o ! -perm -o+r \) -print -quit 2>/dev/null) ]] \
      && cmp -s "$src/limde-appearance" /usr/local/bin/limde-appearance; then
     ok "appearance defaults are up to date"
   else
     sudo rm -rf "$APPEARANCE_SHARE"
     sudo install -d "$APPEARANCE_SHARE"
     sudo cp -a "$stage/." "$APPEARANCE_SHARE/"
+    sudo chown -R root:root "$APPEARANCE_SHARE"
+    sudo chmod -R u+rwX,go+rX,go-w "$APPEARANCE_SHARE"
     sudo install -m 755 "$src/limde-appearance" /usr/local/bin/limde-appearance
     changed "installed the appearance defaults and limde-appearance"
   fi

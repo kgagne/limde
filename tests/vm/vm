@@ -2,8 +2,15 @@
 # Headless QEMU test VMs for limde. No root needed; KVM access is enough.
 #
 #   tests/vm/vm base             install Ubuntu Server into the base image (unattended)
-#   tests/vm/vm up NAME          start a throwaway VM on a copy-on-write overlay of base
-#                                (LIMDE_VM_RES=1920x1200 offers a bigger screen)
+#   tests/vm/vm up NAME [--installed]   start a throwaway VM on a copy-on-write overlay
+#                                of base, or of the saved installed image (limDE already
+#                                installed; about a minute). LIMDE_VM_RES=1920x1200 offers
+#                                a bigger screen
+#   tests/vm/vm sync NAME [--no-restart]   copy this working tree into an installed VM, run
+#                                ./install there (only what changed), then reboot so the
+#                                session restarts with it
+#   tests/vm/vm save NAME        save an installed VM as the installed image for `up
+#                                --installed` (test-install --save does this after a pass)
 #   tests/vm/vm ssh NAME [CMD]   run a command (or a shell) in it as `tester`
 #   tests/vm/vm copy NAME SRC... DEST   rsync files into it (DEST is a guest path)
 #   tests/vm/vm shot NAME FILE   save a PNG of its screen
@@ -130,11 +137,18 @@ cmd_base() {
 
 cmd_up() {
   name_ok "${1:-}"; local d; d=$(vmdir "$1")
+  local from=base
+  [[ ${2:-} == --installed ]] && from=installed
   [[ -f $dir/base.qcow2 ]] || die "no base image; run: tests/vm/vm base"
+  [[ $from == base || -f $dir/installed.qcow2 ]] \
+    || die "no installed image; run tests/vm/test-install NAME --save first"
   running "$1" && { echo "$1 is already running (ssh port $(port_of "$1"))"; return; }
   mkdir -p "$d"
-  [[ -f $d/disk.qcow2 ]] || qemu-img create -q -f qcow2 -F qcow2 -b "$dir/base.qcow2" "$d/disk.qcow2"
-  [[ -f $d/vars.fd ]] || cp "$dir/base-vars.fd" "$d/vars.fd" && chmod u+w "$d/vars.fd"
+  if [[ ! -f $d/disk.qcow2 ]]; then
+    qemu-img create -q -f qcow2 -F qcow2 -b "$dir/$from.qcow2" "$d/disk.qcow2"
+    cp "$dir/$from-vars.fd" "$d/vars.fd" && chmod u+w "$d/vars.fd"
+    echo "$from" > "$d/from"
+  fi
   local port; port=$(free_port); echo "$port" > "$d/ssh-port"
   local vnc; vnc=$(free_vnc_display); echo "$vnc" > "$d/vnc-display"
   rm -f "$d/qmp.sock"
@@ -186,6 +200,55 @@ cmd_click() {  # absolute pointer, so a test can press a panel button by its pos
   done
 }
 
+cmd_sync() {
+  name_ok "${1:-}"; running "$1" || die "$1 is not running"
+  local name=$1
+  ssh_vm() { cmd_ssh "$name" "$@"; }
+  cmd_copy "$name" --exclude=/local --exclude=.git "$repo/" limde/
+  ssh_vm 'test -f /usr/local/share/limde/labwc.commit' \
+    || die "limDE is not installed in $name; start it with: up $name --installed"
+  ssh_vm 'cd limde && ./install --yes' | grep -E '^  (changed|failed)|change\(s\) made|No changes' || true
+  [[ ${2:-} == --no-restart ]] && return
+  # A reboot restarts the whole session the way a login does, so Tinybar and the rest
+  # run inside it (NetworkManager and logind refuse a panel restarted over SSH).
+  local boot; boot=$(ssh_vm 'cat /proc/sys/kernel/random/boot_id')
+  ssh_vm 'sudo systemctl reboot' >/dev/null 2>&1 || true
+  echo -n "Waiting for $name's session "
+  for _ in $(seq 90); do
+    sleep 2; echo -n .
+    [[ $(ssh_vm 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null) == "${boot:-x}" ]] && continue
+    if ssh_vm 'pgrep -f "[s]hare/limde/tinybar/tinybar.py"' >/dev/null 2>&1; then echo " up"; return; fi
+  done
+  die "$name's session did not start Tinybar within 3 minutes"
+}
+
+cmd_save() {
+  name_ok "${1:-}"; local d; d=$(vmdir "$1")
+  [[ -f $d/disk.qcow2 ]] || die "no VM named $1"
+  if running "$1"; then
+    cmd_ssh "$1" 'test -f /usr/local/share/limde/labwc.commit' \
+      || die "limDE is not installed in $1; nothing worth saving"
+    cmd_down "$1" >/dev/null
+  fi
+  local other
+  for other in "$dir"/*/from; do
+    [[ -f $other && $(cat "$other") == installed && $other != "$d/from" ]] \
+      && die "${other%/from} is built on the current installed image; remove it first"
+  done
+  # Flattened onto base, so the new image does not depend on the one it replaces.
+  qemu-img convert -q -O qcow2 -F qcow2 -B "$dir/base.qcow2" "$d/disk.qcow2" "$dir/installed.new"
+  rm -f "$dir/installed.qcow2" "$dir/installed-vars.fd"
+  mv "$dir/installed.new" "$dir/installed.qcow2"
+  cp "$d/vars.fd" "$dir/installed-vars.fd"
+  chmod a-w "$dir/installed.qcow2" "$dir/installed-vars.fd"
+  printf 'saved %s from VM %s; limDE %s\n' "$(date -u +%FT%TZ)" "$1" \
+    "$(git -C "$repo" describe --always --dirty)" > "$dir/installed.info"
+  echo "Installed image saved: $dir/installed.qcow2 ($(cat "$dir/installed.info"))"
+  if [[ -f $d/from && $(cat "$d/from") == installed ]]; then
+    rm -rf "$d"; echo "Removed $1: it was built on the image just replaced"
+  fi
+}
+
 cmd_down() {
   name_ok "${1:-}"; running "$1" || { echo "$1 is not running"; return; }
   local d; d=$(vmdir "$1")
@@ -202,6 +265,7 @@ cmd_rm() {
 
 cmd_list() {
   [[ -f $dir/base.qcow2 ]] && echo "base: $dir/base.qcow2" || echo "base: not built"
+  [[ -f $dir/installed.info ]] && echo "installed: $(cat "$dir/installed.info")" || echo "installed: none saved"
   local d
   for d in "$dir"/*/; do
     d=${d%/}; local n=${d##*/}
@@ -231,7 +295,8 @@ cmd_clean() {
     running "$n" && cmd_down "$n"
   done
   for d in "$dir"/*/; do [[ -f $d/disk.qcow2 ]] && rm -rf "$d"; done
-  rm -rf "$dir/base.qcow2" "$dir/base-vars.fd" "$dir/base-build" "$dir/results"
+  rm -rf "$dir/base.qcow2" "$dir/base-vars.fd" "$dir/base-build" "$dir/results" \
+    "$dir/installed.qcow2" "$dir/installed-vars.fd" "$dir/installed.info"
   if [[ ${1:-} == --all ]]; then
     rm -rf "$dir"
     echo "Removed everything in $dir. Rebuild with: tests/vm/vm base"
@@ -242,6 +307,6 @@ cmd_clean() {
 
 sub=${1:-}; shift || true
 case $sub in
-  base|up|ssh|copy|shot|click|down|rm|list|view|du|clean) "cmd_$sub" "$@" ;;
-  *) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  base|up|sync|save|ssh|copy|shot|click|down|rm|list|view|du|clean) "cmd_$sub" "$@" ;;
+  *) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 2 ;;
 esac

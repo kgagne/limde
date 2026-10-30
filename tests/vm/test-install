@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
 # Acceptance test for the installer, in a fresh throwaway VM.
-#   tests/vm/test-install [VM_NAME] [--keep] [-- INSTALL_ARGS...]
+#   tests/vm/test-install [VM_NAME] [--keep] [--save] [-- INSTALL_ARGS...]
 # 1. copy this working tree into the VM and run ./install --yes (plus INSTALL_ARGS)
 # 2. run it again: it must report "No changes"
 # 3. reboot: labwc must start on tty1 by itself, NetworkManager must be connected,
 #    and networkd must stay off
 # Saves logs and a screenshot under local/vm/results/<VM_NAME>/. Exit 0 = all passed.
+# --save: when everything passed, save the VM as the installed image that
+# `vm up NAME --installed` starts from (for fast iteration with `vm sync`).
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
 vm=$here/vm
-name=itest; keep=0; install_args=()
+name=itest; keep=0; save=0; install_args=()
 while (($#)); do
   case $1 in
     --keep) keep=1 ;;
+    --save) save=1 ;;
     --) shift; install_args=("$@"); break ;;
     *) name=$1 ;;
   esac
@@ -84,6 +87,11 @@ check "no failed units" on_vm '[ -z "$(systemctl --failed --no-legend)" ]'
 on_vm 'systemctl --failed --no-legend; cat ~/.local/state/limde/labwc.log' >"$out/after-reboot.log" 2>&1 || true
 "$vm" shot "$name" "$out/screen.png" >/dev/null || fail "screenshot"
 
+if ((save && fails == 0)); then
+  "$vm" save "$name" || fail "saving the installed image"
+elif ((save)); then
+  echo "Not saved as the installed image: $fails check(s) failed"
+fi
 ((keep)) || { "$vm" down "$name" >/dev/null; "$vm" rm "$name" >/dev/null; }
 echo "== $(grep -c ^PASS "$out/summary.txt") passed, $fails failed; results in $out"
 exit $((fails > 0))
