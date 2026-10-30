@@ -16,7 +16,7 @@
 #   tests/vm/vm copy NAME SRC... DEST   rsync files into it (DEST is a guest path)
 #   tests/vm/vm shot NAME FILE   save a PNG of its screen
 #   tests/vm/vm click NAME X Y   left-click at screen pixel X,Y (virtual tablet)
-#   tests/vm/vm down NAME        power it off (forced after 60 s)
+#   tests/vm/vm down NAME        power it off (forced after 150 s)
 #   tests/vm/vm rm NAME          delete its overlay
 #   tests/vm/vm list             show VMs and whether they run
 #   tests/vm/vm view NAME        watch and use its screen in a window (needs gvncviewer)
@@ -239,7 +239,7 @@ cmd_save() {
       || die "limDE is not installed in $1; nothing worth saving"
     power_off "$1" || true  # a forced stop leaves the forced-off mark checked below
   fi
-  [[ ! -f $d/forced-off ]] || die "$1 did not shut down within 60 s and was forced off, so" \
+  [[ ! -f $d/forced-off ]] || die "$1 did not shut down within 150 s and was forced off, so" \
     "its disk may miss writes; not saved. Start it, see what held up the shutdown, save again"
   qemu_exited "$(cat "$d/qemu.pid" 2>/dev/null || true)" || die "$1's QEMU is still running"
   # A new version each time, rebuilt onto base so it needs no older one. A VM started
@@ -281,12 +281,13 @@ qemu_exited() {
 }
 
 # Powers a running VM off and waits until its QEMU has exited. Returns 1, and marks the
-# VM forced-off until its next `up`, when the guest did not shut down within 60 s and
+# VM forced-off until its next `up`, when the guest did not shut down within 150 s and
 # QEMU had to quit under it.
 power_off() {
   local d pid forced=0; d=$(vmdir "$1"); pid=$(cat "$d/qemu.pid" 2>/dev/null || true)
   "$here/qmp.py" "$d/qmp.sock" system_powerdown >/dev/null || true
-  for _ in $(seq 60); do running "$1" || break; sleep 1; done
+  # Longer than systemd's 90 s stop timeout, so a slow unit still ends in a clean shutdown.
+  for _ in $(seq 150); do running "$1" || break; sleep 1; done
   if running "$1"; then
     "$here/qmp.py" "$d/qmp.sock" quit >/dev/null 2>&1 || true
     : > "$d/forced-off"; forced=1

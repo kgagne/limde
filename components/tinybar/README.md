@@ -49,7 +49,7 @@ windows through the wlr foreign-toplevel protocol.
   battery, kept for 7 days. Gaps are time on mains power.
 - Low battery: on battery, a notification at 10 % and an urgent one at 5 %, which stays
   until dismissed. Each comes once per discharge, and again only after the battery has
-  charged 3 points past it, so a charger that keeps dropping out cannot repeat it; a
+  charged more than 3 points above it, so a charger that keeps dropping out cannot repeat it; a
   new warning replaces the one on screen.
 - Power menu: the power icon at the right end offers Lock, Suspend, Log out, Restart
   and Power off. Log out, Restart and Power off turn red and ask for a second click

@@ -43,8 +43,10 @@ reset_wifi || { echo "could not reset the VM's Wi-Fi settings" >&2; exit 2; }
 
 password=correct-horse-battery
 on_vm "set -e
-sudo apt-get update -qq
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq hostapd dnsmasq-base >/dev/null
+dpkg -s hostapd dnsmasq-base >/dev/null 2>&1 || {
+  sudo apt-get update -qq
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq hostapd dnsmasq-base >/dev/null
+}
 sudo pkill -x hostapd || true
 for f in /tmp/dnsmasq-wlan1.pid /tmp/dnsmasq-wlan2.pid; do [ -f \$f ] && sudo pkill -F \$f; done; true
 sudo modprobe -r mac80211_hwsim 2>/dev/null || true
@@ -69,6 +71,8 @@ done
 # NetworkManager lets only the local desktop session control the network (polkit), as
 # it does Tinybar; an SSH login is refused. So the check runs in a terminal on the VM's
 # screen, opened and typed into through QMP like a person would.
+# Stopped early (Ctrl+C), the check in the VM's terminal must not keep driving Wi-Fi.
+trap 'on_vm "pkill -f \"^python3 -I /tmp/[w]ifi-check\"" >/dev/null 2>&1; exit 130' INT TERM
 on_vm "rm -f /tmp/wifi.out; printf '%s\n' 'python3 -I /tmp/wifi-check $password >/tmp/wifi.out 2>&1; echo \"exit \$?\" >>/tmp/wifi.out; exit' >/tmp/w.sh"
 "$here/qmp.py" "$vmd/qmp.sock" send-key '{"keys": [{"type": "qcode", "data": "meta_l"}, {"type": "qcode", "data": "ret"}]}' >/dev/null
 sleep 3

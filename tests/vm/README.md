@@ -39,7 +39,7 @@ A full install takes about 20 minutes, almost all of it apt and the labwc build,
 day-to-day work runs against a saved installed image instead:
 - `test-install NAME --save` saves the VM as `local/vm/installed.qcow2` when every check
   passed (`vm save NAME` does it by hand; `vm list` shows what it holds). A save shuts
-  the VM down first and refuses one that had to be forced off after 60 s, since its disk
+  the VM down first and refuses one that had to be forced off after 150 s, since its disk
   may miss writes. The image it writes holds the whole disk on top of the base image,
   also for a VM that was itself started with `--installed`.
 - `vm up NAME --installed` starts a VM from it in about 10 seconds, with the session up
