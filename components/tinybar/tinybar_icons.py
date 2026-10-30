@@ -218,8 +218,11 @@ class StatusIndicator(Gtk.Box):
         self.append(holder)
         self.append(self.value)
 
-    def set_text(self, text, *, display_text=None, icon=None):
-        state = (text, display_text, icon)
+    def set_text(self, text, *, display_text=None, icon=None, tooltip=None):
+        """text is a state string ("VOL MUTED") that status_name picks the icon from, and
+        the value shown after its first word; tooltip is the plain words for the hover
+        text and screen readers (text when not given)."""
+        state = (text, display_text, icon, tooltip)
         if state == self.last_text:
             return
         self.last_text = state
@@ -240,5 +243,6 @@ class StatusIndicator(Gtk.Box):
                 icon.remove_css_class('icon-only')
             else:
                 icon.add_css_class('icon-only')
-        self.set_tooltip_text(text)
-        self.update_property([Gtk.AccessibleProperty.LABEL], [text])
+        words = text if tooltip is None else tooltip
+        self.set_tooltip_text(words)
+        self.update_property([Gtk.AccessibleProperty.LABEL], [words])

@@ -372,6 +372,39 @@ def format_coverage(seconds):
     return f"{m}m"
 
 
+def battery_lines(percent, status, runtime_text=None, watts=None, average=None):
+    """Hover-text lines for the battery: level and state, then the draw. percent is
+    None when unreadable; runtime_text is the time to empty (or to full while
+    charging); watts the smoothed draw while discharging; average the history's
+    (watts, seconds on battery) over the last HISTORY_WINDOW_SECONDS, or None. An
+    average over less than a minute is left out: it is only the current draw."""
+
+    level = "Battery level unknown" if percent is None else f"Battery {percent}%"
+
+    if status == "Discharging":
+        lines = [f"{level}, {runtime_text} left" if runtime_text else f"{level}, discharging"]
+        lines.append(f"Drawing {watts:.1f} W" if watts is not None else "Power draw unavailable")
+    elif status == "Charging":
+        lines = [f"{level}, charging" + (f", full in {runtime_text}" if runtime_text else "")]
+    elif status == "Full":
+        lines = [f"{level}, charged"]
+    elif status == "Not charging":
+        lines = [f"{level}, plugged in, not charging"]
+    else:
+        lines = [level]
+
+    if average is not None and average[0] is not None and average[1] >= 60:
+        watts_avg, covered = average
+
+        if covered >= HISTORY_WINDOW_SECONDS - BATTERY_SAMPLE_SECONDS:
+            hours = HISTORY_WINDOW_SECONDS // 3600
+            lines.append(f"{hours}-hour average {watts_avg:.1f} W")
+        else:
+            lines.append(f"Average {watts_avg:.1f} W over {format_coverage(covered)} on battery")
+
+    return lines
+
+
 def get_cpu_temperature():
     for hwmon in Path("/sys/class/hwmon").glob("hwmon*"):
         name = read_path(hwmon / "name")
@@ -493,7 +526,7 @@ def usage_lines(cpu, memory):
 
     if memory:
         used, total = memory
-        lines.append(f"RAM {used:.1f}/{total:.1f} GiB")
+        lines.append(f"Memory {used:.1f} of {total:.1f} GiB")
 
     return lines
 
@@ -1007,6 +1040,28 @@ def shorten(text, limit):
     return text[:limit - 1].rstrip() + "\u2026"
 
 
+def notification_tooltip(count):
+    """Hover text for the bell."""
+    if not count:
+        return "No notifications"
+
+    return "1 notification" if count == 1 else f"{count} notifications"
+
+
+def task_tooltip(name, titles, limit=60):
+    """Hover text for a task button: the app's name, then its window's title, or how
+    many windows it has when there are several."""
+    if len(titles) > 1:
+        return f"{name}\n{len(titles)} windows"
+
+    title = shorten(titles[0], limit) if titles else ""
+
+    if not title or title.casefold() == name.casefold():
+        return name
+
+    return f"{name}\n{title}"
+
+
 def clickable(widget):
     """Show the hand cursor over a widget that does something when clicked."""
 
@@ -1273,10 +1328,7 @@ class NotificationCenter(Gtk.MenuButton):
             else:
                 self.icon.add_css_class("icon-only")
 
-            label = (
-                f"{count} notifications" if count != 1
-                else "1 notification"
-            )
+            label = notification_tooltip(count)
 
             self.set_tooltip_text(label)
 
@@ -1458,6 +1510,37 @@ def visible_networks(access_points, current_ssid=None):
         networks.values(),
         key=lambda network: (-network["strength"], network["ssid"].casefold())
     )
+
+
+def network_tooltip(state):
+    """Hover text for the network icon, in the Wi-Fi menu's words, from the state
+    NetworkMenu.read_state returns (None when NetworkManager could not be asked). It
+    names the connection the icon shows: Wi-Fi first, then a cable."""
+
+    if state is None:
+        return "Network: status unavailable"
+
+    wifi = state["wifi"]
+
+    if wifi:
+        return f"Wi-Fi: {wifi['ssid'] or 'hidden network'}, {wifi['strength']}% signal"
+
+    if state["wifi_connected"]:
+        return "Wi-Fi: connected"
+
+    if state["wired"]:
+        return "Wired: connected"
+
+    if not state["wifi_device"]:
+        return "Network: not connected"
+
+    if not state["hardware_enabled"]:
+        return "Wi-Fi: off by the hardware switch"
+
+    if not state["enabled"]:
+        return "Wi-Fi: off"
+
+    return "Wi-Fi: not connected"
 
 
 def wifi_security(flags, wpa_flags, rsn_flags):
@@ -2084,7 +2167,7 @@ class NetworkMenu(Gtk.MenuButton):
             )
 
         except GLib.Error:
-            self.indicator.set_text("WIFI ?")
+            self.indicator.set_text("WIFI ?", tooltip=network_tooltip(None))
             return
 
         self.control = WifiControl(self.bus)
@@ -2306,27 +2389,31 @@ class NetworkMenu(Gtk.MenuButton):
             state = self.read_state(listing)
 
         except GLib.Error:
-            self.indicator.set_text("WIFI ?")
+            self.indicator.set_text("WIFI ?", tooltip=network_tooltip(None))
             return
 
         self.state = state
         wifi = state["wifi"]
+        # The first argument picks the icon (IconLibrary.status_name); the words are
+        # network_tooltip's.
+        words = network_tooltip(state)
 
         if wifi and wifi["ssid"]:
             self.indicator.set_text(
                 f"WIFI {wifi['ssid']}",
-                icon=signal_glyph(wifi["strength"])
+                icon=signal_glyph(wifi["strength"]),
+                tooltip=words
             )
 
         elif state["wifi_connected"]:
-            self.indicator.set_text("WIFI ON")
+            self.indicator.set_text("WIFI ON", tooltip=words)
 
         elif state["wired"]:
             # Online by cable (desktops, VMs, docks): show that rather than Wi-Fi off.
-            self.indicator.set_text("WIRED Connected", icon="network-wired")
+            self.indicator.set_text("WIRED Connected", icon="network-wired", tooltip=words)
 
         else:
-            self.indicator.set_text("WIFI OFF")
+            self.indicator.set_text("WIFI OFF", tooltip=words)
 
         if listing:
             self.rebuild(state)
@@ -2995,7 +3082,7 @@ class SystemMenu(Gtk.MenuButton):
         if self.library.set_glyph(self.icon, "power-off"):
             self.icon.add_css_class("icon-only")
 
-        self.set_tooltip_text("System")
+        self.set_tooltip_text("Power")
 
     def action_row(self):
         button = clickable(Gtk.Button())
@@ -3075,6 +3162,20 @@ def parse_volume(output):
     """(percent, muted) from `wpctl get-volume` ("Volume: 0.40 [MUTED]"), or None."""
     match = re.search(r"Volume:\s+([0-9.]+)", output or "")
     return (round(float(match.group(1)) * 100), "[MUTED]" in output) if match else None
+
+
+def volume_tooltip(level):
+    """Hover text for the speaker, from parse_volume's (percent, muted) or None."""
+    if level is None:
+        return "Volume: unavailable"
+
+    percent, muted = level
+    return "Volume: muted" if muted else f"Volume {percent}%"
+
+
+def brightness_tooltip(percent):
+    """Hover text for the brightness icon; percent is None when unreadable."""
+    return "Brightness: unavailable" if percent is None else f"Brightness {percent}%"
 
 
 def new_audio_state():
@@ -3868,13 +3969,17 @@ class TinyBar(Gtk.Application):
                 )
 
             count = len(windows)
-            label = self.display_name_for_app(app_id)
+            name = self.display_name_for_app(app_id)
+            label = name
 
             if count > 1:
                 label = f"{label} ({count})"
 
             button.name_label.set_text(label)
-            button.set_tooltip_text(app_id)
+            button.set_tooltip_text(task_tooltip(
+                name,
+                [str(window.get("title") or "") for window in windows]
+            ))
 
             is_active = (
                 self.active_toplevel is not None
@@ -4042,7 +4147,8 @@ class TinyBar(Gtk.Application):
                 )
 
                 self.cpu.set_text(
-                    f"CPU {usage:.0f}%"
+                    f"CPU {usage:.0f}%",
+                    tooltip=usage_lines(usage, None)[0]
                 )
 
                 self.history.add_sample(
@@ -4053,7 +4159,8 @@ class TinyBar(Gtk.Application):
 
         elif current_cpu is not None:
             self.cpu.set_text(
-                "CPU ..."
+                "CPU ...",
+                tooltip="CPU: measuring…"
             )
 
         self.previous_cpu = current_cpu
@@ -4064,7 +4171,8 @@ class TinyBar(Gtk.Application):
             used, total = memory
 
             self.memory.set_text(
-                f"RAM {used:.1f}/{total:.1f}G"
+                f"RAM {used:.1f}/{total:.1f}G",
+                tooltip=usage_lines(None, memory)[0]
             )
 
             self.history.add_sample(
@@ -4075,7 +4183,8 @@ class TinyBar(Gtk.Application):
 
         else:
             self.memory.set_text(
-                "RAM ?"
+                "RAM ?",
+                tooltip="Memory: unavailable"
             )
 
         return True
@@ -4181,20 +4290,25 @@ class TinyBar(Gtk.Application):
 
         if level is None:
             self.volume.set_text(
-                "VOL ?"
+                "VOL ?",
+                tooltip=volume_tooltip(None)
             )
             return
 
         percent, muted = level
 
+        # The state string picks the icon (IconLibrary.status_name); the
+        # tooltip is the words.
         if muted:
             self.volume.set_text(
-                "VOL MUTED"
+                "VOL MUTED",
+                tooltip=volume_tooltip(level)
             )
 
         else:
             self.volume.set_text(
-                f"VOL {percent}%"
+                f"VOL {percent}%",
+                tooltip=volume_tooltip(level)
             )
 
         self.volume.show_volume(percent, muted)
@@ -4231,7 +4345,8 @@ class TinyBar(Gtk.Application):
 
         except GLib.Error:
             self.brightness.set_text(
-                "BRI ?"
+                "BRI ?",
+                tooltip=brightness_tooltip(None)
             )
 
     def on_brightness_changed(
@@ -4286,7 +4401,8 @@ class TinyBar(Gtk.Application):
             )
 
             self.brightness.set_text(
-                f"BRI {percent}%"
+                f"BRI {percent}%",
+                tooltip=brightness_tooltip(percent)
             )
 
             if announce:
@@ -4300,7 +4416,8 @@ class TinyBar(Gtk.Application):
             ValueError
         ):
             self.brightness.set_text(
-                "BRI ?"
+                "BRI ?",
+                tooltip=brightness_tooltip(None)
             )
 
 
@@ -4361,17 +4478,16 @@ class TinyBar(Gtk.Application):
                 / len(self.current_samples)
             )
 
-        parts = [
-            f"BAT {capacity}%"
-        ]
-        power_text = "— W"
+        # The state string IconLibrary.status_name picks the icon from: the
+        # level, and "+" while charging. The hover words are battery_lines'.
+        icon_state = f"BAT {capacity}%"
         smoothed_watts = None
 
         if status == "Charging":
-            parts[0] += " +"
+            icon_state += " +"
 
         elif status == "Full":
-            parts[0] += " FULL"
+            icon_state += " FULL"
 
         if (
             status == "Discharging"
@@ -4402,30 +4518,12 @@ class TinyBar(Gtk.Application):
                 / 1_000_000_000_000
             )
 
-            power_text = f"{smoothed_watts:.1f} W"
-            parts.append(power_text)
-
-        trailing_avg, coverage = (
+        trailing_average = (
             self.history.trailing_average(
                 "power_w",
                 now
             )
         )
-
-        if trailing_avg is not None:
-            if coverage >= (
-                HISTORY_WINDOW_SECONDS
-                - BATTERY_SAMPLE_SECONDS
-            ):
-                parts.append(
-                    f"3H {trailing_avg:.1f} W"
-                )
-
-            else:
-                parts.append(
-                    f"AVG {trailing_avg:.1f} W"
-                    f" / {format_coverage(coverage)}"
-                )
 
         hours = None
 
@@ -4458,20 +4556,18 @@ class TinyBar(Gtk.Application):
             hours
         )
 
-        if runtime_text:
-            if status == "Charging":
-                parts.append(
-                    f"{runtime_text} to full"
-                )
-
-            elif status == "Discharging":
-                parts.append(
-                    runtime_text
-                )
+        percent = int(capacity) if capacity.isdigit() else None
+        lines = battery_lines(
+            percent,
+            status,
+            runtime_text,
+            smoothed_watts,
+            trailing_average
+        )
 
         # Low-battery notifications, each threshold once per discharge.
         warning, self.battery_warned = battery_warning(
-            int(capacity) if capacity.isdigit() else None,
+            percent,
             status,
             self.battery_warned
         )
@@ -4487,15 +4583,11 @@ class TinyBar(Gtk.Application):
         # so they need no timer of their own and are not recorded. CPU is the
         # average since the previous battery sample.
         current_cpu = read_cpu_counters()
-        parts += usage_lines(
+        lines += usage_lines(
             cpu_percent(self.battery_cpu, current_cpu),
             get_memory_usage()
         )
         self.battery_cpu = current_cpu
-
-        parts.append(f"Status: {status}")
-        if power_text == "— W":
-            parts.append("Battery discharge power unavailable.")
 
         # The panel shows only the time left (to empty, or to full while
         # charging); percentage and watts stay in the tooltip. Without an
@@ -4506,8 +4598,9 @@ class TinyBar(Gtk.Application):
             remaining = format_hours(hours)
 
         self.battery.set_text(
-            "\n".join(parts),
-            display_text=f"BAT {remaining or ''}"
+            icon_state,
+            display_text=f"BAT {remaining or ''}",
+            tooltip="\n".join(lines)
         )
 
         load = (

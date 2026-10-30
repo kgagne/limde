@@ -7,7 +7,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import tinybar  # noqa: E402
-from tinybar_icons import brightness_glyph, signal_glyph, volume_glyph  # noqa: E402
+from tinybar_icons import IconLibrary, brightness_glyph, signal_glyph, volume_glyph  # noqa: E402
 
 
 def point(ssid, strength, secured=False, frequency=2437):
@@ -126,8 +126,8 @@ class BatteryTests(unittest.TestCase):
     def test_usage_lines(self):
         self.assertEqual(
             tinybar.usage_lines(7.4, (2.94, 14.79)),
-            ["CPU 7%", "RAM 2.9/14.8 GiB"])
-        self.assertEqual(tinybar.usage_lines(None, (2.94, 14.79)), ["RAM 2.9/14.8 GiB"])
+            ["CPU 7%", "Memory 2.9 of 14.8 GiB"])
+        self.assertEqual(tinybar.usage_lines(None, (2.94, 14.79)), ["Memory 2.9 of 14.8 GiB"])
         self.assertEqual(tinybar.usage_lines(12.0, None), ["CPU 12%"])
         self.assertEqual(tinybar.usage_lines(None, None), [])
 
@@ -599,6 +599,92 @@ class WifiJoinRaceTests(unittest.TestCase):
 
         menu.joins[1]["on_done"](True, None)
         self.assertEqual((menu.busy, menu.target), (False, None))
+
+
+def network(wifi=None, wifi_connected=False, wired=None, device="/d/1", enabled=True,
+            hardware=True):
+    """A NetworkMenu.read_state result."""
+    return {"wifi": wifi, "wifi_connected": wifi_connected or wifi is not None,
+            "wired": wired, "wifi_device": device, "enabled": enabled,
+            "hardware_enabled": hardware, "nearby": []}
+
+
+class TooltipTests(unittest.TestCase):
+    """Hover words are plain phrases, never the state strings the icons are picked from."""
+
+    def test_network(self):
+        home = {**point("Home", 61), "address": "192.0.2.5"}
+        self.assertEqual(tinybar.network_tooltip(network(home)), "Wi-Fi: Home, 61% signal")
+        self.assertEqual(tinybar.network_tooltip(network({**home, "ssid": ""})),
+                         "Wi-Fi: hidden network, 61% signal")
+        self.assertEqual(tinybar.network_tooltip(network(home, wired={"address": None})),
+                         "Wi-Fi: Home, 61% signal")
+        self.assertEqual(tinybar.network_tooltip(network(wifi_connected=True)), "Wi-Fi: connected")
+        self.assertEqual(tinybar.network_tooltip(network(wired={"address": None}, enabled=False)),
+                         "Wired: connected")
+        self.assertEqual(tinybar.network_tooltip(network(enabled=False)), "Wi-Fi: off")
+        self.assertEqual(tinybar.network_tooltip(network(hardware=False)),
+                         "Wi-Fi: off by the hardware switch")
+        self.assertEqual(tinybar.network_tooltip(network()), "Wi-Fi: not connected")
+        self.assertEqual(tinybar.network_tooltip(network(device=None)), "Network: not connected")
+        self.assertEqual(tinybar.network_tooltip(None), "Network: status unavailable")
+
+    def test_volume_and_brightness(self):
+        self.assertEqual(tinybar.volume_tooltip((65, False)), "Volume 65%")
+        self.assertEqual(tinybar.volume_tooltip((65, True)), "Volume: muted")
+        self.assertEqual(tinybar.volume_tooltip(None), "Volume: unavailable")
+        self.assertEqual(tinybar.brightness_tooltip(40), "Brightness 40%")
+        self.assertEqual(tinybar.brightness_tooltip(None), "Brightness: unavailable")
+
+    def test_battery_level_and_time(self):
+        self.assertEqual(tinybar.battery_lines(64, "Discharging", "2h 10m", 9.84),
+                         ["Battery 64%, 2h 10m left", "Drawing 9.8 W"])
+        self.assertEqual(tinybar.battery_lines(64, "Discharging"),
+                         ["Battery 64%, discharging", "Power draw unavailable"])
+        self.assertEqual(tinybar.battery_lines(64, "Charging", "1h 05m"),
+                         ["Battery 64%, charging, full in 1h 05m"])
+        self.assertEqual(tinybar.battery_lines(64, "Charging"), ["Battery 64%, charging"])
+        self.assertEqual(tinybar.battery_lines(100, "Full"), ["Battery 100%, charged"])
+        self.assertEqual(tinybar.battery_lines(80, "Not charging"),
+                         ["Battery 80%, plugged in, not charging"])
+        self.assertEqual(tinybar.battery_lines(80, "Unknown"), ["Battery 80%"])
+        self.assertEqual(tinybar.battery_lines(None, "Unknown"), ["Battery level unknown"])
+
+    def test_battery_average(self):
+        window = tinybar.HISTORY_WINDOW_SECONDS
+        self.assertEqual(tinybar.battery_lines(64, "Full", average=(9.84, window))[1:],
+                         ["3-hour average 9.8 W"])
+        self.assertEqual(tinybar.battery_lines(64, "Full", average=(9.84, 45 * 60))[1:],
+                         ["Average 9.8 W over 45m on battery"])
+        self.assertEqual(tinybar.battery_lines(64, "Full", average=(None, 0)), ["Battery 64%, charged"])
+        self.assertEqual(tinybar.battery_lines(64, "Full", average=(9.84, 59)), ["Battery 64%, charged"])
+
+    def test_notifications(self):
+        self.assertEqual(tinybar.notification_tooltip(0), "No notifications")
+        self.assertEqual(tinybar.notification_tooltip(1), "1 notification")
+        self.assertEqual(tinybar.notification_tooltip(3), "3 notifications")
+
+    def test_task_buttons(self):
+        self.assertEqual(tinybar.task_tooltip("Foot", ["~/code"]), "Foot\n~/code")
+        self.assertEqual(tinybar.task_tooltip("Foot", ["foot"]), "Foot")
+        self.assertEqual(tinybar.task_tooltip("Foot", [""]), "Foot")
+        self.assertEqual(tinybar.task_tooltip("Foot", []), "Foot")
+        self.assertEqual(tinybar.task_tooltip("Firefox", ["a", "b", "c"]), "Firefox\n3 windows")
+        self.assertEqual(tinybar.task_tooltip("Foot", ["x" * 80], limit=10), "Foot\nxxxxxxxxx\u2026")
+
+    def test_state_strings_still_pick_the_icons(self):
+        # The indicators' first argument is parsed for the icon; the words are not.
+        library = IconLibrary.__new__(IconLibrary)
+        cases = [
+            ("volume", "VOL MUTED", "volume-xmark"), ("volume", "VOL 65%", "volume-high"),
+            ("volume", "VOL 20%", "volume-low"), ("wifi", "WIFI OFF", "wifi-slash"),
+            ("wifi", "WIFI ?", "wifi-slash"), ("wifi", "WIFI ON", "wifi"),
+            ("brightness", "BRI 40%", "brightness"), ("battery", "BAT 64% +", "battery-bolt"),
+            ("battery", "BAT 64%", "battery-half"), ("battery", "BAT 100% FULL", "battery-full"),
+            ("battery", "BAT ?%", "battery-exclamation"),
+        ]
+        for kind, state, icon in cases:
+            self.assertEqual(library.status_name(kind, state), icon, state)
 
 
 if __name__ == "__main__":

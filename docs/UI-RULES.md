@@ -61,6 +61,20 @@ Every control must fit the 18 px line of 13 px text, so rows stay 30 px (one lin
 Sizing rules for switches and entries already apply to every popover; reuse the classes
 above for buttons and sliders instead of new values.
 
+## Tooltip wording
+
+Plain words in sentence case, never a state code ("VOL MUTED"): the thing's name, then
+its state, in the words its popover uses.
+- A number follows the name: "Volume 65%", "Brightness 40%", "Battery 64%, 2h 10m left".
+- A word or a name follows a colon: "Wi-Fi: Home, 61% signal", "Wired: connected",
+  "Wi-Fi: off", "Volume: muted", "Tailscale: connected (click to turn off)".
+- More detail goes on the lines below, one fact per line (the battery, a window's title).
+- A reading that failed says so: "Volume: unavailable".
+
+Write the words in a small function with a unit test (`components/tinybar/tests/test_panel.py`).
+A `StatusIndicator` takes them as `tooltip=`; its first argument is the state string its
+icon is picked from, and is never shown.
+
 ## Cursor
 
 Anything that does something when clicked shows the hand cursor: wrap it in
