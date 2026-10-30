@@ -2,6 +2,7 @@
 from pathlib import Path
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -79,6 +80,22 @@ class SystemMenuTests(unittest.TestCase):
         self.assertFalse(tinybar.needs_second_click(None, "lock", None))
         self.assertFalse(tinybar.needs_second_click("restart", "suspend", None))
 
+    def test_a_double_click_is_not_the_second_click(self):
+        too_soon = tinybar.confirms_too_soon
+        interval = 400_000  # 400 ms in microseconds
+        armed_at = 10_000_000
+        self.assertTrue(too_soon("power-off", "power-off", armed_at, armed_at + 150_000, interval))
+        self.assertTrue(too_soon("power-off", "power-off", armed_at, armed_at + 399_999, interval))
+        self.assertFalse(too_soon("power-off", "power-off", armed_at, armed_at + 400_000, interval))
+        self.assertFalse(too_soon("power-off", "power-off", armed_at, armed_at + 2_000_000, interval))
+        # Only the row asking waits; a quick click elsewhere is handled as before.
+        self.assertFalse(too_soon("power-off", "restart", armed_at, armed_at + 100_000, interval))
+        self.assertFalse(too_soon(None, "power-off", 0, armed_at, interval))
+
+    def test_double_click_time_falls_back_to_gtk_default(self):
+        with mock.patch.object(tinybar.Gtk.Settings, "get_default", return_value=None):
+            self.assertEqual(tinybar.double_click_microseconds(), 400_000)
+
 
 class BatteryTests(unittest.TestCase):
     def test_decimal_hours(self):
@@ -138,11 +155,28 @@ class BatteryWarningTests(unittest.TestCase):
                  (6, "Discharging"), (1, "Discharging")]
         self.assertEqual(warnings_over(steps), [10, 5])
 
-    def test_reset_on_charge(self):
-        steps = [(9, "Discharging"), (9, "Charging"), (9, "Discharging")]
+    def test_reset_once_charged_past_the_threshold(self):
+        steps = [(9, "Discharging"), (12, "Charging"), (14, "Charging"),
+                 (10, "Discharging")]
         self.assertEqual(warnings_over(steps), [10, 10])
         for status in ("Charging", "Full", "Not charging"):
-            self.assertEqual(tinybar.battery_warning(4, status, 5), (None, None))
+            self.assertEqual(tinybar.battery_warning(14, status, 5), (None, None))
+            self.assertEqual(tinybar.battery_warning(4, status, 5), (None, 5))
+
+    def test_charging_past_only_the_critical_one_resets_only_it(self):
+        self.assertEqual(tinybar.battery_warning(8, "Charging", 5), (None, 5))
+        self.assertEqual(tinybar.battery_warning(9, "Charging", 5), (None, 10))
+        steps = [(4, "Discharging"), (9, "Charging"), (5, "Discharging")]
+        self.assertEqual(warnings_over(steps), [5, 5])
+
+    def test_a_flapping_charger_does_not_repeat_a_warning(self):
+        flapping = [(4, "Discharging"), (4, "Charging"), (4, "Discharging"),
+                    (5, "Not charging"), (4, "Discharging"), (5, "Charging"),
+                    (4, "Discharging")]
+        self.assertEqual(warnings_over(flapping), [5])
+        steps = [(10, "Discharging"), (11, "Charging"), (9, "Discharging"),
+                 (12, "Charging"), (8, "Discharging")]
+        self.assertEqual(warnings_over(steps), [10])
 
     def test_jump_below_both_gives_only_the_critical_one(self):
         self.assertEqual(warnings_over([(12, "Discharging"), (4, "Discharging")]), [5])
@@ -150,6 +184,7 @@ class BatteryWarningTests(unittest.TestCase):
     def test_unknown_status_or_percent_keeps_the_state(self):
         self.assertEqual(tinybar.battery_warning(4, "Unknown", 10), (None, 10))
         self.assertEqual(tinybar.battery_warning(None, "Discharging", 10), (None, 10))
+        self.assertEqual(tinybar.battery_warning(None, "Full", 10), (None, 10))
         steps = [(9, "Discharging"), (9, "Unknown"), (9, "Discharging")]
         self.assertEqual(warnings_over(steps), [10])
 
@@ -451,6 +486,119 @@ class VolumeTests(unittest.TestCase):
         self.assertFalse(tinybar.apply_audio_objects(audio, others))
         self.assertFalse(tinybar.apply_audio_objects(audio, [{"id": 65, "info": None}]))
         self.assertEqual(audio, tinybar.new_audio_state())
+
+    def test_monitor_retries_back_off_and_never_give_up(self):
+        delays, delay = [], 0
+        # PipeWire stays down: every pw-dump quits at once.
+        for _attempt in range(7):
+            delay = tinybar.audio_monitor_delay(0.1, delay)
+            delays.append(delay)
+        self.assertEqual(delays, [5, 10, 20, 40, 60, 60, 60])
+        # Once one runs a while, the next restart waits the base time again.
+        self.assertEqual(tinybar.audio_monitor_delay(600, 60), 5)
+        self.assertEqual(tinybar.audio_monitor_delay(600, 0), 5)
+
+
+class FakeJoinMenu:
+    """NetworkMenu's joining code on a stand-in with no widgets: the form is a record
+    of what it would show, and NetworkManager a list of connect calls to answer."""
+
+    on_network_clicked = tinybar.NetworkMenu.on_network_clicked
+    join = tinybar.NetworkMenu.join
+    on_joined = tinybar.NetworkMenu.on_joined
+    on_popover_hidden = tinybar.NetworkMenu.on_popover_hidden
+
+    def __init__(self, saved):
+        self.saved = saved
+        self.state = {"wifi_device": "/dev/wlan0"}
+        self.target = None
+        self.busy = False
+        self.visible = True
+        self.form = None
+        self.joins = []
+        self.control = mock.Mock()
+        self.control.connect.side_effect = lambda *args, **kwargs: self.joins.append(kwargs)
+
+    def get_popover(self):
+        return mock.Mock(get_visible=lambda: self.visible)
+
+    def get_root(self):
+        return None
+
+    def show_form(self, row, asking, message=None):
+        self.form = (row, asking, message)
+
+    def close_form(self):
+        self.form = None
+        self.target = None
+
+    def read_saved(self):
+        pass
+
+    def refresh(self):
+        pass
+
+
+def wifi_network(ssid, security="psk"):
+    return dict(point(ssid, 70, secured=security != "open"), path=f"/ap/{ssid}",
+                security=security)
+
+
+class WifiJoinRaceTests(unittest.TestCase):
+    def setUp(self):
+        layer_shell = mock.patch.object(tinybar, "Gtk4LayerShell")
+        layer_shell.start()
+        self.addCleanup(layer_shell.stop)
+        self.menu = FakeJoinMenu({"Home": "/saved/home"})
+        self.home, self.work = wifi_network("Home"), wifi_network("Work")
+
+    def test_closing_the_popover_keeps_the_join_and_its_result(self):
+        menu = self.menu
+        menu.on_network_clicked("home-row", self.home)
+        menu.visible = False
+        menu.on_popover_hidden(None)
+        self.assertTrue(menu.busy)
+        self.assertEqual(menu.form, ("home-row", False, "Connecting to Home…"))
+
+        # Reopened mid-join: another network cannot be started over it.
+        menu.visible = True
+        menu.on_network_clicked("work-row", self.work)
+        self.assertEqual(len(menu.joins), 1)
+
+        menu.joins[0]["on_done"](False, "Wrong password")
+        self.assertFalse(menu.busy)
+        self.assertEqual(menu.target["network"]["ssid"], "Home")
+        self.assertEqual(menu.target["replaces"], "/saved/home")
+        self.assertEqual(menu.form[:2], ("home-row", True))
+
+    def test_a_result_after_the_popover_closed_resets_the_form(self):
+        menu = self.menu
+        menu.on_network_clicked("home-row", self.home)
+        menu.visible = False
+        menu.on_popover_hidden(None)
+        menu.joins[0]["on_done"](False, "Wrong password")
+        self.assertEqual((menu.busy, menu.target, menu.form), (False, None, None))
+
+    def test_a_stale_result_touches_nothing(self):
+        menu = self.menu
+        menu.saved["Work"] = "/saved/work"
+        menu.on_network_clicked("home-row", self.home)
+        # The Wi-Fi switch closes the form; its call's end clears busy.
+        menu.close_form()
+        menu.busy = False
+        menu.on_network_clicked("work-row", self.work)
+        work = menu.target
+        self.assertEqual(len(menu.joins), 2)
+
+        for ok, message in ((False, "Wrong password"), (True, None)):
+            menu.joins[0]["on_done"](ok, message)
+            self.assertIs(menu.target, work)
+            self.assertTrue(menu.busy)
+            self.assertIsNone(work["replaces"])
+            self.assertEqual(menu.form, ("work-row", False, "Connecting to Work…"))
+
+        menu.joins[1]["on_done"](True, None)
+        self.assertEqual((menu.busy, menu.target), (False, None))
 
 
 if __name__ == "__main__":

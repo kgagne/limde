@@ -81,6 +81,9 @@ TEMP_SAMPLE_SECONDS = 30
 NOTIFICATION_SAMPLE_SECONDS = 2
 # Log out, restart and power off ask for a second click; the question clears after this.
 CONFIRM_SECONDS = 4
+# GTK's own default double-click time, for when its setting cannot be read. A second
+# click sooner than the double-click time is the rest of a double-click, not an answer.
+DOUBLE_CLICK_MS = 400
 
 # CPU and RAM readouts are off in the panel until they show something more
 # useful. The sampling code stays; with this off it is never scheduled, so
@@ -196,8 +199,10 @@ WPCTL = "/usr/bin/wpctl"
 AUDIO_MONITOR_COMMAND = ["/usr/bin/pw-dump", "--monitor", "--no-colors"]
 # PipeWire sends bursts of changes; one volume read follows a burst.
 AUDIO_EVENT_MS = 100
-# pw-dump quits when PipeWire restarts; it is started again after this.
+# pw-dump quits when PipeWire restarts; it is started again after this. While it keeps
+# quitting at once (PipeWire down), each wait doubles, up to the maximum.
 AUDIO_MONITOR_RETRY_SECONDS = 5
+AUDIO_MONITOR_RETRY_MAX_SECONDS = 60
 
 # How long the brightness/volume readout stays up after the last change.
 LEVEL_OVERLAY_MS = 1500
@@ -216,6 +221,9 @@ BATTERY_LOAD_LEVELS = (
 # The critical one is urgent: Mako keeps it on screen until it is dismissed.
 BATTERY_LOW_PERCENT = 10
 BATTERY_CRITICAL_PERCENT = 5
+# A threshold is announced again only once a charge has taken the battery this many
+# points above it, so a charger that flaps between charging and not cannot repeat it.
+BATTERY_REARM_POINTS = 3
 
 # The battery popover's graph views, cycled with its arrows: name, span, bin
 # size, and hours between gridlines (24 puts them at local midnight).
@@ -304,13 +312,27 @@ def battery_warning(percent, status, warned):
 
     Each threshold is announced once per discharge, and a reading already below both
     announces only the critical one. Charging, full or plugged in ("Not charging")
-    starts over; an unknown status keeps the state, so a flicker cannot repeat one.
+    starts a threshold over only once the battery is BATTERY_REARM_POINTS above it,
+    and an unknown status or percent keeps the state, so neither a flicker nor a
+    charger that keeps dropping out can repeat one.
     """
 
-    if status in ("Charging", "Full", "Not charging"):
-        return None, None
+    if percent is None:
+        return None, warned
 
-    if status != "Discharging" or percent is None:
+    if status in ("Charging", "Full", "Not charging"):
+        if warned is None:
+            return None, None
+
+        # The thresholds still announced: the ones the charge has not cleared yet.
+        kept = [
+            threshold
+            for threshold in (BATTERY_CRITICAL_PERCENT, BATTERY_LOW_PERCENT)
+            if warned <= threshold and percent <= threshold + BATTERY_REARM_POINTS
+        ]
+        return None, (kept[0] if kept else None)
+
+    if status != "Discharging":
         return None, warned
 
     for threshold in (BATTERY_CRITICAL_PERCENT, BATTERY_LOW_PERCENT):
@@ -2471,7 +2493,7 @@ class NetworkMenu(Gtk.MenuButton):
             return
 
         self.close_form()
-        self.target = {"network": network, "row": row, "replaces": None}
+        self.target = {"network": network, "row": row, "replaces": None, "joining": False}
         saved = self.saved.get(network["ssid"])
 
         if saved:
@@ -2501,10 +2523,13 @@ class NetworkMenu(Gtk.MenuButton):
         self.join(settings=wifi_settings(network["security"], password))
 
     def join(self, saved_path=None, settings=None):
-        network = self.target["network"]
+        # The result goes to this target only, whatever the form shows by then.
+        target = self.target
+        network = target["network"]
         self.busy = True
+        target["joining"] = True
         self.show_form(
-            self.target["row"],
+            target["row"],
             settings is not None and needs_password(network["security"]),
             f"Connecting to {network['ssid']}…"
         )
@@ -2514,20 +2539,30 @@ class NetworkMenu(Gtk.MenuButton):
             network["path"],
             saved_path=saved_path,
             settings=settings,
-            replaces=self.target["replaces"],
-            on_done=lambda ok, message: self.on_joined(ok, message, saved_path)
+            replaces=target["replaces"],
+            on_done=lambda ok, message: self.on_joined(ok, message, saved_path, target)
         )
 
-    def on_joined(self, ok, message, saved_path):
-        self.busy = False
+    def on_joined(self, ok, message, saved_path, target):
+        target["joining"] = False
 
-        if self.target is None:
+        if target is not self.target:
+            # Its form was closed by the Wi-Fi switch, whose own call clears busy,
+            # and another join may run now: this result is stale, so leave all alone.
             return
+
+        self.busy = False
 
         if ok:
             self.close_form()
             self.read_saved()
             self.refresh()
+            return
+
+        if not self.get_popover().get_visible():
+            # It failed after the popover closed: that shows in the panel glyph, and
+            # the next opening starts from a fresh list.
+            self.close_form()
             return
 
         network = self.target["network"]
@@ -2609,9 +2644,11 @@ class NetworkMenu(Gtk.MenuButton):
             Gtk4LayerShell.KeyboardMode.NONE
         )
 
-        # A join in progress carries on and its result shows in the panel glyph.
-        self.close_form()
-        self.busy = False
+        # A join in progress carries on, still busy, and keeps its form and the list
+        # as they are, so opening the popover again shows it connecting; its result
+        # comes back to it alone (on_joined). Any other form closes.
+        if self.target is None or not self.target["joining"]:
+            self.close_form()
 
 
 def with_alpha(color, alpha):
@@ -2878,11 +2915,29 @@ def needs_second_click(armed, key, confirm):
     return bool(confirm) and armed != key
 
 
+def confirms_too_soon(armed, key, armed_at, now, interval):
+    """True when a click on the row already asking comes sooner than interval after
+    the click that armed it: the second half of a double-click, not an answer, so it
+    is ignored. Times in one unit (GLib's monotonic microseconds)."""
+
+    return armed == key and now - armed_at < interval
+
+
+def double_click_microseconds():
+    """GTK's double-click time (gtk-double-click-time, in ms), in microseconds."""
+
+    settings = Gtk.Settings.get_default()
+    milliseconds = settings.get_property("gtk-double-click-time") if settings else 0
+
+    return (milliseconds if milliseconds > 0 else DOUBLE_CLICK_MS) * 1000
+
+
 class SystemMenu(Gtk.MenuButton):
     """Power glyph at the right end: lock, suspend, log out, restart, power off.
 
     Log out, restart and power off take a second click, so a stray click cannot end
-    the session. Suspend needs none: swayidle locks the screen before sleep.
+    the session; a double-click does not count as both. Suspend needs none: swayidle
+    locks the screen before sleep.
     """
 
     ACTIONS = (
@@ -2904,6 +2959,8 @@ class SystemMenu(Gtk.MenuButton):
 
         self.library = library
         self.armed = None
+        # When the asking row was armed, in GLib monotonic microseconds.
+        self.armed_at = 0
         self.disarm_source = None
         self.rows = {}
 
@@ -2962,10 +3019,16 @@ class SystemMenu(Gtk.MenuButton):
 
     def on_action_clicked(self, _button, key):
         button, label, title, confirm, command = self.rows[key]
+        now = GLib.get_monotonic_time()
+
+        if confirms_too_soon(self.armed, key, self.armed_at, now, double_click_microseconds()):
+            # A double-click's second half: keep asking, for a deliberate click.
+            return
 
         if needs_second_click(self.armed, key, confirm):
             self.disarm()
             self.armed = key
+            self.armed_at = now
             label.set_label(confirm)
             button.add_css_class("system-confirm")
             self.disarm_source = GLib.timeout_add_seconds(
@@ -3067,6 +3130,16 @@ def audio_outputs(audio):
                   key=lambda output: output[1].casefold())
 
 
+def audio_monitor_delay(ran_seconds, last_delay):
+    """Seconds to wait before starting pw-dump again after one that ran ran_seconds:
+    the base wait after one that ran longer than that (PipeWire restarted), otherwise
+    twice the last wait up to the maximum, so a PipeWire that stays down for a while
+    is still followed once it is back, without a tight loop meanwhile."""
+    if ran_seconds > AUDIO_MONITOR_RETRY_SECONDS or not last_delay:
+        return AUDIO_MONITOR_RETRY_SECONDS
+    return min(last_delay * 2, AUDIO_MONITOR_RETRY_MAX_SECONDS)
+
+
 class VolumeMenu(Gtk.MenuButton):
     """Speaker glyph; its popover holds a mute toggle, a volume slider and the outputs.
 
@@ -3082,6 +3155,8 @@ class VolumeMenu(Gtk.MenuButton):
         self.monitor = None
         self.monitor_buffer = b""
         self.monitor_started = 0
+        # The wait before the last restart of pw-dump (see audio_monitor_delay).
+        self.monitor_delay = 0
         self.refresh_source = None
         # The slider's newest value not yet sent; one set-volume runs at a time.
         self.wanted = None
@@ -3250,9 +3325,11 @@ class VolumeMenu(Gtk.MenuButton):
         except GLib.Error:
             chunk = b""
         if not chunk:
-            # PipeWire stopped or restarted: start again, unless pw-dump failed at once.
-            if time.monotonic() - self.monitor_started > AUDIO_MONITOR_RETRY_SECONDS:
-                GLib.timeout_add_seconds(AUDIO_MONITOR_RETRY_SECONDS, self.setup)
+            # PipeWire stopped or restarted: start again, waiting longer each time
+            # pw-dump quits at once, so it never gives up on a PipeWire that comes back.
+            self.monitor_delay = audio_monitor_delay(
+                time.monotonic() - self.monitor_started, self.monitor_delay)
+            GLib.timeout_add_seconds(self.monitor_delay, self.setup)
             return
         objects, self.monitor_buffer = split_dump(self.monitor_buffer + chunk)
         if apply_audio_objects(self.audio, objects) and self.refresh_source is None:
@@ -3378,6 +3455,8 @@ class TinyBar(Gtk.Application):
         self.last_battery_status = None
         # Lowest warning threshold announced this discharge (see battery_warning).
         self.battery_warned = None
+        # The last warning's notification id: the next one replaces it, not stacks.
+        self.battery_notification = 0
 
         self.previous_cpu = None
         self.battery_cpu = None
@@ -4451,14 +4530,16 @@ class TinyBar(Gtk.Application):
     def send_battery_warning(self, percent, threshold, runtime_text):
         """Post a low-battery notification through the session's notification
         service (Mako). Asynchronous, so a missing or slow service never stalls
-        the panel; a failure is only logged."""
+        the panel; a failure is only logged. Each warning replaces the previous
+        one, so at most one stays on screen (Mako keeps urgent ones until
+        dismissed); one already dismissed is simply posted anew."""
 
         urgent = threshold == BATTERY_CRITICAL_PERCENT
         summary, body = battery_warning_text(percent, threshold, runtime_text)
 
         def finished(bus, result):
             try:
-                bus.call_finish(result)
+                (self.battery_notification,) = bus.call_finish(result).unpack()
             except GLib.Error as error:
                 print(
                     f"tinybar: battery warning not shown: {error.message}",
@@ -4483,7 +4564,7 @@ class TinyBar(Gtk.Application):
                 "(susssasa{sv}i)",
                 (
                     "Tinybar",
-                    0,
+                    self.battery_notification,
                     "battery-caution" if urgent else "battery-low",
                     summary,
                     body,
