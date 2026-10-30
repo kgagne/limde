@@ -207,6 +207,40 @@ popover > contents {
     color: ${colors_muted};
 }
 
+/* System menu: plain rows that highlight on hover. */
+.system-popover {
+    padding: 6px;
+    min-width: 180px;
+}
+
+.system-action {
+    min-height: 0;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: ${shape_control_radius}px;
+    background: transparent;
+    color: ${colors_text};
+    box-shadow: none;
+    transition: none;
+}
+
+/* On the label: the base rule gives every node its own size, so a size set on the
+   button would not reach its text. */
+.system-action label {
+    font-size: 13px;
+}
+
+.system-action:hover {
+    background: ${colors_hover};
+}
+
+/* Log out, restart or power off waiting for its second click. */
+.system-action.system-confirm,
+.system-action.system-confirm:hover {
+    background: ${colors_error_background};
+    color: ${colors_error_text};
+}
+
 .panel-heading {
     padding: 4px 4px 0;
     font-size: 12px;

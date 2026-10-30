@@ -79,6 +79,8 @@ BATTERY_SAMPLE_SECONDS = 5
 USAGE_SAMPLE_SECONDS = 2
 TEMP_SAMPLE_SECONDS = 30
 NOTIFICATION_SAMPLE_SECONDS = 2
+# Log out, restart and power off ask for a second click; the question clears after this.
+CONFIRM_SECONDS = 4
 
 # CPU and RAM readouts are off in the panel until they show something more
 # useful. The sampling code stays; with this off it is never scheduled, so
@@ -2844,6 +2846,143 @@ class BatteryMenu(Gtk.MenuButton):
         self.summary.set_text(power_summary(summary, name))
 
 
+def needs_second_click(armed, key, confirm):
+    """True when a click on the system menu's `key` row should ask again instead of
+    acting: the row has a question (`confirm`) and is not the one already asking."""
+
+    return bool(confirm) and armed != key
+
+
+class SystemMenu(Gtk.MenuButton):
+    """Power glyph at the right end: lock, suspend, log out, restart, power off.
+
+    Log out, restart and power off take a second click, so a stray click cannot end
+    the session. Suspend needs none: swayidle locks the screen before sleep.
+    """
+
+    ACTIONS = (
+        ("lock", "lock", "Lock", None,
+         ["loginctl", "lock-session"]),
+        ("suspend", "moon", "Suspend", None,
+         ["systemctl", "suspend"]),
+        # Labwc exports LABWC_PID to what it starts; --exit signals that process.
+        ("log-out", "log-out", "Log out", "Click again to log out",
+         ["labwc", "--exit"]),
+        ("restart", "rotate-right", "Restart", "Click again to restart",
+         ["systemctl", "reboot"]),
+        ("power-off", "power-off", "Power off", "Click again to power off",
+         ["systemctl", "poweroff"]),
+    )
+
+    def __init__(self, library):
+        super().__init__()
+
+        self.library = library
+        self.armed = None
+        self.disarm_source = None
+        self.rows = {}
+
+        self.set_has_frame(False)
+        self.add_css_class("panel-menu")
+
+        self.icon = glyph_widget("status-icon")
+        self.set_child(self.icon)
+
+        content = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=2
+        )
+
+        content.add_css_class("system-popover")
+
+        for key, glyph, title, confirm, command in self.ACTIONS:
+            button, icon, label = self.action_row()
+            library.set_glyph(icon, glyph)
+            label.set_label(title)
+            button.connect("clicked", self.on_action_clicked, key)
+            self.rows[key] = (button, label, title, confirm, command)
+            content.append(button)
+
+        popover = Gtk.Popover()
+        popover.set_child(content)
+        popover.connect("hide", lambda _popover: self.disarm())
+
+        self.set_popover(popover)
+        open_below_panel(self)
+
+        if self.library.set_glyph(self.icon, "power-off"):
+            self.icon.add_css_class("icon-only")
+
+        self.set_tooltip_text("System")
+
+    def action_row(self):
+        button = Gtk.Button()
+        button.add_css_class("system-action")
+
+        row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=8
+        )
+
+        icon = glyph_widget("panel-row-icon")
+        label = Gtk.Label()
+        label.set_xalign(0)
+        label.set_hexpand(True)
+
+        row.append(icon)
+        row.append(label)
+        button.set_child(row)
+
+        return button, icon, label
+
+    def on_action_clicked(self, _button, key):
+        button, label, title, confirm, command = self.rows[key]
+
+        if needs_second_click(self.armed, key, confirm):
+            self.disarm()
+            self.armed = key
+            label.set_label(confirm)
+            button.add_css_class("system-confirm")
+            self.disarm_source = GLib.timeout_add_seconds(
+                CONFIRM_SECONDS,
+                self.on_confirm_timeout
+            )
+            return
+
+        self.popdown()
+
+        try:
+            process = Gio.Subprocess.new(command, Gio.SubprocessFlags.NONE)
+        except GLib.Error as error:
+            print(f"tinybar: {title.lower()} failed: {error}", flush=True)
+            return
+
+        # A refusal (polkit, or no LABWC_PID) shows only in the exit status.
+        process.wait_check_async(None, self.on_action_finished, title)
+
+    def on_action_finished(self, process, result, title):
+        try:
+            process.wait_check_finish(result)
+        except GLib.Error as error:
+            print(f"tinybar: {title.lower()} failed: {error}", flush=True)
+
+    def on_confirm_timeout(self):
+        self.disarm_source = None
+        self.disarm()
+        return GLib.SOURCE_REMOVE
+
+    def disarm(self):
+        if self.disarm_source:
+            GLib.source_remove(self.disarm_source)
+            self.disarm_source = None
+
+        if self.armed:
+            button, label, title, _confirm, _command = self.rows[self.armed]
+            label.set_label(title)
+            button.remove_css_class("system-confirm")
+            self.armed = None
+
+
 class LevelOverlay(Gtk.Window):
     """Brief brightness or volume readout near the bottom of the screen.
 
@@ -3064,6 +3203,7 @@ class TinyBar(Gtk.Application):
             show_value=False
         )
         self.battery = BatteryMenu(self.icons, self.history)
+        self.system_menu = SystemMenu(self.icons)
         # Desktops and VMs have no battery or backlight: leave those indicators out.
         self.battery.set_visible(HAS_BATTERY)
         self.brightness.set_visible(HAS_BACKLIGHT)
@@ -3082,7 +3222,8 @@ class TinyBar(Gtk.Application):
             self.wifi,
             self.brightness,
             self.volume,
-            self.battery
+            self.battery,
+            self.system_menu
         ]
 
         for widget in widgets:

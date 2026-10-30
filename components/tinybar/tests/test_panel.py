@@ -55,6 +55,31 @@ class NetworkListTests(unittest.TestCase):
         self.assertEqual(tinybar.decode_ssid(b"\xff"), "�")
 
 
+class SystemMenuTests(unittest.TestCase):
+    def test_session_actions_in_order(self):
+        commands = {key: command for key, *_rest, command in tinybar.SystemMenu.ACTIONS}
+        self.assertEqual(list(commands), ["lock", "suspend", "log-out", "restart", "power-off"])
+        self.assertEqual(commands["lock"], ["loginctl", "lock-session"])
+        self.assertEqual(commands["suspend"], ["systemctl", "suspend"])
+        self.assertEqual(commands["log-out"], ["labwc", "--exit"])
+        self.assertEqual(commands["restart"], ["systemctl", "reboot"])
+        self.assertEqual(commands["power-off"], ["systemctl", "poweroff"])
+
+    def test_only_ending_the_session_asks_again(self):
+        asking = [key for key, _glyph, _title, confirm, _command in tinybar.SystemMenu.ACTIONS
+                  if confirm]
+        self.assertEqual(asking, ["log-out", "restart", "power-off"])
+
+    def test_second_click_on_the_same_row_acts(self):
+        question = "Click again to restart"
+        self.assertTrue(tinybar.needs_second_click(None, "restart", question))
+        self.assertFalse(tinybar.needs_second_click("restart", "restart", question))
+        # Another row asking moves the question; it does not count as the first click.
+        self.assertTrue(tinybar.needs_second_click("power-off", "restart", question))
+        self.assertFalse(tinybar.needs_second_click(None, "lock", None))
+        self.assertFalse(tinybar.needs_second_click("restart", "suspend", None))
+
+
 class BatteryTests(unittest.TestCase):
     def test_decimal_hours(self):
         self.assertEqual(tinybar.format_hours(3.5), "3.5h")
