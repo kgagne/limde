@@ -626,7 +626,7 @@ class TooltipTests(unittest.TestCase):
         self.assertEqual(tinybar.network_tooltip(network(hardware=False)),
                          "Wi-Fi: off by the hardware switch")
         self.assertEqual(tinybar.network_tooltip(network()), "Wi-Fi: not connected")
-        self.assertEqual(tinybar.network_tooltip(network(device=None)), "Network: not connected")
+        self.assertEqual(tinybar.network_tooltip(network(device=None)), "Wi-Fi: no Wi-Fi device")
         self.assertEqual(tinybar.network_tooltip(None), "Network: status unavailable")
 
     def test_volume_and_brightness(self):

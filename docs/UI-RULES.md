@@ -72,8 +72,11 @@ its state, in the words its popover uses.
 - A reading that failed says so: "Volume: unavailable".
 
 Write the words in a small function with a unit test (`components/tinybar/tests/test_panel.py`).
-A `StatusIndicator` takes them as `tooltip=`; its first argument is the state string its
-icon is picked from, and is never shown.
+A `StatusIndicator` takes them as `tooltip=`. Its first argument is a state string
+("VOL MUTED", "RAM 2.9/14.8G"), not hover words, but it can still show: the icon is
+picked from it, the words after its first word are the panel value (when `show_value`,
+unless `display_text=` is given), and with no icon for it the whole string is the label.
+Rewording one can change the icon and what the panel shows.
 
 ## Cursor
 

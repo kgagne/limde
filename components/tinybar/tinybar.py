@@ -1532,7 +1532,7 @@ def network_tooltip(state):
         return "Wired: connected"
 
     if not state["wifi_device"]:
-        return "Network: not connected"
+        return "Wi-Fi: no Wi-Fi device"
 
     if not state["hardware_enabled"]:
         return "Wi-Fi: off by the hardware switch"
