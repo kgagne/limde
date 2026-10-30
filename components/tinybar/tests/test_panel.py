@@ -761,6 +761,114 @@ class BluetoothTests(unittest.TestCase):
         self.assertEqual(prompt("display", "Keys", "0000"), "Type 0000 on Keys, then press Enter")
         self.assertEqual(prompt("pin", "Old mouse"), "Old mouse needs a PIN. Use Other device… below.")
 
+    def test_an_open_form_keeps_its_list_and_the_ones_above(self):
+        fill = tinybar.bluetooth_lists_to_fill
+        self.assertEqual(fill(None), {"paired", "nearby"})
+        # The nearby list, below a paired device's form, still fills while searching.
+        self.assertEqual(fill({"device": {"paired": True}}), {"nearby"})
+        self.assertEqual(fill({"device": {"paired": False}}), set())
+
+
+class FakeBlueZ:
+    """BluetoothControl's actions; each waits in self.calls until a test ends it with
+    its on_done."""
+
+    def __init__(self):
+        self.calls = []
+
+    def __getattr__(self, action):
+        return lambda *args: self.calls.append((action, args[-1]))
+
+
+class FakeWidget:
+    def get_parent(self):
+        return None
+
+    def set_label(self, _label):
+        pass
+
+
+class WidgetlessBluetoothMenu:
+    """BluetoothMenu's device actions with stand-ins for its widgets and for BlueZ: the
+    form records what it shows, and refresh() counts."""
+
+    on_device_clicked = tinybar.BluetoothMenu.on_device_clicked
+    on_connect_clicked = tinybar.BluetoothMenu.on_connect_clicked
+    on_forget_clicked = tinybar.BluetoothMenu.on_forget_clicked
+    done_for = tinybar.BluetoothMenu.done_for
+    on_done = tinybar.BluetoothMenu.on_done
+    close_form = tinybar.BluetoothMenu.close_form
+    on_switch_set = tinybar.BluetoothMenu.on_switch_set
+    on_pair_new_clicked = tinybar.BluetoothMenu.on_pair_new_clicked
+    on_popover_hidden = tinybar.BluetoothMenu.on_popover_hidden
+
+    def __init__(self):
+        self.control, self.adapter = FakeBlueZ(), HCI0
+        self.target, self.busy, self.searching, self.updating_switch = None, False, False, False
+        self.form = self.connect_button = self.forget_button = FakeWidget()
+        self.shown, self.refreshes = None, 0
+
+    def show_form(self, message=None, buttons=()):
+        self.shown = message
+
+    def refresh(self):
+        self.refreshes += 1
+
+
+class BluetoothMenuTests(unittest.TestCase):
+    PHONES = {"path": HCI0 + "/dev_A", "name": "Headphones", "paired": True, "connected": False}
+    KEYBOARD = {"path": HCI0 + "/dev_B", "name": "Keyboard", "paired": True, "connected": True}
+
+    def end(self, menu, call, ok, message=None):
+        menu.control.calls[call][1](ok, message)
+
+    def test_a_late_result_stays_with_the_form_it_came_from(self):
+        for ok, message in ((False, "Could not connect"), (True, None)):
+            menu = WidgetlessBluetoothMenu()
+            menu.on_device_clicked("phones row", self.PHONES)
+            menu.on_connect_clicked(None)  # call 0, still running when the popover closes
+            menu.on_popover_hidden(None)
+            menu.on_device_clicked("keyboard row", self.KEYBOARD)
+            menu.on_connect_clicked(None)  # call 1
+            self.assertEqual([action for action, _ in menu.control.calls],
+                             ["connect", "disconnect"])
+            self.end(menu, 0, ok, message)
+            self.assertTrue(menu.busy)
+            self.assertIs(menu.target["device"], self.KEYBOARD)
+            self.assertEqual(menu.shown, "Disconnecting…")
+            self.end(menu, 1, False, "Could not disconnect")
+            self.assertFalse(menu.busy)
+            self.assertEqual(menu.shown, "Could not disconnect")
+
+    def test_closing_a_form_ends_its_wait(self):
+        menu = WidgetlessBluetoothMenu()
+        menu.on_device_clicked("phones row", self.PHONES)
+        menu.on_connect_clicked(None)
+        menu.on_switch_set(None, False)
+        self.assertEqual((menu.target, menu.busy), (None, False))
+        menu.on_device_clicked("keyboard row", self.KEYBOARD)
+        self.assertIs(menu.target["device"], self.KEYBOARD)
+
+    def test_pair_new_device_folds_a_form_with_nothing_running(self):
+        menu = WidgetlessBluetoothMenu()
+        menu.on_device_clicked("phones row", self.PHONES)
+        menu.on_pair_new_clicked(None)
+        self.assertIsNone(menu.target)
+        self.assertTrue(menu.searching)
+        menu.on_device_clicked("phones row", self.PHONES)
+        menu.on_connect_clicked(None)
+        menu.on_pair_new_clicked(None)
+        self.assertIs(menu.target["device"], self.PHONES)  # It waits for its result.
+
+    def test_the_switch_goes_back_only_when_bluez_refuses(self):
+        menu = WidgetlessBluetoothMenu()
+        menu.on_switch_set(None, False)
+        self.end(menu, 0, True)  # BlueZ's PropertiesChanged redraws it, not the reply.
+        self.assertEqual(menu.refreshes, 0)
+        menu.on_switch_set(None, True)
+        self.end(menu, 1, False, "Could not switch Bluetooth")
+        self.assertEqual(menu.refreshes, 1)
+
 
 @unittest.skipUnless(shutil.which("dbus-daemon"), "needs dbus-daemon")
 class BluetoothAgentTests(unittest.TestCase):

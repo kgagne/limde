@@ -30,7 +30,9 @@ lists windows through the wlr foreign-toplevel protocol.
   adapter. Tinybar is BlueZ's pairing agent and follows BlueZ's D-Bus signals, so
   nothing polls; the calls are in `BluetoothControl`, and `tests/vm/test-bluetooth`
   runs them against BlueZ's virtual controllers in a VM. Only the first adapter is
-  shown.
+  shown. Closing the menu leaves a pairing or connection running; its result shows
+  in the panel icon, never under another device's row, and a new action can start at
+  once. "Pair new device" folds away a device's open buttons.
 - Volume: click the speaker for a mute toggle, a slider (up to 100 %, like the keys)
   and the list of outputs; click an output to make it the default. Only the volume keys
   show the level overlay. Changes made elsewhere, such as another app or a new default

@@ -2854,6 +2854,16 @@ def bluetooth_failure(error, fallback):
     return BLUEZ_FAILURES.get((error or "").rsplit(".", 1)[-1], fallback)
 
 
+def bluetooth_lists_to_fill(target):
+    """The device lists ("paired", "nearby") the popover may refill now, given the open
+    form's target (None: no form). The form's own list stays as it is, and so does the
+    paired list above the nearby one, so rows never jump under the pointer; the nearby
+    list below a paired device's form still fills while searching."""
+    if target is None:
+        return {"paired", "nearby"}
+    return {"nearby"} if target["device"]["paired"] else set()
+
+
 def pairing_prompt(kind, name, code=None):
     """What the popover says when pairing needs the person: "confirm" a number the
     device shows, "display" one to type on it, or "pin" (refused; bluetoothctl asks)."""
@@ -3181,20 +3191,21 @@ class BluetoothMenu(Gtk.MenuButton):
         self.pair_new.set_visible(powered and not self.searching)
         self.nearby_heading.set_visible(self.searching)
 
-        # Leave the lists alone while a device's form is open, so rows do not jump
-        # under the pointer.
-        if self.target is not None:
+        # An open form keeps its own list and the ones above it as they are.
+        refill = bluetooth_lists_to_fill(self.target)
+        if "paired" in refill:
+            clear_box(self.paired)
+            for device in paired:
+                self.paired.append(self.device_button(device))
+            self.paired.set_visible(powered and bool(paired))
+            self.none.set_visible(powered and not paired)
+        if "nearby" not in refill:
             return
 
-        clear_box(self.paired)
         clear_box(self.nearby)
-        for device in paired:
-            self.paired.append(self.device_button(device))
         nearby = nearby if self.searching else []
         for device in nearby:
             self.nearby.append(self.device_button(device))
-        self.paired.set_visible(powered and bool(paired))
-        self.none.set_visible(powered and not paired)
         # A short list goes without a scrollbar, whose minimum height would pad it out;
         # one-line rows are 30 px with 4 between (docs/UI-RULES.md).
         tall = len(nearby) * 34 > NETWORK_LIST_HEIGHT
@@ -3228,7 +3239,10 @@ class BluetoothMenu(Gtk.MenuButton):
         parent = self.form.get_parent()
         if parent is not None:
             parent.remove(self.form)
+        # An action still running carries on, but its result no longer has a form to
+        # show in (on_done drops it), so the next one may start.
         self.target = None
+        self.busy = False
 
     def on_device_clicked(self, row, device):
         if self.busy:
@@ -3245,7 +3259,7 @@ class BluetoothMenu(Gtk.MenuButton):
             return
         self.busy = True
         self.show_form(f"Pairing with {device['name']}…")
-        self.control.pair(device["path"], self.on_done)
+        self.control.pair(device["path"], self.done_for(self.target))
 
     def on_connect_clicked(self, _button):
         if self.busy or self.target is None:
@@ -3254,21 +3268,28 @@ class BluetoothMenu(Gtk.MenuButton):
         self.busy = True
         if device["connected"]:
             self.show_form("Disconnecting…")
-            self.control.disconnect(device["path"], self.on_done)
+            self.control.disconnect(device["path"], self.done_for(self.target))
         else:
             self.show_form(f"Connecting to {device['name']}…")
-            self.control.connect(device["path"], self.on_done)
+            self.control.connect(device["path"], self.done_for(self.target))
 
     def on_forget_clicked(self, _button):
         if self.busy or self.target is None:
             return
         self.busy = True
-        self.control.forget(self.adapter, self.target["device"]["path"], self.on_done)
+        self.control.forget(self.adapter, self.target["device"]["path"],
+                            self.done_for(self.target))
 
-    def on_done(self, ok, message):
+    def done_for(self, target):
+        """The on_done of an action started from target's form."""
+        return lambda ok, message: self.on_done(target, ok, message)
+
+    def on_done(self, target, ok, message):
+        if target is not self.target:
+            # Its form has closed (the popover hid, or the adapter went off), and another
+            # device's action may be running now; the panel glyph shows the outcome.
+            return
         self.busy = False
-        if self.target is None:
-            return  # The popover closed; the panel glyph shows the outcome.
         if ok:
             self.close_form()
             self.refresh()
@@ -3310,12 +3331,19 @@ class BluetoothMenu(Gtk.MenuButton):
         if self.updating_switch or self.control is None or self.adapter is None:
             return False
         self.close_form()
-        self.control.set_powered(self.adapter, enabled, lambda _ok, _message: self.refresh())
+        # BlueZ replies before its PropertiesChanged for Powered, which redraws the
+        # popover; a refresh on that reply would flip the switch back for a moment.
+        # Only a failure puts it back.
+        self.control.set_powered(self.adapter, enabled,
+                                 lambda ok, _message: ok or self.refresh())
         return False
 
     def on_pair_new_clicked(self, _button):
         if self.control is None or self.adapter is None:
             return
+        if not self.busy:
+            # A form with nothing running folds away; a running one stays for its result.
+            self.close_form()
         self.searching = True
         self.control.search(self.adapter, True)
         self.refresh()
@@ -3336,7 +3364,6 @@ class BluetoothMenu(Gtk.MenuButton):
         if self.target and self.target["answer"]:
             self.target["answer"](False)
         self.close_form()
-        self.busy = False
 
 
 def with_alpha(color, alpha):
