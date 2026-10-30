@@ -18,6 +18,10 @@ windows through the wlr foreign-toplevel protocol.
   kept the way NetworkManager keeps them by default: readable only by root, with the
   connection. NetworkManager's calls are in `WifiControl`; `tests/vm/test-wifi` runs
   them against simulated access points in a VM.
+- Volume: click the speaker for a mute toggle, a slider (up to 100 %, like the keys)
+  and the list of outputs; click an output to make it the default. Only the volume keys
+  show the level overlay. Changes made elsewhere, such as another app or a new default
+  output, show at once: Tinybar follows PipeWire through `pw-dump --monitor`.
 - Tailscale (optional, not installed by limDE): a button left of Wi-Fi turns Tailscale
   on and off with `tailscale up` and `tailscale down`. Tailscale's logo means connected;
   all nine dots greyed with a slash means off or not ready (Tailscale's own tray greys

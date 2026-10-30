@@ -33,4 +33,11 @@ case "${1:-}" in
 esac
 
 output=$("$WPCTL" get-volume @DEFAULT_AUDIO_SINK@)
-printf '%s\n' "$output" > "$STATE_FILE"
+
+# A key's change ends with a "key" line, which makes Tinybar show the level
+# overlay; sync and Tinybar's own reads leave it out.
+if [ "$1" = sync ]; then
+    printf '%s\n' "$output" > "$STATE_FILE"
+else
+    printf '%s\nkey\n' "$output" > "$STATE_FILE"
+fi

@@ -190,6 +190,14 @@ NM_TIMEOUT_MS = 1000
 
 NETWORK_LIST_HEIGHT = 320
 
+WPCTL = "/usr/bin/wpctl"
+# Reports every PipeWire change as JSON; from pipewire-bin, which pipewire needs.
+AUDIO_MONITOR_COMMAND = ["/usr/bin/pw-dump", "--monitor", "--no-colors"]
+# PipeWire sends bursts of changes; one volume read follows a burst.
+AUDIO_EVENT_MS = 100
+# pw-dump quits when PipeWire restarts; it is started again after this.
+AUDIO_MONITOR_RETRY_SECONDS = 5
+
 # How long the brightness/volume readout stays up after the last change.
 LEVEL_OVERLAY_MS = 1500
 LEVEL_OVERLAY_MARGIN = 96
@@ -324,7 +332,7 @@ def battery_warning_text(percent, threshold, runtime_text):
     else:
         body = "Plug in soon."
 
-    return f"Battery at {percent} %", body
+    return f"Battery at {percent}%", body
 
 
 def format_coverage(seconds):
@@ -2983,6 +2991,265 @@ class SystemMenu(Gtk.MenuButton):
             self.armed = None
 
 
+def parse_volume(output):
+    """(percent, muted) from `wpctl get-volume` ("Volume: 0.40 [MUTED]"), or None."""
+    match = re.search(r"Volume:\s+([0-9.]+)", output or "")
+    return (round(float(match.group(1)) * 100), "[MUTED]" in output) if match else None
+
+
+def new_audio_state():
+    return {"sinks": {}, "watched": set(), "default": None}
+
+
+def split_dump(buffer):
+    """Objects in the complete batches of `pw-dump --monitor` output, and the rest. A batch
+    is an indented JSON array, so a line holding only "]" ends one; bad ones are skipped."""
+    *batches, rest = buffer.split(b"\n]\n")
+    objects = []
+    for batch in batches:
+        try:
+            found = json.loads(batch + b"\n]")
+        except ValueError:
+            continue
+        objects += [item for item in found if isinstance(item, dict)] if isinstance(found, list) else []
+    return objects, rest
+
+
+def apply_audio_objects(audio, objects):
+    """Fold pw-dump objects into audio; True if the volume or the outputs may have changed.
+    "sinks" maps output node ids to (node.name, description); "watched" holds audio devices
+    (hardware volume is set there) and the "default" metadata, which pw-dump sends with
+    only its changed entries. A removed object comes as its id alone."""
+    changed = False
+    for item in objects:
+        key, kind = item.get("id"), item.get("type", "")
+        props = (item.get("info") or {}).get("props") or item.get("props") or {}
+        if "type" not in item:
+            if audio["sinks"].pop(key, None) is not None or key in audio["watched"]:
+                audio["watched"].discard(key)
+                changed = True
+        elif kind.endswith(":Node") and props.get("media.class") == "Audio/Sink":
+            name = props.get("node.name")
+            audio["sinks"][key] = (name, props.get("node.description") or name or f"Output {key}")
+            changed = True
+        elif (kind.endswith(":Device") and props.get("media.class") == "Audio/Device") or (
+                kind.endswith(":Metadata") and props.get("metadata.name") == "default"):
+            audio["watched"].add(key)
+            changed = True
+            for entry in item.get("metadata") or []:
+                if entry.get("subject") == 0 and entry.get("key") == "default.audio.sink":
+                    value = entry.get("value")
+                    audio["default"] = value.get("name") if isinstance(value, dict) else None
+    return changed
+
+
+def audio_outputs(audio):
+    """The popover's outputs by name: (node id, description, is the default)."""
+    return sorted(((key, description, name == audio["default"])
+                   for key, (name, description) in audio["sinks"].items()),
+                  key=lambda output: output[1].casefold())
+
+
+class VolumeMenu(Gtk.MenuButton):
+    """Speaker glyph; its popover holds a mute toggle, a volume slider and the outputs.
+
+    Every change runs wpctl, then reads the volume back into the state file the keys write
+    (VOLUME_STATE), which the panel shows. A `pw-dump --monitor` child reports PipeWire's
+    changes, so changes made elsewhere are read too. Only the keys show the level overlay.
+    """
+
+    def __init__(self, library):
+        super().__init__()
+        self.library = library
+        self.audio = new_audio_state()
+        self.monitor = None
+        self.monitor_buffer = b""
+        self.monitor_started = 0
+        self.refresh_source = None
+        # The slider's newest value not yet sent; one set-volume runs at a time.
+        self.wanted = None
+        self.sending = False
+        self.updating = False
+        self.set_has_frame(False)
+        self.add_css_class("panel-menu")
+        self.indicator = StatusIndicator(library, "volume", show_value=False)
+        self.set_child(self.indicator)
+
+        self.mute = Gtk.ToggleButton()
+        self.mute.set_has_frame(False)
+        self.mute.add_css_class("volume-mute")
+        self.mute_icon = glyph_widget()
+        self.mute.set_child(self.mute_icon)
+        self.mute.connect("toggled", self.on_mute_toggled)
+        self.slider = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+        self.slider.set_hexpand(True)
+        self.slider.add_css_class("volume-slider")
+        self.slider.update_property([Gtk.AccessibleProperty.LABEL], ["Volume"])
+        self.slider.connect("value-changed", self.on_slider_changed)
+        self.value = Gtk.Label()
+        self.value.set_width_chars(4)
+        self.value.set_xalign(1)
+        self.value.add_css_class("notification-body")
+        controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        for widget in (self.mute, self.slider, self.value):
+            controls.append(widget)
+
+        self.heading = Gtk.Label(label="Output")
+        self.heading.set_xalign(0)
+        self.heading.add_css_class("panel-heading")
+        self.outputs = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        content.add_css_class("notification-popover")
+        for widget in (controls, self.heading, self.outputs):
+            content.append(widget)
+
+        popover = Gtk.Popover()
+        popover.set_child(content)
+        popover.connect("show", self.on_popover_shown)
+        self.set_popover(popover)
+        open_below_panel(self)
+
+    def set_text(self, text, **kwargs):
+        self.indicator.set_text(text, **kwargs)
+
+    def show_volume(self, percent, muted):
+        """Show the state file's level in the popover; a drag in progress keeps the slider."""
+        self.updating = True
+        self.mute.set_active(muted)
+        self.mute.set_tooltip_text("Unmute" if muted else "Mute")
+        self.library.set_glyph(self.mute_icon, volume_glyph(percent, muted))
+        (self.slider.add_css_class if muted else self.slider.remove_css_class)("muted")
+        if not self.sending:
+            self.slider.set_value(percent)
+            self.value.set_text(f"{percent}%")
+        self.updating = False
+
+    def wpctl(self, *args, then=None):
+        """Run wpctl without blocking, in the C locale; then(output, or None if it failed)."""
+        launcher = Gio.SubprocessLauncher.new(
+            Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE)
+        launcher.setenv("LC_ALL", "C", True)
+        try:
+            proc = launcher.spawnv([WPCTL, *args])
+        except GLib.Error as error:
+            print(f"tinybar: cannot run wpctl: {error.message}", flush=True)
+            if then:
+                then(None)
+            return
+        proc.communicate_utf8_async(None, None, self.on_wpctl_done, then)
+
+    def on_wpctl_done(self, proc, result, then):
+        try:
+            _ok, output, _err = proc.communicate_utf8_finish(result)
+        except GLib.Error:
+            output = None
+        if then:
+            then(output if proc.get_successful() else None)
+
+    def refresh(self, _output=None):
+        """Read the default output's volume into the state file, as a key would."""
+        self.wpctl("get-volume", "@DEFAULT_AUDIO_SINK@", then=self.write_state)
+
+    def write_state(self, output):
+        level = parse_volume(output)
+        if level is None:
+            return
+        # The popover shows it now, even if a failed wpctl left the file as it was. The
+        # file gets no "key" line, so no overlay; an unchanged level is not rewritten, so
+        # a key press's line survives the reread its own change causes.
+        self.show_volume(*level)
+        if level == parse_volume(read_path(VOLUME_STATE)):
+            return
+        try:
+            VOLUME_STATE.write_text(output.strip() + "\n")
+        except OSError:
+            pass
+
+    def on_slider_changed(self, slider):
+        if self.updating:
+            return
+        self.wanted = round(slider.get_value())
+        self.value.set_text(f"{self.wanted}%")
+        if not self.sending:
+            self.send_volume()
+
+    def send_volume(self, _output=None):
+        # A drag sends its newest value once the set-volume before it ends.
+        if self.wanted is None:
+            self.sending = False
+            self.refresh()
+            return
+        self.sending = True
+        percent, self.wanted = self.wanted, None
+        # The same 100 % cap as the keys.
+        self.wpctl("set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", f"{percent}%",
+                   then=self.send_volume)
+
+    def on_mute_toggled(self, button):
+        if not self.updating:
+            self.wpctl("set-mute", "@DEFAULT_AUDIO_SINK@", "1" if button.get_active() else "0",
+                       then=self.refresh)
+
+    def rebuild_outputs(self):
+        clear_box(self.outputs)
+        outputs = audio_outputs(self.audio)
+        for key, description, default in outputs:
+            button = Gtk.Button()
+            button.set_has_frame(False)
+            button.add_css_class("network-row")
+            button.set_child(panel_row(self.library, "speaker", description, None,
+                                       "check" if default else None))
+            button.connect("clicked", self.on_output_clicked, key)
+            self.outputs.append(button)
+        self.heading.set_visible(bool(outputs))
+
+    def on_output_clicked(self, _button, key):
+        self.wpctl("set-default", str(key), then=self.refresh)
+
+    def on_popover_shown(self, _popover):
+        self.rebuild_outputs()
+        self.refresh()
+
+    def setup(self):
+        self.audio = new_audio_state()
+        self.monitor_buffer = b""
+        try:
+            self.monitor = Gio.Subprocess.new(
+                AUDIO_MONITOR_COMMAND,
+                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE)
+        except GLib.Error as error:
+            print(f"tinybar: cannot follow volume changes: {error.message}", flush=True)
+            return False
+        self.monitor_started = time.monotonic()
+        self.read_monitor(self.monitor.get_stdout_pipe())
+        return False
+
+    def read_monitor(self, stream):
+        stream.read_bytes_async(65536, GLib.PRIORITY_DEFAULT, None, self.on_monitor_output)
+
+    def on_monitor_output(self, stream, result):
+        try:
+            chunk = stream.read_bytes_finish(result).get_data() or b""
+        except GLib.Error:
+            chunk = b""
+        if not chunk:
+            # PipeWire stopped or restarted: start again, unless pw-dump failed at once.
+            if time.monotonic() - self.monitor_started > AUDIO_MONITOR_RETRY_SECONDS:
+                GLib.timeout_add_seconds(AUDIO_MONITOR_RETRY_SECONDS, self.setup)
+            return
+        objects, self.monitor_buffer = split_dump(self.monitor_buffer + chunk)
+        if apply_audio_objects(self.audio, objects) and self.refresh_source is None:
+            self.refresh_source = GLib.timeout_add(AUDIO_EVENT_MS, self.refresh_after_event)
+        self.read_monitor(stream)
+
+    def refresh_after_event(self):
+        self.refresh_source = None
+        self.refresh()
+        if self.get_popover().get_visible():
+            self.rebuild_outputs()
+        return False
+
+
 class LevelOverlay(Gtk.Window):
     """Brief brightness or volume readout near the bottom of the screen.
 
@@ -3197,11 +3464,7 @@ class TinyBar(Gtk.Application):
             "brightness",
             show_value=False
         )
-        self.volume = StatusIndicator(
-            self.icons,
-            "volume",
-            show_value=False
-        )
+        self.volume = VolumeMenu(self.icons)
         self.battery = BatteryMenu(self.icons, self.history)
         self.system_menu = SystemMenu(self.icons)
         # Desktops and VMs have no battery or backlight: leave those indicators out.
@@ -3278,6 +3541,7 @@ class TinyBar(Gtk.Application):
             )
 
         self.setup_volume_monitor()
+        self.volume.setup()
         self.setup_brightness_monitor()
         self.wifi.setup()
 
@@ -3745,7 +4009,7 @@ class TinyBar(Gtk.Application):
         try:
             result = subprocess.run(
                 [
-                    "/usr/bin/wpctl",
+                    WPCTL,
                     "get-volume",
                     "@DEFAULT_AUDIO_SINK@"
                 ],
@@ -3810,48 +4074,36 @@ class TinyBar(Gtk.Application):
         return False
 
     def update_volume_from_state(self, announce=False):
-        # announce: a key press changed it, so also show the level overlay.
+        # announce: the file changed. The level overlay shows only if a key wrote
+        # it: tinybar-volume ends a key's write with a "key" line; the popover and
+        # changes made elsewhere (VolumeMenu.write_state) do not.
         output = read_path(
             VOLUME_STATE
         )
 
-        if not output:
+        level = parse_volume(output)
+
+        if level is None:
             self.volume.set_text(
                 "VOL ?"
             )
             return
 
-        match = re.search(
-            r"Volume:\s+([0-9.]+)",
-            output
-        )
-
-        muted = "[MUTED]" in output
-        percent = None
-
-        if match:
-            percent = round(
-                float(match.group(1))
-                * 100
-            )
+        percent, muted = level
 
         if muted:
             self.volume.set_text(
                 "VOL MUTED"
             )
 
-        elif percent is not None:
+        else:
             self.volume.set_text(
                 f"VOL {percent}%"
             )
 
-        else:
-            self.volume.set_text(
-                "VOL ?"
-            )
-            return
+        self.volume.show_volume(percent, muted)
 
-        if announce:
+        if announce and output.splitlines()[-1] == "key":
             self.level_overlay.show_level(
                 volume_glyph(percent or 0, muted),
                 percent or 0,

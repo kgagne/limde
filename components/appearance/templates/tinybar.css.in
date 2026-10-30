@@ -253,7 +253,9 @@ popover > contents {
     color: ${colors_text};
 }
 
-.power-arrow {
+/* Also the volume popover's mute toggle; its glyph shows the state. */
+.power-arrow,
+.volume-mute {
     min-height: 0;
     min-width: 0;
     padding: 2px 6px;
@@ -265,7 +267,8 @@ popover > contents {
     transition: none;
 }
 
-.power-arrow:hover {
+.power-arrow:hover,
+.volume-mute:hover {
     background: ${colors_hover};
     color: ${colors_text};
 }
@@ -307,6 +310,21 @@ popover > contents {
     background: ${colors_hover};
 }
 
+/* Volume popover slider: the level overlay's bar (below) with a knob. */
+.volume-slider {
+    padding: 6px 8px;
+}
+
+.volume-slider slider {
+    min-width: 14px;
+    min-height: 14px;
+    margin: -4px;
+    border: 0;
+    border-radius: 50%;
+    background: ${colors_text};
+    box-shadow: none;
+}
+
 /* The line, band, gridlines and labels are drawn in this colour at set opacities. */
 .power-graph {
     font-size: 11px;
@@ -336,18 +354,22 @@ window.level-window {
     color: ${colors_secondary};
 }
 
-.level-bar trough {
+.level-bar trough,
+.volume-slider trough {
     min-height: 6px;
     border-radius: 3px;
     background: ${colors_hover};
 }
 
-.level-bar progress {
+.level-bar progress,
+.volume-slider highlight {
     min-height: 6px;
     border-radius: 3px;
     background: ${colors_text};
 }
 
-.level-bar.muted progress {
+.level-bar.muted progress,
+.volume-slider.muted highlight,
+.volume-slider.muted slider {
     background: ${colors_muted};
 }

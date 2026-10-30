@@ -155,11 +155,11 @@ class BatteryWarningTests(unittest.TestCase):
 
     def test_text(self):
         self.assertEqual(tinybar.battery_warning_text("10", 10, "25m"),
-                         ("Battery at 10 %", "About 25m left."))
+                         ("Battery at 10%", "About 25m left."))
         self.assertEqual(tinybar.battery_warning_text("10", 10, None),
-                         ("Battery at 10 %", "Plug in soon."))
+                         ("Battery at 10%", "Plug in soon."))
         self.assertEqual(tinybar.battery_warning_text("4", 5, None),
-                         ("Battery at 4 %", "Plug in now."))
+                         ("Battery at 4%", "Plug in now."))
 
 
 def power_record(start, avg, low=None, high=None, coverage=300):
@@ -359,6 +359,98 @@ class WifiJoinTests(unittest.TestCase):
         found = tinybar.visible_networks([weak, strong])
         self.assertEqual(found[0]["path"], "/ap/2")
         self.assertTrue(found[0]["secured"])
+
+
+# `pw-dump --monitor --no-colors` output, cut down to the fields that matter: the first
+# batch (a laptop's card with speakers and HDMI, a playing stream, a client, two metadata
+# objects), the default output moving to HDMI, then HDMI and the client going away.
+PW_DUMP = b"""[
+  { "id": 44, "type": "PipeWire:Interface:Device", "version": 3, "info": { "change-mask": [ "props", "params" ],
+    "props": { "device.api": "alsa", "device.description": "Built-in Audio", "media.class": "Audio/Device" },
+    "params": { "Route": [ { "index": 0, "direction": "Output", "name": "analog-output-speaker" } ] } } },
+  { "id": 59, "type": "PipeWire:Interface:Node", "version": 3, "info": { "state": "suspended", "error": null,
+    "props": { "device.id": 44, "media.class": "Audio/Sink", "node.description": "Built-in Audio Analog Stereo",
+      "node.name": "alsa_output.pci-0000_00_1f.3.analog-stereo", "node.nick": "ALC289 Analog" },
+    "params": { "Props": [ { "volume": 1.0, "mute": false, "channelVolumes": [ 1.0, 1.0 ] } ] } } },
+  { "id": 61, "type": "PipeWire:Interface:Node", "version": 3, "info": { "state": "suspended", "props": {
+    "media.class": "Audio/Sink", "node.description": "Built-in Audio Digital Stereo (HDMI)",
+    "node.name": "alsa_output.pci-0000_00_1f.3.hdmi-stereo" } } },
+  { "id": 70, "type": "PipeWire:Interface:Node", "version": 3, "info": { "state": "running",
+    "props": { "application.name": "Firefox", "media.class": "Stream/Output/Audio", "node.name": "Firefox" } } },
+  { "id": 65, "type": "PipeWire:Interface:Client", "version": 3, "info": { "change-mask": [ "props" ],
+    "props": { "application.name": "wpctl" } } },
+  { "id": 32, "type": "PipeWire:Interface:Metadata", "version": 3, "props": { "metadata.name": "settings" },
+    "metadata": [ { "subject": 0, "key": "clock.rate", "type": "", "value": 48000 } ] },
+  { "id": 41, "type": "PipeWire:Interface:Metadata", "version": 3, "props": { "metadata.name": "default" },
+    "metadata": [
+      { "subject": 0, "key": "default.audio.sink", "type": "Spa:String:JSON",
+        "value": { "name": "alsa_output.pci-0000_00_1f.3.analog-stereo" } },
+      { "subject": 0, "key": "default.audio.source", "type": "Spa:String:JSON",
+        "value": { "name": "alsa_input.pci-0000_00_1f.3.analog-stereo" } } ] }
+]
+[
+  { "id": 41, "type": "PipeWire:Interface:Metadata", "version": 3, "props": { "metadata.name": "default" },
+    "metadata": [ { "subject": 0, "key": "default.audio.sink", "type": "Spa:String:JSON",
+      "value": { "name": "alsa_output.pci-0000_00_1f.3.hdmi-stereo" } } ] }
+]
+[
+  {
+    "id": 61,
+    "info": null
+  },
+  {
+    "id": 65,
+    "info": null
+  }
+]
+"""
+
+
+class VolumeTests(unittest.TestCase):
+    def test_wpctl_get_volume(self):
+        self.assertEqual(tinybar.parse_volume("Volume: 0.40"), (40, False))
+        self.assertEqual(tinybar.parse_volume("Volume: 0.10 [MUTED]\nkey"), (10, True))
+        self.assertEqual(tinybar.parse_volume("Volume: 1.00"), (100, False))
+        self.assertIsNone(tinybar.parse_volume(None))
+        self.assertIsNone(tinybar.parse_volume("Translate ID error: default sink not found"))
+
+    def test_batches_split_wherever_the_pipe_breaks(self):
+        whole, rest = tinybar.split_dump(PW_DUMP)
+        self.assertEqual((rest, [item["id"] for item in whole]),
+                         (b"", [44, 59, 61, 70, 65, 32, 41, 41, 61, 65]))
+        for size in (1, 7, 100, 4096):
+            objects, rest = [], b""
+            for start in range(0, len(PW_DUMP), size):
+                found, rest = tinybar.split_dump(rest + PW_DUMP[start:start + size])
+                objects += found
+            self.assertEqual(objects, whole, size)
+
+    def test_unfinished_and_broken_batches(self):
+        self.assertEqual(tinybar.split_dump(b'[\n  { "id": 1'), ([], b'[\n  { "id": 1'))
+        self.assertEqual(tinybar.split_dump(b'[\n  {\n]\n[\n  { "id": 2, "info": null }\n]\n['),
+                         ([{"id": 2, "info": None}], b"["))
+
+    def test_outputs_and_default_follow_the_batches(self):
+        first, moved, removed = (tinybar.split_dump(part + b"\n]\n")[0]
+                                 for part in PW_DUMP.split(b"\n]\n")[:3])
+        audio = tinybar.new_audio_state()
+        self.assertTrue(tinybar.apply_audio_objects(audio, first))
+        self.assertEqual(audio["watched"], {44, 41})
+        self.assertEqual(tinybar.audio_outputs(audio), [
+            (59, "Built-in Audio Analog Stereo", True),
+            (61, "Built-in Audio Digital Stereo (HDMI)", False),
+        ])
+        self.assertTrue(tinybar.apply_audio_objects(audio, moved))
+        self.assertEqual([output[2] for output in tinybar.audio_outputs(audio)], [False, True])
+        self.assertTrue(tinybar.apply_audio_objects(audio, removed))
+        self.assertEqual(tinybar.audio_outputs(audio), [(59, "Built-in Audio Analog Stereo", False)])
+
+    def test_clients_streams_and_other_metadata_change_nothing(self):
+        audio = tinybar.new_audio_state()
+        others = [item for item in tinybar.split_dump(PW_DUMP)[0] if item["id"] in (70, 65, 32)]
+        self.assertFalse(tinybar.apply_audio_objects(audio, others))
+        self.assertFalse(tinybar.apply_audio_objects(audio, [{"id": 65, "info": None}]))
+        self.assertEqual(audio, tinybar.new_audio_state())
 
 
 if __name__ == "__main__":
