@@ -79,4 +79,4 @@ Test: `scripts/check` (icons, both themes, contrast); `python3 components/appear
 - **install test** — `tests/vm/test-install NAME [--keep]`: two runs ("No changes"), reboot, session checks.
 - **release check** — `tests/vm/test-acceptance` (about 40 min): power cut and Ctrl+C mid-install, first login, baseline, update over user changes.
 - **wifi test** — `tests/vm/test-wifi NAME` after `test-install NAME --keep`: simulated radios, two hostapd networks, `tests/vm/wifi-check`. Trap: it tests the installed Tinybar, not the repo copy.
-- **session-only actions** — polkit refuses NetworkManager control over SSH, so tests type into foot through QMP: `tests/vm/test-wifi::type_text`, `tests/vm/test-acceptance::key`. Trap: only `tests/vm/vm` honours `LIMDE_VM_DIR`.
+- **session-only actions** — polkit refuses NetworkManager control over SSH, so tests type into foot through QMP: `tests/vm/test-wifi::type_text`, `tests/vm/test-acceptance::key`. Trap: a Tinybar restarted over SSH is outside the session too, so its Wi-Fi joins and power actions are refused; reboot the VM instead. Only `tests/vm/vm` honours `LIMDE_VM_DIR`.
