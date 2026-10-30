@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Log out and back in, in a VM with limde installed (the base image logs in again by itself):
+# the new session must get its own Elephant, which answers queries. The old session itself may
+# linger here: logging back in within agent-web's 2 s check keeps its old --keep-open loop alive,
+# which only this image's autologin is fast enough to do.
+#   tests/vm/test-logout [VM_NAME]
+# Saves the output under local/vm/results/<VM_NAME>/logout.txt. Exit 0 = all passed.
+set -uo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+repo=$(cd "$here/../.." && pwd)
+vm=$here/vm
+name=${1:-itest}
+out=${LIMDE_VM_DIR:-$repo/local/vm}/results/$name
+mkdir -p "$out"
+on_vm() { "$vm" ssh "$name" "$@"; }
+failed=0
+check() { local what=$1; shift
+  if "$@" >>"$out/logout.txt" 2>&1; then echo "PASS  $what"; else echo "FAIL  $what"; failed=1; fi; }
+: >"$out/logout.txt"
+
+old_labwc=$(on_vm pgrep -x labwc) || { echo "no session running in $name" >&2; exit 2; }
+old_elephant=$(on_vm pgrep -x elephant) || { echo "Elephant is not running in $name" >&2; exit 2; }
+elephant_scope() { on_vm 'grep -o "session-[0-9]*\.scope" /proc/$(pgrep -x elephant)/cgroup'; }
+old_scope=$(elephant_scope) || { echo "cannot read Elephant's session in $name" >&2; exit 2; }
+
+# What the panel's Log out runs.
+on_vm "LABWC_PID=$old_labwc labwc --exit"
+
+new_session_up() {
+  local labwc elephant
+  labwc=$(on_vm pgrep -x labwc) && [ "$labwc" != "$old_labwc" ] || return 1
+  elephant=$(on_vm pgrep -x elephant) && [ "$elephant" != "$old_elephant" ] || return 1
+  on_vm 'pgrep -f "[w]alker --gapplication-service" >/dev/null'
+}
+up=1
+for _ in $(seq 30); do new_session_up && { up=0; break; }; sleep 2; done
+check "a new session starts with a new Elephant" test "$up" = 0
+check "exactly one Elephant runs" on_vm '[ "$(pgrep -cx elephant)" = 1 ]'
+check "Elephant left the old session" test "$(elephant_scope)" != "$old_scope"
+check "Elephant runs in the new session" on_vm \
+  "tr '\\0' '\\n' </proc/\$(pgrep -x elephant)/environ | grep -q '^LABWC_PID='\$(pgrep -x labwc)'\$'"
+check "Elephant answers on its socket" on_vm \
+  "timeout 10 elephant query 'desktopapplications;fire;5;false' 2>&1 | grep -qi firefox"
+check "its log shows no errors" on_vm '! grep -iE "panic|fatal|error" ~/.local/state/limde/elephant.log'
+on_vm 'cat ~/.local/state/limde/elephant.log; loginctl list-sessions --no-pager' >>"$out/logout.txt" 2>&1
+exit "$failed"

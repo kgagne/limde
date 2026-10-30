@@ -55,6 +55,12 @@ before every push, and whenever the install flow itself changes (`install`,
 `lib/install/`, `packages/`, `pins/`). Save its VM with `--save` so the bench starts from
 the newest good install.
 
+## Logging out
+
+`test-logout NAME` runs on an installed VM (`vm up NAME --installed` is enough). It does what the
+panel's Log out does, waits for the image's autologin to start the next session, and checks that
+that session has its own Elephant, which answers a query.
+
 ## Wi-Fi
 
 `test-wifi NAME` runs in a VM where limDE is installed (`test-install NAME --keep`). The
