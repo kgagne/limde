@@ -54,7 +54,10 @@ rm -rf "$tmp_theme"
 # 4. Colour contrast (WCAG 2.2) for both palettes.
 python3 "$root/components/appearance/check-contrast" || fail=1
 
-# 5. Fresh-clone self-test: the same checks must pass on a clone (file modes, ignored files).
+# 5. The code map still points at files and names that exist.
+scripts/check-codemap || fail=1
+
+# 6. Fresh-clone self-test: the same checks must pass on a clone (file modes, ignored files).
 if [[ ${1:-} == --clone ]]; then
   tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
   git clone -q --no-local . "$tmp/limde"

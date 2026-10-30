@@ -217,6 +217,12 @@ Your own files override limDE's, and the installer never overwrites them:
   and `scripts/check` keeps it that way.
 - **Panel:** `~/.config/tinybar/settings.toml` (see `components/tinybar/README.md`).
 
+## Working on limDE
+
+`docs/CODEMAP.md` lists where each part lives (files and function names) and the traps
+that cost time. `scripts/check` runs before every commit and fails if the map points at
+something that no longer exists, so update it when you move or rename what it lists.
+
 ## Updating
 
 ```

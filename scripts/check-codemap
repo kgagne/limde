@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Check that a code map still points at real code.
+
+  scripts/check-codemap [MAP]      (default: docs/CODEMAP.md)
+
+In the map, a backticked `path` that starts with one of the repository's top-level
+files or folders must exist, and a backticked `path::Name` must name something that
+appears as a whole word in that file (`Class.method` checks both words). The map must
+also stay short enough to read at the start of every session.
+"""
+import re
+import sys
+from pathlib import Path
+
+MAX_LINES = 150
+
+root = Path(__file__).resolve().parent.parent
+map_file = root / (sys.argv[1] if len(sys.argv) > 1 else "docs/CODEMAP.md")
+top_level = {p.name for p in root.iterdir()}
+problems = []
+
+if not map_file.is_file():
+    sys.exit(f"codemap: {map_file.relative_to(root)} is missing")
+
+lines = map_file.read_text().splitlines()
+
+if len(lines) > MAX_LINES:
+    problems.append(f"{len(lines)} lines; keep it under {MAX_LINES}")
+
+for number, line in enumerate(lines, 1):
+    for span in re.findall(r"`([^`\s]+)`", line):
+        path, _, name = span.partition("::")
+        path = path.rstrip("/")
+
+        if path.split("/", 1)[0] not in top_level or not re.fullmatch(r"[\w.*/-]+", path):
+            continue  # not a repository path: a command, a live path, a setting
+
+        matches = sorted(root.glob(path)) if "*" in path else [root / path]
+
+        if not any(m.exists() for m in matches):
+            problems.append(f"line {number}: {path} does not exist")
+            continue
+
+        if not name:
+            continue
+
+        if not matches[0].is_file():
+            problems.append(f"line {number}: {path} is not a file, so ::{name} cannot be checked")
+            continue
+
+        text = matches[0].read_text(errors="replace")
+
+        for word in name.split("."):
+            if not re.search(rf"(?<![\w-]){re.escape(word)}(?![\w-])", text):
+                problems.append(f"line {number}: {name} is not in {path}")
+                break
+
+for problem in problems:
+    print(f"codemap: {problem}", file=sys.stderr)
+
+sys.exit(1 if problems else 0)
