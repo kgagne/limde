@@ -258,6 +258,8 @@ or out of date, including the pinned source builds in `pins/`.
 - On NVIDIA laptops, the desktop runs on the integrated GPU. The NVIDIA card is left to
   Ubuntu's open nouveau driver; limDE doesn't set up NVIDIA's driver.
 - The light theme doesn't change foot's terminal colours, which stay dark.
+- Screen readers are not supported in v1.0: limDE installs no accessibility bus
+  (AT-SPI), so Orca and similar tools cannot read the desktop.
 - There is no uninstaller yet.
 - Ubuntu 26.04 only.
 

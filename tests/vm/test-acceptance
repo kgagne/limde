@@ -104,7 +104,8 @@ for proc in tinybar.py mako swayidle elephant 'walker --gapplication-service' 'a
   check "session runs $proc" on_vm "pgrep -f '[${proc:0:1}]${proc:1}' >/dev/null"
 done
 check "no failed units" on_vm '[ -z "$(systemctl --failed --no-legend)" ]'
-# GTK's accessibility-bus warning is left out: accessibility is an open question.
+# GTK's accessibility-bus warning is left out: screen readers are unsupported in v1.0
+# (README, known limitations), so there is no bus to find.
 check "panel and launcher logs show no errors" on_vm '! grep -iE "traceback|error|critical" ~/.local/state/limde/{tinybar,walker,elephant}.log | grep -v "accessibility bus"'
 check "launcher file search finds files" on_vm 'touch ~/limde-findme.txt && fd -t f limde-findme ~ | grep -q findme'
 on_vm 'cat ~/.local/state/limde/labwc.log' >"$out/labwc-first-login.log" 2>&1
