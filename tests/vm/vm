@@ -145,9 +145,12 @@ cmd_up() {
   running "$1" && { echo "$1 is already running (ssh port $(port_of "$1"))"; return; }
   mkdir -p "$d"
   if [[ ! -f $d/disk.qcow2 ]]; then
-    qemu-img create -q -f qcow2 -F qcow2 -b "$dir/$from.qcow2" "$d/disk.qcow2"
-    cp "$dir/$from-vars.fd" "$d/vars.fd" && chmod u+w "$d/vars.fd"
-    echo "$from" > "$d/from"
+    # The installed image is a link to the newest save; build on that version, which
+    # stays until no VM uses it, so a later save can run while this VM does.
+    local image; image=$(basename "$(readlink -f "$dir/$from.qcow2")")
+    qemu-img create -q -f qcow2 -F qcow2 -b "$dir/$image" "$d/disk.qcow2"
+    cp "$dir/${image%.qcow2}-vars.fd" "$d/vars.fd" && chmod u+w "$d/vars.fd"
+    echo "$image" > "$d/from"
   fi
   local port; port=$(free_port); echo "$port" > "$d/ssh-port"
   local vnc; vnc=$(free_vnc_display); echo "$vnc" > "$d/vnc-display"
@@ -230,23 +233,24 @@ cmd_save() {
       || die "limDE is not installed in $1; nothing worth saving"
     cmd_down "$1" >/dev/null
   fi
-  local other
-  for other in "$dir"/*/from; do
-    [[ -f $other && $(cat "$other") == installed && $other != "$d/from" ]] \
-      && die "${other%/from} is built on the current installed image; remove it first"
-  done
-  # Flattened onto base, so the new image does not depend on the one it replaces.
-  qemu-img convert -q -O qcow2 -F qcow2 -B "$dir/base.qcow2" "$d/disk.qcow2" "$dir/installed.new"
-  rm -f "$dir/installed.qcow2" "$dir/installed-vars.fd"
-  mv "$dir/installed.new" "$dir/installed.qcow2"
-  cp "$d/vars.fd" "$dir/installed-vars.fd"
-  chmod a-w "$dir/installed.qcow2" "$dir/installed-vars.fd"
+  # A new version each time, flattened onto base so it needs no older one.
+  local image; image=installed-$(date -u +%Y%m%d%H%M%S).qcow2
+  qemu-img convert -q -O qcow2 -F qcow2 -B "$dir/base.qcow2" "$d/disk.qcow2" "$dir/$image.new"
+  mv "$dir/$image.new" "$dir/$image"
+  cp "$d/vars.fd" "$dir/${image%.qcow2}-vars.fd"
+  chmod a-w "$dir/$image" "$dir/${image%.qcow2}-vars.fd"
+  ln -sfn "$image" "$dir/installed.qcow2"
+  ln -sfn "${image%.qcow2}-vars.fd" "$dir/installed-vars.fd"
   printf 'saved %s from VM %s; limDE %s\n' "$(date -u +%FT%TZ)" "$1" \
     "$(git -C "$repo" describe --always --dirty)" > "$dir/installed.info"
-  echo "Installed image saved: $dir/installed.qcow2 ($(cat "$dir/installed.info"))"
-  if [[ -f $d/from && $(cat "$d/from") == installed ]]; then
-    rm -rf "$d"; echo "Removed $1: it was built on the image just replaced"
-  fi
+  echo "Installed image saved: $dir/$image ($(cat "$dir/installed.info"))"
+  # Older versions go once no VM is built on them.
+  local old
+  for old in "$dir"/installed-*.qcow2; do
+    [[ $(basename "$old") == "$image" ]] && continue
+    grep -qxF "$(basename "$old")" "$dir"/*/from 2>/dev/null && continue
+    rm -f "$old" "${old%.qcow2}-vars.fd"
+  done
 }
 
 cmd_down() {
@@ -296,7 +300,7 @@ cmd_clean() {
   done
   for d in "$dir"/*/; do [[ -f $d/disk.qcow2 ]] && rm -rf "$d"; done
   rm -rf "$dir/base.qcow2" "$dir/base-vars.fd" "$dir/base-build" "$dir/results" \
-    "$dir/installed.qcow2" "$dir/installed-vars.fd" "$dir/installed.info"
+    "$dir"/installed*
   if [[ ${1:-} == --all ]]; then
     rm -rf "$dir"
     echo "Removed everything in $dir. Rebuild with: tests/vm/vm base"
