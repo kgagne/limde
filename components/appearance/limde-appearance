@@ -8,6 +8,8 @@ renders the templates listed in manifest.toml into your home folder.
     limde-appearance              show what would change (a diff)
     limde-appearance --check      exit 1 if anything is out of date
     limde-appearance --apply      write the changes, backing up what they replace
+    limde-appearance --apply --mode light   switch to light or dark and keep it (Tinybar's
+                                  menu does this); the choice wins over mode in your file
     limde-appearance --output-dir DIR   render into DIR instead, for a preview
 
 Standard library only.
@@ -32,6 +34,7 @@ DEFAULTS = next((d for d in (HERE.parent / 'share/limde/appearance', HERE)
                  if (d / 'appearance.toml').is_file()), HERE)
 USER_FILE = Path.home() / '.config/limde/appearance.toml'
 STATE = Path.home() / '.local/state/limde/appearance'
+MODE_FILE = STATE / 'mode'
 
 COLOR = re.compile(r'#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?')
 NAME = re.compile(r'[A-Za-z0-9 _-]+')
@@ -150,10 +153,19 @@ def main():
     mode.add_argument('--apply', action='store_true')
     mode.add_argument('--check', action='store_true')
     mode.add_argument('--output-dir', type=Path)
+    parser.add_argument('--mode', choices=('dark', 'light'),
+                        help='with --apply: switch to dark or light and keep it')
     parser.add_argument('--defaults', type=Path, default=DEFAULTS, help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.mode and not args.apply:
+        parser.error('--mode needs --apply')
 
     config = merged_config(args.defaults, USER_FILE)
+    # The switched mode is a runtime choice, kept apart from the file the user edits.
+    saved_mode = MODE_FILE.read_text().strip() if MODE_FILE.is_file() else None
+    wanted_mode = args.mode or saved_mode
+    if wanted_mode in ('dark', 'light'):
+        config['desktop']['mode'] = wanted_mode
     rendered = render(args.defaults, template_values(config))
 
     pending = []
@@ -209,6 +221,9 @@ def main():
         for key, change in prefs.items():
             subprocess.run(['gsettings', 'set', 'org.gnome.desktop.interface', key, change['after']], check=True)
             print(f"Updated desktop preference: {key} = {change['after']}")
+    if args.mode:
+        MODE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        MODE_FILE.write_text(args.mode + '\n')
     if pending or prefs:
         print(f'Previous versions saved in {backup}')
         print('Reopen affected apps; run "makoctl reload" and "labwc --reconfigure" to refresh those.')

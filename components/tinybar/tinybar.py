@@ -3623,6 +3623,53 @@ class BatteryMenu(Gtk.MenuButton):
         self.summary.set_text(power_summary(summary, name))
 
 
+def mode_action(color_scheme):
+    """The system menu's mode row for the current GTK colour scheme:
+    (glyph, title, mode to switch to)."""
+
+    if color_scheme == "prefer-light":
+        return ("moon", "Dark mode", "dark")
+
+    return ("sun", "Light mode", "light")
+
+
+# Walker's service runs in the background, so it is restarted to take the new icon
+# theme (GTK 4 reads it only at start). It starts as in autostart.d/50-launcher.sh,
+# without Tinybar's own preload and settings; the old instance must exit first, or the
+# new one only hands over to it. It is matched by name: pkill -f would match this script.
+MODE_SWITCH_SCRIPT = """
+limde-appearance --apply --mode "$1" || exit
+labwc --reconfigure
+makoctl reload
+pkill -x -u "$(id -u)" walker
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    pgrep -x -u "$(id -u)" walker >/dev/null || break
+    sleep 0.2
+done
+env -u LD_PRELOAD -u GTK_A11Y GSK_RENDERER=cairo \\
+    setsid -f walker --gapplication-service >"$HOME/.local/state/limde/walker.log" 2>&1
+"""
+
+
+def mode_switch_command(mode):
+    """Apply the mode, let Labwc and Mako reread their generated styles, and restart
+    Walker's service."""
+
+    return ["sh", "-c", MODE_SWITCH_SCRIPT, "tinybar-mode", mode]
+
+
+def interface_settings():
+    """GNOME's interface settings, or None without their schema (Gio.Settings.new would
+    abort the program)."""
+
+    source = Gio.SettingsSchemaSource.get_default()
+
+    if source and source.lookup("org.gnome.desktop.interface", True):
+        return Gio.Settings.new("org.gnome.desktop.interface")
+
+    return None
+
+
 def needs_second_click(armed, key, confirm):
     """True when a click on the system menu's `key` row should ask again instead of
     acting: the row has a question (`confirm`) and is not the one already asking."""
@@ -3648,7 +3695,8 @@ def double_click_microseconds():
 
 
 class SystemMenu(Gtk.MenuButton):
-    """Power glyph at the right end: lock, suspend, log out, restart, power off.
+    """Cog at the right end: light/dark mode, then lock and restart, with suspend, log
+    out and power off behind More.
 
     Log out, restart and power off take a second click, so a stray click cannot end
     the session; a double-click does not count as both. Suspend needs none: swayidle
@@ -3669,10 +3717,16 @@ class SystemMenu(Gtk.MenuButton):
          ["systemctl", "poweroff"]),
     )
 
-    def __init__(self, library):
+    # The power rows always shown; the rest of ACTIONS opens under More.
+    SHOWN_FIRST = ("lock", "restart")
+
+    def __init__(self, library, on_mode_changed):
         super().__init__()
 
         self.library = library
+        self.on_mode_changed = on_mode_changed
+        self.interface = interface_settings()
+        self.target_mode = None
         self.armed = None
         # When the asking row was armed, in GLib monotonic microseconds.
         self.armed_at = 0
@@ -3692,25 +3746,107 @@ class SystemMenu(Gtk.MenuButton):
 
         content.add_css_class("system-popover")
 
+        if self.interface:
+            content.append(self.menu_heading("Appearance"))
+            self.mode_button, self.mode_icon, self.mode_label = self.action_row()
+            self.mode_button.connect("clicked", self.on_mode_clicked)
+            content.append(self.mode_button)
+
+        content.append(self.menu_heading("Power"))
+
+        self.more_rows = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=4
+        )
+
         for key, glyph, title, confirm, command in self.ACTIONS:
             button, icon, label = self.action_row()
             library.set_glyph(icon, glyph)
             label.set_label(title)
             button.connect("clicked", self.on_action_clicked, key)
             self.rows[key] = (button, label, title, confirm, command)
-            content.append(button)
+
+            if key in self.SHOWN_FIRST:
+                content.append(button)
+            else:
+                self.more_rows.append(button)
+
+        # More stays where it is when it opens, with the rows below it: a double-click
+        # on it then lands on Less, not on a row that has just appeared under the pointer.
+        self.more_button, self.more_icon, self.more_label = self.action_row()
+        self.more_button.connect("clicked", self.on_more_clicked)
+        content.append(self.more_button)
+        content.append(self.more_rows)
+        self.show_more(False)
 
         popover = Gtk.Popover()
         popover.set_child(content)
-        popover.connect("hide", lambda _popover: self.disarm())
+        popover.connect("show", self.on_popover_shown)
+        popover.connect("hide", self.on_popover_hidden)
 
         self.set_popover(popover)
         open_below_panel(self)
 
-        if self.library.set_glyph(self.icon, "power-off"):
+        if self.library.set_glyph(self.icon, "gear"):
             self.icon.add_css_class("icon-only")
 
-        self.set_tooltip_text("Power")
+        self.set_tooltip_text("Settings")
+
+    def menu_heading(self, title):
+        heading = Gtk.Label(label=title)
+        heading.set_xalign(0)
+        heading.add_css_class("panel-heading")
+
+        return heading
+
+    def show_more(self, shown):
+        self.more_rows.set_visible(shown)
+        self.library.set_glyph(self.more_icon, "chevron-up" if shown else "chevron-down")
+        self.more_label.set_label("Less" if shown else "More")
+
+    def on_more_clicked(self, _button):
+        # A row asking for its second click may be about to hide.
+        self.disarm()
+        self.show_more(not self.more_rows.get_visible())
+
+    def on_popover_shown(self, _popover):
+        if not self.interface:
+            return
+
+        glyph, title, self.target_mode = mode_action(
+            self.interface.get_string("color-scheme")
+        )
+
+        self.library.set_glyph(self.mode_icon, glyph)
+        self.mode_label.set_label(title)
+
+    def on_popover_hidden(self, _popover):
+        self.disarm()
+        self.show_more(False)
+
+    def on_mode_clicked(self, _button):
+        self.popdown()
+        mode = self.target_mode
+
+        try:
+            process = Gio.Subprocess.new(
+                mode_switch_command(mode),
+                Gio.SubprocessFlags.STDOUT_SILENCE
+            )
+        except GLib.Error as error:
+            print(f"tinybar: mode switch failed: {error}", flush=True)
+            return
+
+        process.wait_check_async(None, self.on_mode_switched, mode)
+
+    def on_mode_switched(self, process, result, mode):
+        try:
+            process.wait_check_finish(result)
+        except GLib.Error as error:
+            print(f"tinybar: switching to {mode} mode failed: {error}", flush=True)
+
+        # Reload even after a partial failure: whatever was written should show.
+        self.on_mode_changed()
 
     def action_row(self):
         button = clickable(Gtk.Button())
@@ -4292,7 +4428,7 @@ class TinyBar(Gtk.Application):
         )
         self.volume = VolumeMenu(self.icons)
         self.battery = BatteryMenu(self.icons, self.history)
-        self.system_menu = SystemMenu(self.icons)
+        self.system_menu = SystemMenu(self.icons, self.reload_style)
         # Desktops and VMs have no battery or backlight: leave those indicators out.
         self.battery.set_visible(HAS_BATTERY)
         self.brightness.set_visible(HAS_BACKLIGHT)
@@ -4347,7 +4483,7 @@ class TinyBar(Gtk.Application):
 
         window.set_child(overlay)
 
-        css = Gtk.CssProvider()
+        css = self.css = Gtk.CssProvider()
 
         try:
             css.load_from_path(
@@ -4705,6 +4841,23 @@ class TinyBar(Gtk.Application):
         return True
 
     # ---------- clock ----------
+
+    def reload_style(self):
+        """Reread the generated stylesheet after the system menu switches mode."""
+
+        try:
+            self.css.load_from_path(str(STYLE_FILE))
+        except GLib.Error as error:
+            print(f"tinybar: failed to reload CSS: {error}", flush=True)
+
+        # GTK 4 on Wayland reads the icon theme from settings.ini only at start, so
+        # the light and dark app icons would otherwise stay as they were.
+        interface = interface_settings()
+
+        if interface:
+            Gtk.Settings.get_default().set_property(
+                "gtk-icon-theme-name", interface.get_string("icon-theme")
+            )
 
     def update_clock(self):
         now = datetime.datetime.now()

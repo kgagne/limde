@@ -212,8 +212,10 @@ Your own files override limDE's, and the installer never overwrites them:
   same name as one of limDE's replaces it, and an empty one turns that piece off.
 - **Theme:** colours, fonts and icons live in `~/.config/limde/appearance.toml`, which
   needs only the keys you change. `limde-appearance` shows what would change, and
-  `limde-appearance --apply` writes it, backing up what it replaces. For the light theme,
-  put `mode = "light"` under `[desktop]` there, apply, and log in again. Both palettes
+  `limde-appearance --apply` writes it, backing up what it replaces. To switch between
+  the light and dark themes, use the cog menu in Tinybar; it keeps your choice, which wins
+  over any `mode` set in that file. Windows already open may keep some of the old theme
+  until you reopen them. Both palettes
   meet WCAG 2.2's contrast minimums (4.5:1 for text, 3:1 for icons and control edges),
   and `scripts/check` keeps it that way.
 - **Panel:** `~/.config/tinybar/settings.toml` (see `components/tinybar/README.md`).

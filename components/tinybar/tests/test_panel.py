@@ -59,6 +59,24 @@ class NetworkListTests(unittest.TestCase):
 
 
 class SystemMenuTests(unittest.TestCase):
+    def test_mode_row_offers_the_other_mode(self):
+        self.assertEqual(tinybar.mode_action("prefer-dark"), ("sun", "Light mode", "light"))
+        self.assertEqual(tinybar.mode_action("prefer-light"), ("moon", "Dark mode", "dark"))
+        self.assertEqual(tinybar.mode_action("default")[2], "light")
+
+    def test_mode_switch_passes_mode_as_an_argument(self):
+        command = tinybar.mode_switch_command("light")
+        self.assertEqual(command[:2], ["sh", "-c"])
+        self.assertEqual(command[4], "light")
+        self.assertIn('limde-appearance --apply --mode "$1"', command[2])
+        # pkill -f would match the script's own command line and stop it halfway.
+        self.assertNotIn("pkill -f", command[2])
+
+    def test_lock_and_restart_are_shown_first(self):
+        keys = [key for key, *_rest in tinybar.SystemMenu.ACTIONS]
+        self.assertEqual(tinybar.SystemMenu.SHOWN_FIRST, ("lock", "restart"))
+        self.assertLessEqual(set(tinybar.SystemMenu.SHOWN_FIRST), set(keys))
+
     def test_session_actions_in_order(self):
         commands = {key: command for key, *_rest, command in tinybar.SystemMenu.ACTIONS}
         self.assertEqual(list(commands), ["lock", "suspend", "log-out", "restart", "power-off"])
