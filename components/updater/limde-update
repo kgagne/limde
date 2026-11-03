@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+"""Update limDE to its newest release: fetch, show what changes, check it out, ./install.
+
+    limde-update [--check] [--yes] [--main | --to REF]
+
+Run by hand; nothing runs it on a schedule. It works in the clone that ./install last
+ran from, recorded with the commit and optional parts in /usr/local/share/limde/installed.
+
+  --check   show what an update would bring and stop; changes nothing
+  --yes     do not ask before installing
+  --main    follow the main branch instead of release tags
+  --to REF  install a given tag or commit, newer or older (also how to go back)
+
+Releases are tags named vMAJOR.MINOR.PATCH, with -beta.N or -rc.N for test releases.
+Test releases are offered only while the installed version is one, or is not a release.
+The checkout is detached at the chosen commit; your branches are left as they are.
+Ubuntu's own packages are not updated here: use apt (or unattended-upgrades).
+"""
+
+import argparse
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+RECORD = Path(os.environ.get("LIMDE_INSTALL_RECORD", "/usr/local/share/limde/installed"))
+RELEASE = re.compile(r"v(\d+)\.(\d+)\.(\d+)(?:-(beta|rc)\.(\d+))?")
+# What the install rebuilds or downloads again when these change.
+REBUILDS = {"pins/labwc": "labwc", "pins/launcher": "Walker and Elephant",
+            "pins/pcmanfm": "PCManFM", "pins/firefox": "Firefox"}
+
+
+class Stop(Exception):
+    pass
+
+
+def say(text=""):
+    print(text, flush=True)
+
+
+def git(root, *args, check=True):
+    done = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
+    if check and done.returncode:
+        raise Stop(f"git {args[0]} failed: {done.stderr.strip() or done.returncode}")
+    return done.stdout.strip() if not done.returncode else None
+
+
+def read_record():
+    try:
+        lines = RECORD.read_text().splitlines()
+    except OSError:
+        raise Stop(f"no install record at {RECORD}; run ./install from your limDE clone first")
+    record = dict(line.split("=", 1) for line in lines if "=" in line)
+    if not record.get("source") or not record.get("commit"):
+        raise Stop(f"{RECORD} is incomplete; run ./install from your limDE clone again")
+    return record
+
+
+def version_key(tag):
+    m = RELEASE.fullmatch(tag)
+    major, minor, patch, stage, n = m.groups()
+    # A final release sorts after its betas and release candidates.
+    return (int(major), int(minor), int(patch), {"beta": 0, "rc": 1, None: 2}[stage], int(n or 0))
+
+
+def is_test_release(tag):
+    return RELEASE.fullmatch(tag)[4] is not None
+
+
+def release_tags(root):
+    return sorted((t for t in (git(root, "tag", "--list", "v*") or "").split()
+                   if RELEASE.fullmatch(t)), key=version_key)
+
+
+def exact_tag(root, commit):
+    tags = [t for t in (git(root, "tag", "--points-at", commit) or "").split() if RELEASE.fullmatch(t)]
+    return max(tags, key=version_key) if tags else None
+
+
+def contains(root, ancestor, commit):
+    return subprocess.run(["git", "-C", str(root), "merge-base", "--is-ancestor", ancestor, commit],
+                          capture_output=True).returncode == 0
+
+
+def name_of(root, commit):
+    return exact_tag(root, commit) or git(root, "describe", "--tags", "--always", commit)
+
+
+def choose(root, installed, args):
+    """The commit to install and how to call it, or None when nothing is newer."""
+    if args.to:
+        commit = git(root, "rev-parse", "--verify", "--quiet", args.to + "^{commit}", check=False)
+        if not commit:
+            raise Stop(f"{args.to} is not a tag or commit in this clone")
+        return commit, name_of(root, commit)
+    if args.main:
+        commit = git(root, "rev-parse", "origin/main")
+        return (None, None) if contains(root, commit, installed) else (commit, name_of(root, commit))
+    current = exact_tag(root, installed)
+    tests = current is None or is_test_release(current)
+    for tag in reversed(release_tags(root)):
+        if is_test_release(tag) and not tests:
+            continue
+        commit = git(root, "rev-parse", tag + "^{commit}")
+        return (None, None) if contains(root, commit, installed) else (commit, tag)
+    return None, None
+
+
+def describe_change(root, installed, target, name):
+    if contains(root, installed, target):
+        count = git(root, "rev-list", "--count", f"{installed}..{target}")
+        say(f"  {count} new commit(s)")
+    else:
+        say("  this goes back to, or across to, a version without some of what is installed now")
+    if RELEASE.fullmatch(name or ""):
+        notes = git(root, "tag", "--list", "--format=%(contents)", name).splitlines()
+        if notes:
+            say()
+            for line in notes[:20]:
+                say(f"  | {line}")
+            if len(notes) > 20:
+                say(f"  | … ({len(notes) - 20} more lines: git -C {root} tag -n999 {name})")
+    changed = set((git(root, "diff", "--name-only", installed, target, "--", "pins", "packages")
+                   or "").split())
+    rebuilt = [what for path, what in REBUILDS.items() if path in changed]
+    if rebuilt:
+        say()
+        say("  Built or downloaded again: " + ", ".join(rebuilt))
+    if any(p.startswith("packages/") for p in changed):
+        say("  The package lists changed; the install may add Ubuntu packages.")
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--check", action="store_true", help="show what would change and stop")
+    ap.add_argument("--yes", "-y", action="store_true", help="do not ask before installing")
+    which = ap.add_mutually_exclusive_group()
+    which.add_argument("--main", action="store_true", help="follow the main branch")
+    which.add_argument("--to", metavar="REF", help="install this tag or commit")
+    args = ap.parse_args(argv)
+    if os.geteuid() == 0:
+        say("Run limde-update as your normal user; ./install asks for sudo itself.")
+        return 64
+    try:
+        record = read_record()
+        root = Path(record["source"])
+        if not (root / "install").is_file() or git(root, "rev-parse", "--git-dir", check=False) is None:
+            raise Stop(f"{root} is not a limDE clone any more; run ./install from where it is now")
+        installed = record["commit"]
+        say(f"Installed: {name_of(root, installed)} from {root}")
+        say("Fetching…")
+        fetched = subprocess.run(["git", "-C", str(root), "fetch", "--quiet", "--tags", "origin"],
+                                 capture_output=True, text=True)
+        if fetched.returncode:
+            raise Stop("could not fetch from origin: " + (fetched.stderr.strip() or "no reason given"))
+        target, name = choose(root, installed, args)
+        if target is None or target == installed:
+            say("Up to date." + ("" if args.main else
+                                 " (limde-update --main shows what is newer on the main branch.)"))
+            return 0
+        say(f"Available: {name}")
+        describe_change(root, installed, target, name)
+        if args.check:
+            say()
+            say("Run limde-update to install it." if not (args.main or args.to)
+                else "Run the same command without --check to install it.")
+            return 0
+        if git(root, "status", "--porcelain", "--untracked-files=no"):
+            raise Stop(f"{root} has changes that are not committed; commit or stash them first "
+                       "(git status shows them)")
+        say()
+        if not args.yes:
+            answer = input(f"Install {name}? [Y/n] ").strip().lower()
+            if answer not in ("", "y", "yes"):
+                say("Nothing was changed.")
+                return 1
+        git(root, "-c", "advice.detachedHead=false", "checkout", "--quiet", "--detach", target)
+        say(f"Checked out {name}. Running ./install…")
+        groups = record.get("groups", "")
+        command = ["./install", "--yes"] + ([f"--with={groups}"] if groups else [])
+        done = subprocess.run(command, cwd=root)
+        if done.returncode:
+            say()
+            say(f"./install stopped (exit {done.returncode}). The clone is at {name}; fix the problem "
+                f"and run ./install again, or go back with: limde-update --to {installed[:12]}")
+        return done.returncode
+    except Stop as e:
+        say(f"limde-update: {e}")
+        return 1
+    except (KeyboardInterrupt, EOFError):
+        say()
+        say("Stopped.")
+        return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

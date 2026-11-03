@@ -1,5 +1,5 @@
-# Small limde tools: Space preview, screenshots, the app-aware close/quit helper, and
-# the notification for cut and copied files.
+# Small limde tools: Space preview, screenshots, the app-aware close/quit helper, the
+# notification for cut and copied files, and limde-update.
 
 step_helpers() {
   heading "Helpers (preview, screenshots, shortcuts, clipboard)"
@@ -11,6 +11,7 @@ step_helpers() {
   install -m 755 "$src/preview/limde-preview" "$stage/limde-preview"
   install -m 755 "$src/screenshot/limde-screenshot" "$stage/limde-screenshot"
   install -m 755 "$src/clipboard-notify/limde-clipboard-notify" "$stage/limde-clipboard-notify"
+  install -m 755 "$src/updater/limde-update" "$stage/limde-update"
   local f n=0
   for f in "$stage"/*; do
     cmp -s "$f" "/usr/local/bin/${f##*/}" && continue
@@ -18,6 +19,6 @@ step_helpers() {
     n=$((n + 1))
   done
   rm -rf "$work" "$stage"
-  if ((n)); then changed "installed $n helper(s): limde-preview, limde-screenshot, limde-clipboard-notify, app-shortcut"
+  if ((n)); then changed "installed $n helper(s): limde-preview, limde-screenshot, limde-clipboard-notify, limde-update, app-shortcut"
   else ok "helpers are up to date"; fi
 }

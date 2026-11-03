@@ -51,6 +51,7 @@ Test: `scripts/check`; `./install --plan` shows the plan without changing anythi
 - **keys, touchpad, window rules** — `config/labwc/rc.xml::keyboard`, `config/labwc/rc.xml::libinput`, `config/labwc/rc.xml::windowRules`. Trap: a user's touchpad block replaces limDE's whole block. Window corners and title fonts are fixed in rc.xml's `<theme>`, not the appearance settings.
 - **default apps** — `config/home/.config/mimeapps.list` (starter file).
 - **helper commands** — `lib/install/82-helpers.sh::step_helpers` installs a named list to `/usr/local/bin`. Trap: a new command needs a line here (Tinybar's in `step_tinybar`, listed in three loops).
+- **updates** — `limde-update` fetches the newest release tag into the installed clone, shows notes and rebuilt pins, checks it out detached and runs `./install --yes --with=` the recorded groups: `components/updater/limde-update::choose`, `components/updater/limde-update::main`; record written by `lib/install/89-record.sh::step_record`. Test: `python3 components/updater/tests/test_limde_update.py`. Trap: test releases are offered only while the installed version is one (or untagged); the record's groups come from the last `./install` run.
 - **scrub gate** — no personal or machine data in tracked files: `scripts/check`, `scripts/public-patterns`, `scripts/public-allow`, run by `.githooks/pre-commit`.
 
 ## Appearance and icons: `components/appearance/`, `components/icons/`

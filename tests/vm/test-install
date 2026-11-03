@@ -5,6 +5,7 @@
 # 2. run it again: it must report "No changes"
 # 3. reboot: labwc must start on tty1 by itself, NetworkManager must be connected,
 #    and networkd must stay off
+# 4. limde-update: offer, install and go back from a test release on a local origin
 # Saves logs and a screenshot under local/vm/results/<VM_NAME>/. Exit 0 = all passed.
 # --save: when everything passed, save the VM as the installed image that
 # `vm up NAME --installed` starts from (for fast iteration with `vm sync`).
@@ -33,7 +34,8 @@ on_vm() { "$vm" ssh "$name" "$@"; }
 "$vm" down "$name" >/dev/null 2>&1 || true
 "$vm" rm "$name" >/dev/null 2>&1 || true
 "$vm" up "$name"
-"$vm" copy "$name" --exclude=/local --exclude=.git "$repo/" limde/
+# With .git, so the install record and limde-update see a real clone.
+"$vm" copy "$name" --exclude=/local "$repo/" limde/
 
 echo "== first run"
 on_vm "cd limde && ./install --yes ${install_args[*]}" >"$out/install-1.log" 2>&1; rc=$?
@@ -83,8 +85,36 @@ check "appearance rendered" on_vm 'test -f ~/.config/tinybar/style.css && limde-
 check "redundant launcher entries hidden" on_vm 'for n in footclient foot-server pcmanfm-desktop-pref; do grep -q "^NoDisplay=true" /usr/local/share/applications/$n.desktop || exit 1; done'
 check "agent-web window starts by itself" on_vm 'pgrep -f "[f]irefox --profile .*agent-web/profile --name limde.AgentWeb" >/dev/null'
 check "agent-web opens the welcome page" on_vm 'grep -q "learning: not set up yet" ~/.local/state/limde/agent-web.log'
+check "install record names this clone" on_vm 'grep -qx "source=$HOME/limde" /usr/local/share/limde/installed && grep -qx "commit=$(git -C limde rev-parse HEAD)" /usr/local/share/limde/installed'
+check "limde-update is installed" on_vm 'limde-update --help | grep -q -- --check'
+check "unattended security updates are on" on_vm 'systemctl -q is-enabled apt-daily-upgrade.timer && apt-config dump | grep -q "APT::Periodic::Unattended-Upgrade \"1\""'
 check "no failed units" on_vm '[ -z "$(systemctl --failed --no-legend)" ]'
 on_vm 'systemctl --failed --no-legend; cat ~/.local/state/limde/labwc.log' >"$out/after-reboot.log" 2>&1 || true
+
+echo "== limde-update"
+# A local origin with one new release tag on top of this commit; the clone's own origin
+# is put back afterwards. Skipped when the copied tree has uncommitted changes.
+if on_vm 'git -C limde diff --quiet HEAD' 2>/dev/null; then
+  on_vm 'set -e; rm -rf /tmp/up; git clone -q --bare limde /tmp/up/origin.git
+    git clone -q /tmp/up/origin.git /tmp/up/work; cd /tmp/up/work
+    git -c user.name=t -c user.email=t@t commit -q --allow-empty -m "test release"
+    git -c user.name=t -c user.email=t@t tag -a v99.0.0 -m "limDE v99.0.0 (test release)"
+    git push -q origin HEAD:refs/heads/main v99.0.0
+    git -C ~/limde remote get-url origin >/tmp/up/url 2>/dev/null || true
+    git -C ~/limde remote remove origin 2>/dev/null || true
+    git -C ~/limde remote add origin /tmp/up/origin.git' >"$out/update-setup.log" 2>&1
+  before=$(on_vm 'git -C limde rev-parse HEAD')
+  on_vm 'limde-update --check' >"$out/update-check.log" 2>&1
+  check "limde-update --check offers the new release" grep -q 'Available: v99.0.0' "$out/update-check.log"
+  on_vm 'limde-update --yes' >"$out/update.log" 2>&1
+  check "limde-update installs the new release" on_vm 'grep -qx "commit=$(git -C limde rev-parse "v99.0.0^{commit}")" /usr/local/share/limde/installed'
+  on_vm "limde-update --to $before --yes" >"$out/update-back.log" 2>&1
+  check "limde-update --to goes back" on_vm "grep -qx commit=$before /usr/local/share/limde/installed && [ \"\$(git -C limde rev-parse HEAD)\" = $before ]"
+  on_vm 'git -C ~/limde remote remove origin; url=$(cat /tmp/up/url); [ -z "$url" ] || git -C ~/limde remote add origin "$url"
+    git -C ~/limde tag -d v99.0.0 >/dev/null; rm -rf /tmp/up' >>"$out/update-setup.log" 2>&1
+else
+  echo "  skipped: the copied tree has uncommitted changes"
+fi
 "$vm" shot "$name" "$out/screen.png" >/dev/null || fail "screenshot"
 
 if ((save && fails == 0)); then

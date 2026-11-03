@@ -2,6 +2,7 @@
 
 OPTIONAL_DIR=$LIMDE_ROOT/packages/optional
 PACKAGES=()
+CHOSEN_GROUPS=()
 
 optional_groups() { for f in "$OPTIONAL_DIR"/*.list; do basename "$f" .list; done; }
 
@@ -17,7 +18,8 @@ suggested() {
 }
 
 step_plan() {
-  local with=("$@") group chosen=()
+  local with=("$@") group
+  local -n chosen=CHOSEN_GROUPS
   for group in "${with[@]}"; do
     [[ -f $OPTIONAL_DIR/$group.list ]] \
       || die "unknown optional group: $group (available: $(optional_groups | tr '\n' ' '))"

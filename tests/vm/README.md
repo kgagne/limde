@@ -91,7 +91,9 @@ sends the device side's question to the newest default agent. The agent's refusa
 
 ## Release acceptance
 
-`test-install NAME` checks a clean install, a second run and a reboot. `test-acceptance
+`test-install NAME` checks a clean install, a second run, a reboot and `limde-update`
+(a test release tag on a local origin: offered, installed, then `--to` goes back; skipped when
+the copied tree has uncommitted changes, which `limde-update` refuses). `test-acceptance
 NAME` covers the rest of a release check, in one fresh VM (about 40 minutes):
 - the power is cut while apt is unpacking, then Ctrl+C lands during the labwc build;
   each next run must finish, and the run after must report "No changes"

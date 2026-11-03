@@ -50,4 +50,5 @@ step_helpers
 step_session_config
 step_agent_web
 step_session
+step_record
 summary

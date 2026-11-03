@@ -229,12 +229,23 @@ something that no longer exists, so update it when you move or rename what it li
 ## Updating
 
 ```
-git pull
-./install
+limde-update --check
 ```
 
-Running `./install` again is safe. Each step checks first and only changes what is missing
-or out of date, including the pinned source builds in `pins/`.
+```
+limde-update
+```
+
+`limde-update` fetches the newest limDE release into the clone you installed from, shows
+its notes and what it will rebuild, and asks before it checks that release out and runs
+`./install` with the optional parts you chose last time. It runs only when you run it.
+`--main` follows the main branch instead of releases, and `--to TAG` installs a given
+release, which is also how to go back to an earlier one. Ubuntu's own packages are
+updated by apt as usual (Ubuntu Server installs unattended security updates).
+
+Running `./install` again is always safe. Each step checks first and only changes what
+is missing or out of date, including the pinned source builds in `pins/`. So `git pull`
+followed by `./install` also works, for a clone that follows a branch.
 
 ## Known gaps
 
