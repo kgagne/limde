@@ -20,6 +20,7 @@ from tinybar_icons import (
     desktop_entry,
     glyph_widget,
     layered_glyph,
+    microphone_glyph,
     set_layered_glyph,
     signal_glyph,
     volume_glyph,
@@ -63,6 +64,8 @@ RUNTIME_DIR = Path(
 )
 
 VOLUME_STATE = RUNTIME_DIR / "volume"
+# Written only by the mic-mute key, ending in a "key" line like VOLUME_STATE's.
+MICROPHONE_STATE = RUNTIME_DIR / "microphone"
 # tinybar-idle reads this to signal the panel: SIGUSR1 hides, SIGUSR2 restores.
 PID_FILE = RUNTIME_DIR / "tinybar.pid"
 
@@ -245,6 +248,8 @@ OTHER_DEVICE_COMMAND = ["foot", "bluetoothctl"]
 WPCTL = "/usr/bin/wpctl"
 # Reports every PipeWire change as JSON; from pipewire-bin, which pipewire needs.
 AUDIO_MONITOR_COMMAND = ["/usr/bin/pw-dump", "--monitor", "--no-colors"]
+# Sets the default microphone; from pipewire-bin too.
+PW_METADATA = "/usr/bin/pw-metadata"
 # PipeWire sends bursts of changes; one volume read follows a burst.
 AUDIO_EVENT_MS = 100
 # pw-dump quits when PipeWire restarts; it is started again after this. While it keeps
@@ -4084,13 +4089,20 @@ def parse_volume(output):
     return (round(float(match.group(1)) * 100), "[MUTED]" in output) if match else None
 
 
-def volume_tooltip(level):
-    """Hover text for the speaker, from parse_volume's (percent, muted) or None."""
+def volume_tooltip(level, microphone=None):
+    """Hover text for the speaker, from parse_volume's (percent, muted) or None; the
+    default microphone's level, the same way, on a second line when there is one."""
     if level is None:
-        return "Volume: unavailable"
+        lines = ["Volume: unavailable"]
+    else:
+        percent, muted = level
+        lines = ["Volume: muted" if muted else f"Volume {percent}%"]
 
-    percent, muted = level
-    return "Volume: muted" if muted else f"Volume {percent}%"
+    if microphone is not None:
+        percent, muted = microphone
+        lines.append("Microphone: muted" if muted else f"Microphone {percent}%")
+
+    return "\n".join(lines)
 
 
 def brightness_tooltip(percent):
@@ -4099,7 +4111,17 @@ def brightness_tooltip(percent):
 
 
 def new_audio_state():
-    return {"sinks": {}, "watched": set(), "default": None}
+    return {"sinks": {}, "sources": {}, "watched": set(), "default": None,
+            "default_source": None}
+
+
+def is_microphone(props):
+    """True for a node that records sound: a source, but not the monitor of an output
+    (which only plays back what that output plays)."""
+    return (props.get("media.class") in ("Audio/Source", "Audio/Source/Virtual")
+            and not str(props.get("node.name") or "").endswith(".monitor")
+            and props.get("device.class") != "monitor"
+            and str(props.get("stream.monitor", "")).lower() not in ("true", "1"))
 
 
 def split_dump(buffer):
@@ -4116,39 +4138,77 @@ def split_dump(buffer):
     return objects, rest
 
 
+# The "default" metadata's keys, and where apply_audio_objects keeps their node names.
+AUDIO_DEFAULTS = {"default.audio.sink": "default", "default.audio.source": "default_source"}
+
+
 def apply_audio_objects(audio, objects):
-    """Fold pw-dump objects into audio; True if the volume or the outputs may have changed.
-    "sinks" maps output node ids to (node.name, description); "watched" holds audio devices
-    (hardware volume is set there) and the "default" metadata, which pw-dump sends with
-    only its changed entries. A removed object comes as its id alone."""
+    """Fold pw-dump objects into audio; True if a level or the device lists may have
+    changed. "sinks" and "sources" map output and microphone node ids to (node.name,
+    description); "watched" holds audio devices (hardware volume is set there) and the
+    "default" metadata, which pw-dump sends with only its changed entries. A removed
+    object comes as its id alone."""
     changed = False
     for item in objects:
         key, kind = item.get("id"), item.get("type", "")
         props = (item.get("info") or {}).get("props") or item.get("props") or {}
         if "type" not in item:
-            if audio["sinks"].pop(key, None) is not None or key in audio["watched"]:
+            removed = [audio[nodes].pop(key, None) for nodes in ("sinks", "sources")]
+            if removed != [None, None] or key in audio["watched"]:
                 audio["watched"].discard(key)
                 changed = True
         elif kind.endswith(":Node") and props.get("media.class") == "Audio/Sink":
             name = props.get("node.name")
             audio["sinks"][key] = (name, props.get("node.description") or name or f"Output {key}")
             changed = True
+        elif kind.endswith(":Node") and is_microphone(props):
+            name = props.get("node.name")
+            audio["sources"][key] = (
+                name, props.get("node.description") or name or f"Microphone {key}")
+            changed = True
         elif (kind.endswith(":Device") and props.get("media.class") == "Audio/Device") or (
                 kind.endswith(":Metadata") and props.get("metadata.name") == "default"):
             audio["watched"].add(key)
             changed = True
             for entry in item.get("metadata") or []:
-                if entry.get("subject") == 0 and entry.get("key") == "default.audio.sink":
+                if entry.get("subject") == 0 and entry.get("key") in AUDIO_DEFAULTS:
                     value = entry.get("value")
-                    audio["default"] = value.get("name") if isinstance(value, dict) else None
+                    audio[AUDIO_DEFAULTS[entry["key"]]] = (
+                        value.get("name") if isinstance(value, dict) else None)
     return changed
 
 
+def audio_devices(nodes, default):
+    """(node id, description, is the default) for each node, by description."""
+    return sorted(((key, description, name == default)
+                   for key, (name, description) in nodes.items()),
+                  key=lambda device: device[1].casefold())
+
+
 def audio_outputs(audio):
-    """The popover's outputs by name: (node id, description, is the default)."""
-    return sorted(((key, description, name == audio["default"])
-                   for key, (name, description) in audio["sinks"].items()),
-                  key=lambda output: output[1].casefold())
+    """The popover's outputs: (node id, description, is the default)."""
+    return audio_devices(audio["sinks"], audio["default"])
+
+
+def audio_inputs(audio):
+    """The popover's microphones, monitors left out: (node id, description, is the default)."""
+    return audio_devices(audio["sources"], audio["default_source"])
+
+
+def default_source_command(name):
+    """pw-metadata's command that makes the source node called name the default."""
+    return [PW_METADATA, "-n", "default", "0", "default.configured.audio.source",
+            json.dumps({"name": name}), "Spa:String:JSON"]
+
+
+def default_microphone(audio):
+    """The default microphone's node id, or None. WirePlumber's default source can be an
+    output's monitor (its sink's name): wpctl's @DEFAULT_AUDIO_SOURCE@ is then the
+    output itself, so the microphone controls act on node ids, never on that name."""
+    for key, (name, _description) in audio["sources"].items():
+        if name is not None and name == audio["default_source"]:
+            return key
+    return None
 
 
 def audio_monitor_delay(ran_seconds, last_delay):
@@ -4161,32 +4221,23 @@ def audio_monitor_delay(ran_seconds, last_delay):
     return min(last_delay * 2, AUDIO_MONITOR_RETRY_MAX_SECONDS)
 
 
-class VolumeMenu(Gtk.MenuButton):
-    """Speaker glyph; its popover holds a mute toggle, a volume slider and the outputs.
+class LevelControls(Gtk.Box):
+    """A mute toggle, a 0-100 % slider and its value, for one wpctl target (the default
+    output or microphone). show() puts a level read back into them; a change runs
+    wpctl through run(), then done() so the owner reads the level back."""
 
-    Every change runs wpctl, then reads the volume back into the state file the keys write
-    (VOLUME_STATE), which the panel shows. A `pw-dump --monitor` child reports PipeWire's
-    changes, so changes made elsewhere are read too. Only the keys show the level overlay.
-    """
-
-    def __init__(self, library):
-        super().__init__()
+    def __init__(self, library, target, name, glyph, run, done):
+        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         self.library = library
-        self.audio = new_audio_state()
-        self.monitor = None
-        self.monitor_buffer = b""
-        self.monitor_started = 0
-        # The wait before the last restart of pw-dump (see audio_monitor_delay).
-        self.monitor_delay = 0
-        self.refresh_source = None
+        self.target = target
+        self.name = name
+        self.glyph = glyph
+        self.run = run
+        self.done = done
         # The slider's newest value not yet sent; one set-volume runs at a time.
         self.wanted = None
         self.sending = False
         self.updating = False
-        self.set_has_frame(False)
-        self.add_css_class("panel-menu")
-        self.indicator = StatusIndicator(library, "volume", show_value=False)
-        self.set_child(self.indicator)
 
         self.mute = clickable(Gtk.ToggleButton())
         self.mute.set_has_frame(False)
@@ -4197,23 +4248,100 @@ class VolumeMenu(Gtk.MenuButton):
         self.slider = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
         self.slider.set_hexpand(True)
         self.slider.add_css_class("volume-slider")
-        self.slider.update_property([Gtk.AccessibleProperty.LABEL], ["Volume"])
+        self.slider.update_property([Gtk.AccessibleProperty.LABEL], [name])
         self.slider.connect("value-changed", self.on_slider_changed)
         self.value = Gtk.Label()
         self.value.set_width_chars(4)
         self.value.set_xalign(1)
         self.value.add_css_class("notification-body")
-        controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         for widget in (self.mute, self.slider, self.value):
-            controls.append(widget)
+            self.append(widget)
 
-        self.heading = Gtk.Label(label="Output")
-        self.heading.set_xalign(0)
-        self.heading.add_css_class("panel-heading")
+    def show(self, percent, muted):
+        """Show a level read back; a drag in progress keeps the slider."""
+        self.updating = True
+        self.mute.set_active(muted)
+        words = "Unmute" if muted else "Mute"
+        self.mute.set_tooltip_text(words if self.name == "Volume" else f"{words} {self.name.lower()}")
+        self.library.set_glyph(self.mute_icon, self.glyph(percent, muted))
+        (self.slider.add_css_class if muted else self.slider.remove_css_class)("muted")
+        if not self.sending:
+            self.slider.set_value(percent)
+            self.value.set_text(f"{percent}%")
+        self.updating = False
+
+    def on_slider_changed(self, slider):
+        if self.updating:
+            return
+        self.wanted = round(slider.get_value())
+        self.value.set_text(f"{self.wanted}%")
+        if not self.sending:
+            self.send_volume()
+
+    def send_volume(self, _output=None):
+        # A drag sends its newest value once the set-volume before it ends.
+        if self.wanted is None:
+            self.sending = False
+            self.done()
+            return
+        self.sending = True
+        percent, self.wanted = self.wanted, None
+        # The same 100 % cap as the keys.
+        self.run("set-volume", "-l", "1.0", self.target, f"{percent}%", then=self.send_volume)
+
+    def on_mute_toggled(self, button):
+        if not self.updating:
+            self.run("set-mute", self.target, "1" if button.get_active() else "0",
+                     then=self.done)
+
+
+class VolumeMenu(Gtk.MenuButton):
+    """Speaker glyph; its popover holds the output's mute toggle, volume slider and list,
+    then, when there is a microphone, the same for the default microphone.
+
+    Every change runs wpctl, then reads the volume back into the state file the keys write
+    (VOLUME_STATE), which the panel shows. A `pw-dump --monitor` child reports PipeWire's
+    changes, so changes made elsewhere are read too. Only the keys show the level overlay.
+    The microphone's level is kept in microphone (None without one); on_microphone() is
+    called when it changes, for the panel's tooltip.
+    """
+
+    def __init__(self, library):
+        super().__init__()
+        self.library = library
+        self.audio = new_audio_state()
+        self.microphone = None
+        self.on_microphone = None
+        self.monitor = None
+        self.monitor_buffer = b""
+        self.monitor_started = 0
+        # The wait before the last restart of pw-dump (see audio_monitor_delay).
+        self.monitor_delay = 0
+        self.refresh_source = None
+        self.set_has_frame(False)
+        self.add_css_class("panel-menu")
+        self.indicator = StatusIndicator(library, "volume", show_value=False)
+        self.set_child(self.indicator)
+
+        self.speaker = LevelControls(library, "@DEFAULT_AUDIO_SINK@", "Volume", volume_glyph,
+                                     self.wpctl, self.refresh)
+        self.heading = self.section_heading("Output")
         self.outputs = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+
+        # Its target is the default microphone's node id, set by refresh.
+        self.mic = LevelControls(library, None, "Microphone", microphone_glyph,
+                                 self.wpctl, self.refresh)
+        self.inputs = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        # Hidden while there is no microphone. The list shows with more than one, or
+        # alone when none is the default (to pick one); the controls need a default.
+        self.mic_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        for widget in (self.section_heading("Microphone"), self.mic, self.inputs):
+            self.mic_section.append(widget)
+        self.mic_section.set_visible(False)
+
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         content.add_css_class("notification-popover")
-        for widget in (controls, self.heading, self.outputs):
+        for widget in (self.speaker, self.heading, self.outputs, self.mic_section):
             content.append(widget)
 
         popover = Gtk.Popover()
@@ -4222,30 +4350,33 @@ class VolumeMenu(Gtk.MenuButton):
         self.set_popover(popover)
         open_below_panel(self)
 
+    @staticmethod
+    def section_heading(text):
+        heading = Gtk.Label(label=text)
+        heading.set_xalign(0)
+        heading.add_css_class("panel-heading")
+        return heading
+
     def set_text(self, text, **kwargs):
         self.indicator.set_text(text, **kwargs)
 
     def show_volume(self, percent, muted):
-        """Show the state file's level in the popover; a drag in progress keeps the slider."""
-        self.updating = True
-        self.mute.set_active(muted)
-        self.mute.set_tooltip_text("Unmute" if muted else "Mute")
-        self.library.set_glyph(self.mute_icon, volume_glyph(percent, muted))
-        (self.slider.add_css_class if muted else self.slider.remove_css_class)("muted")
-        if not self.sending:
-            self.slider.set_value(percent)
-            self.value.set_text(f"{percent}%")
-        self.updating = False
+        """Show the state file's level in the popover."""
+        self.speaker.show(percent, muted)
 
     def wpctl(self, *args, then=None):
-        """Run wpctl without blocking, in the C locale; then(output, or None if it failed)."""
+        self.spawn([WPCTL, *args], then)
+
+    def spawn(self, argv, then=None):
+        """Run a command without blocking, in the C locale; then(output, or None if it
+        failed)."""
         launcher = Gio.SubprocessLauncher.new(
             Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE)
         launcher.setenv("LC_ALL", "C", True)
         try:
-            proc = launcher.spawnv([WPCTL, *args])
+            proc = launcher.spawnv(argv)
         except GLib.Error as error:
-            print(f"tinybar: cannot run wpctl: {error.message}", flush=True)
+            print(f"tinybar: cannot run {argv[0]}: {error.message}", flush=True)
             if then:
                 then(None)
             return
@@ -4260,8 +4391,15 @@ class VolumeMenu(Gtk.MenuButton):
             then(output if proc.get_successful() else None)
 
     def refresh(self, _output=None):
-        """Read the default output's volume into the state file, as a key would."""
+        """Read the default output's volume into the state file, as a key would, and the
+        default microphone's level (see default_microphone)."""
         self.wpctl("get-volume", "@DEFAULT_AUDIO_SINK@", then=self.write_state)
+        key = default_microphone(self.audio)
+        if key is None:
+            self.show_microphone(None)
+        else:
+            self.mic.target = str(key)
+            self.wpctl("get-volume", self.mic.target, then=self.show_microphone)
 
     def write_state(self, output):
         level = parse_volume(output)
@@ -4278,49 +4416,51 @@ class VolumeMenu(Gtk.MenuButton):
         except OSError:
             pass
 
-    def on_slider_changed(self, slider):
-        if self.updating:
-            return
-        self.wanted = round(slider.get_value())
-        self.value.set_text(f"{self.wanted}%")
-        if not self.sending:
-            self.send_volume()
+    def show_microphone(self, output):
+        """Show the default microphone's level; without one, only the list (if any)."""
+        level = parse_volume(output)
+        self.mic_section.set_visible(bool(self.audio["sources"]))
+        self.mic.set_visible(level is not None)
+        self.inputs.set_visible(len(self.audio["sources"]) > 1 or level is None)
+        if level is not None:
+            self.mic.show(*level)
+        if level != self.microphone:
+            self.microphone = level
+            if self.on_microphone:
+                self.on_microphone()
 
-    def send_volume(self, _output=None):
-        # A drag sends its newest value once the set-volume before it ends.
-        if self.wanted is None:
-            self.sending = False
-            self.refresh()
-            return
-        self.sending = True
-        percent, self.wanted = self.wanted, None
-        # The same 100 % cap as the keys.
-        self.wpctl("set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", f"{percent}%",
-                   then=self.send_volume)
-
-    def on_mute_toggled(self, button):
-        if not self.updating:
-            self.wpctl("set-mute", "@DEFAULT_AUDIO_SINK@", "1" if button.get_active() else "0",
-                       then=self.refresh)
-
-    def rebuild_outputs(self):
-        clear_box(self.outputs)
+    def rebuild_lists(self):
         outputs = audio_outputs(self.audio)
-        for key, description, default in outputs:
+        self.rebuild_list(self.outputs, outputs, "speaker", self.on_output_clicked)
+        self.heading.set_visible(bool(outputs))
+        self.rebuild_list(self.inputs, audio_inputs(self.audio), "microphone",
+                          self.on_input_clicked)
+
+    def rebuild_list(self, box, devices, glyph, on_clicked):
+        """Rows that make a device the default when clicked; the default has a check."""
+        clear_box(box)
+        for key, description, default in devices:
             button = clickable(Gtk.Button())
             button.set_has_frame(False)
             button.add_css_class("network-row")
-            button.set_child(panel_row(self.library, "speaker", description, None,
+            button.set_child(panel_row(self.library, glyph, description, None,
                                        "check" if default else None))
-            button.connect("clicked", self.on_output_clicked, key)
-            self.outputs.append(button)
-        self.heading.set_visible(bool(outputs))
+            button.connect("clicked", on_clicked, key)
+            box.append(button)
 
     def on_output_clicked(self, _button, key):
         self.wpctl("set-default", str(key), then=self.refresh)
 
+    def on_input_clicked(self, _button, key):
+        # wpctl set-default refuses virtual sources (a noise filter's, say), which
+        # WirePlumber takes as the default when asked through the metadata, as wpctl
+        # itself does for the rest.
+        name = (self.audio["sources"].get(key) or (None,))[0]
+        if name:
+            self.spawn(default_source_command(name), then=self.refresh)
+
     def on_popover_shown(self, _popover):
-        self.rebuild_outputs()
+        self.rebuild_lists()
         self.refresh()
 
     def setup(self):
@@ -4361,7 +4501,7 @@ class VolumeMenu(Gtk.MenuButton):
         self.refresh_source = None
         self.refresh()
         if self.get_popover().get_visible():
-            self.rebuild_outputs()
+            self.rebuild_lists()
         return False
 
 
@@ -4615,6 +4755,8 @@ class TinyBar(Gtk.Application):
 
         self.volume_monitor = None
         self.volume_refresh_source = None
+        self.microphone_monitor = None
+        self.microphone_refresh_source = None
 
         self.brightness_monitor = None
         self.brightness_refresh_source = None
@@ -4696,6 +4838,8 @@ class TinyBar(Gtk.Application):
             show_value=False
         )
         self.volume = VolumeMenu(self.icons)
+        # A new microphone level rewrites the speaker's tooltip, which names it too.
+        self.volume.on_microphone = self.update_volume_from_state
         self.battery = BatteryMenu(self.icons, self.history)
         self.system_menu = SystemMenu(self.icons, self.reload_style)
         # Desktops and VMs have no battery or backlight: leave those indicators out.
@@ -5314,6 +5458,15 @@ class TinyBar(Gtk.Application):
             self.on_volume_state_changed
         )
 
+        # The mic-mute key's file need not exist yet; the monitor sees it created.
+        self.microphone_monitor = Gio.File.new_for_path(
+            str(MICROPHONE_STATE)
+        ).monitor_file(Gio.FileMonitorFlags.NONE, None)
+        self.microphone_monitor.connect(
+            "changed",
+            self.on_microphone_state_changed
+        )
+
     def on_volume_state_changed(
         self,
         *args
@@ -5345,7 +5498,7 @@ class TinyBar(Gtk.Application):
         if level is None:
             self.volume.set_text(
                 "VOL ?",
-                tooltip=volume_tooltip(None)
+                tooltip=volume_tooltip(None, self.volume.microphone)
             )
             return
 
@@ -5356,13 +5509,13 @@ class TinyBar(Gtk.Application):
         if muted:
             self.volume.set_text(
                 "VOL MUTED",
-                tooltip=volume_tooltip(level)
+                tooltip=volume_tooltip(level, self.volume.microphone)
             )
 
         else:
             self.volume.set_text(
                 f"VOL {percent}%",
-                tooltip=volume_tooltip(level)
+                tooltip=volume_tooltip(level, self.volume.microphone)
             )
 
         self.volume.show_volume(percent, muted)
@@ -5374,6 +5527,29 @@ class TinyBar(Gtk.Application):
                 "Muted" if muted else None,
                 muted
             )
+
+    def on_microphone_state_changed(self, *args):
+        # Only the mic-mute key writes this file (tinybar-volume mic-mute); the popover
+        # and the tooltip follow the change through VolumeMenu's pw-dump child.
+        if self.microphone_refresh_source is None:
+            self.microphone_refresh_source = GLib.timeout_add(
+                25, self.show_microphone_key)
+
+    def show_microphone_key(self):
+        self.microphone_refresh_source = None
+        output = read_path(MICROPHONE_STATE)
+        level = parse_volume(output)
+
+        if level is not None and output.splitlines()[-1] == "key":
+            percent, muted = level
+            self.level_overlay.show_level(
+                microphone_glyph(percent, muted),
+                percent,
+                "Muted" if muted else None,
+                muted
+            )
+
+        return False
 
     # ---------- brightness ----------
 

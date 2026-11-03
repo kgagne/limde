@@ -50,6 +50,7 @@
     <keybind key="XF86AudioRaiseVolume"><action name="Execute" command="tinybar-volume up" /></keybind>
     <keybind key="XF86AudioLowerVolume"><action name="Execute" command="tinybar-volume down" /></keybind>
     <keybind key="XF86AudioMute"><action name="Execute" command="tinybar-volume mute" /></keybind>
+    <keybind key="XF86AudioMicMute"><action name="Execute" command="tinybar-volume mic-mute" /></keybind>
     <keybind key="XF86MonBrightnessUp"><action name="Execute" command="tinybar-brightness up" /></keybind>
     <keybind key="XF86MonBrightnessDown"><action name="Execute" command="tinybar-brightness down" /></keybind>
 

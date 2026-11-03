@@ -24,6 +24,10 @@ def volume_glyph(percent, muted=False):
     return 'volume-off' if percent == 0 else 'volume-low' if percent < 50 else 'volume-high'
 
 
+def microphone_glyph(_percent, muted=False):
+    return 'microphone-slash' if muted else 'microphone'
+
+
 def signal_glyph(strength):
     return 'wifi-weak' if strength < 35 else 'wifi-fair' if strength < 65 else 'wifi'
 

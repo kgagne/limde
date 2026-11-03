@@ -92,8 +92,8 @@ with Super+E:
 </labwc_config>
 ```
 
-limDE's keys keep working next to yours. The volume and brightness keys run
-`tinybar-volume` and `tinybar-brightness`, and the screenshot keys run
+limDE's keys keep working next to yours. The volume, mic-mute and brightness keys
+run `tinybar-volume` and `tinybar-brightness`, and the screenshot keys run
 `limde-screenshot`; if you rebind those keys, keep those commands so the panel still shows
 the change.
 

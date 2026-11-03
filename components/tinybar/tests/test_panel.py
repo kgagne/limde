@@ -507,6 +507,65 @@ class VolumeTests(unittest.TestCase):
         self.assertFalse(tinybar.apply_audio_objects(audio, [{"id": 65, "info": None}]))
         self.assertEqual(audio, tinybar.new_audio_state())
 
+    def test_microphones_leave_out_monitors_and_follow_the_default(self):
+        def node(key, media_class, name, description=None, **props):
+            props.update({"media.class": media_class, "node.name": name})
+            if description:
+                props["node.description"] = description
+            return {"id": key, "type": "PipeWire:Interface:Node", "info": {"props": props}}
+
+        audio = tinybar.new_audio_state()
+        self.assertTrue(tinybar.apply_audio_objects(audio, [
+            node(80, "Audio/Source", "alsa_input.pci-0000_00_1f.3.analog-stereo",
+                 "Built-in Audio Analog Stereo"),
+            node(81, "Audio/Source/Virtual", "testmic"),
+            node(82, "Audio/Source", "alsa_output.hdmi-stereo.monitor", "Monitor of HDMI"),
+            node(83, "Audio/Source", "loopback", "Loopback", **{"stream.monitor": "true"}),
+            node(84, "Stream/Input/Audio", "Firefox"),
+        ]))
+        self.assertEqual(tinybar.audio_inputs(audio), [
+            (80, "Built-in Audio Analog Stereo", False),
+            (81, "testmic", False),
+        ])
+        self.assertEqual(tinybar.audio_outputs(audio), [])
+
+        # The first dump's default metadata names both defaults.
+        default = [item for item in tinybar.split_dump(PW_DUMP)[0] if item["id"] == 41][0]
+        tinybar.apply_audio_objects(audio, [default])
+        self.assertEqual([mic[2] for mic in tinybar.audio_inputs(audio)], [True, False])
+        self.assertEqual(audio["default"], "alsa_output.pci-0000_00_1f.3.analog-stereo")
+
+        self.assertEqual(tinybar.default_microphone(audio), 80)
+
+        self.assertTrue(tinybar.apply_audio_objects(audio, [{"id": 80, "info": None}]))
+        self.assertEqual(tinybar.audio_inputs(audio), [(81, "testmic", False)])
+        self.assertIsNone(tinybar.default_microphone(audio))
+
+    def test_an_output_monitor_as_default_source_is_no_microphone(self):
+        # WirePlumber's choice with no microphone: the output's name, i.e. its monitor.
+        audio = tinybar.new_audio_state()
+        tinybar.apply_audio_objects(audio, [
+            {"id": 40, "type": "PipeWire:Interface:Node", "info": {"props": {
+                "media.class": "Audio/Sink", "node.name": "auto_null",
+                "node.description": "Dummy Output"}}},
+            {"id": 53, "type": "PipeWire:Interface:Node", "info": {"props": {
+                "media.class": "Audio/Source/Virtual", "node.name": "testmic"}}},
+            {"id": 41, "type": "PipeWire:Interface:Metadata", "props": {"metadata.name": "default"},
+             "metadata": [{"subject": 0, "key": "default.audio.source",
+                           "value": {"name": "auto_null"}}]},
+        ])
+        self.assertIsNone(tinybar.default_microphone(audio))
+        self.assertEqual(tinybar.audio_inputs(audio), [(53, "testmic", False)])
+
+    def test_picking_a_microphone_names_it_in_the_metadata(self):
+        self.assertEqual(tinybar.default_source_command('my "mic"'), [
+            "/usr/bin/pw-metadata", "-n", "default", "0", "default.configured.audio.source",
+            '{"name": "my \\"mic\\""}', "Spa:String:JSON"])
+
+    def test_microphone_glyph(self):
+        self.assertEqual(tinybar.microphone_glyph(80), "microphone")
+        self.assertEqual(tinybar.microphone_glyph(80, muted=True), "microphone-slash")
+
     def test_monitor_retries_back_off_and_never_give_up(self):
         delays, delay = [], 0
         # PipeWire stays down: every pw-dump quits at once.
@@ -653,6 +712,12 @@ class TooltipTests(unittest.TestCase):
         self.assertEqual(tinybar.volume_tooltip((65, False)), "Volume 65%")
         self.assertEqual(tinybar.volume_tooltip((65, True)), "Volume: muted")
         self.assertEqual(tinybar.volume_tooltip(None), "Volume: unavailable")
+        self.assertEqual(tinybar.volume_tooltip((65, False), (80, False)),
+                         "Volume 65%\nMicrophone 80%")
+        self.assertEqual(tinybar.volume_tooltip((65, True), (80, True)),
+                         "Volume: muted\nMicrophone: muted")
+        self.assertEqual(tinybar.volume_tooltip(None, (0, False)),
+                         "Volume: unavailable\nMicrophone 0%")
         self.assertEqual(tinybar.brightness_tooltip(40), "Brightness 40%")
         self.assertEqual(tinybar.brightness_tooltip(None), "Brightness: unavailable")
 

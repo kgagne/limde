@@ -26,8 +26,21 @@ case "${1:-}" in
     sync)
         ;;
 
+    mic-mute)
+        # The default microphone, in its own file, so the overlay shows the
+        # microphone and the speaker's state is left alone. Without a microphone
+        # WirePlumber's default source can be an output's monitor, which wpctl
+        # resolves to the output itself: leave that alone.
+        "$WPCTL" inspect @DEFAULT_AUDIO_SOURCE@ 2>/dev/null |
+            grep -q 'media\.class = "Audio/Source' || exit 0
+        "$WPCTL" set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+        output=$("$WPCTL" get-volume @DEFAULT_AUDIO_SOURCE@)
+        printf '%s\nkey\n' "$output" > "$RUNTIME_DIR/microphone"
+        exit 0
+        ;;
+
     *)
-        echo "usage: tinybar-volume {up|down|mute|sync}" >&2
+        echo "usage: tinybar-volume {up|down|mute|mic-mute|sync}" >&2
         exit 2
         ;;
 esac
