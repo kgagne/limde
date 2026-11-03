@@ -109,6 +109,10 @@ def load_settings():
 # limde's agent-web window; set first_app_id in settings.toml to change it.
 FIRST_APP_ID = load_settings().get("first_app_id", "limde.AgentWeb")
 
+# Widest an app's name gets on its task button, in characters, before it ends in "…".
+# With many apps open the names shrink further, so the list stops short of the clock.
+TASK_NAME_MAX_CHARS = 20
+
 # Idle hide: swayidle (autostart.d/20-idle.sh) runs `tinybar-idle hide` after 90 s without
 # input and `tinybar-idle restore` at the next input. Hiding minimises every window
 # except those in idle_hide_keep; restoring brings back only those, bottom of the stack
@@ -1103,6 +1107,35 @@ def task_tooltip(name, titles, limit=60):
     return f"{name}\n{title}"
 
 
+def task_click_action(windows, last_active_id=None):
+    """What a click on an app's task button does: (verb, window) for the helper.
+
+    The app's focused window is minimised when it is the app's only window; with
+    several, the click moves focus to the next one, so a click never hides one of
+    many. Otherwise the window the app last had focused (or its first) is raised.
+    """
+
+    focused = next(
+        (w for w in windows if w.get("active") and not w.get("minimized")),
+        None
+    )
+
+    if focused is not None:
+        if len(windows) == 1:
+            return "minimize", focused
+
+        return "activate", windows[(windows.index(focused) + 1) % len(windows)]
+
+    target = next((w for w in windows if w["id"] == last_active_id), windows[0])
+    return "activate", target
+
+
+def task_close_label(count):
+    """The task menu's close row: "Close" for one window, "Close 3 windows" for more."""
+
+    return "Close" if count <= 1 else f"Close {count} windows"
+
+
 def clickable(widget):
     """Show the hand cursor over a widget that does something when clicked."""
 
@@ -1114,16 +1147,23 @@ def open_below_panel(button):
     """Open a panel button's popover without an arrow, clear of the panel.
 
     GTK anchors a popover to the button itself, so by default its arrow and top
-    edge sit over the lower part of the bar. The offset is measured when the
-    popover opens, so it follows font and margin changes. The button gets the hand
-    cursor: on its inner button, so the popover keeps the normal one.
+    edge sit over the lower part of the bar. The button gets the hand cursor: on its
+    inner button, so the popover keeps the normal one.
     """
 
-    popover = button.get_popover()
-    popover.set_has_arrow(False)
     clickable(button.get_first_child())
+    place_below_panel(button.get_popover())
+
+
+def place_below_panel(popover):
+    """Show a popover without an arrow, POPOVER_GAP below the panel. The offset is
+    measured from the popover's parent each time it opens, so it follows font and
+    margin changes and a popover moved to another parent."""
+
+    popover.set_has_arrow(False)
 
     def on_show(_popover):
+        button = popover.get_parent()
         root = button.get_root()
         found, bounds = button.compute_bounds(root)
 
@@ -3694,6 +3734,30 @@ def double_click_microseconds():
     return (milliseconds if milliseconds > 0 else DOUBLE_CLICK_MS) * 1000
 
 
+def action_row():
+    """A menu row that acts when clicked (the system and task menus): a glyph and a
+    label in a flat button that highlights on hover. Returns (button, icon, label)."""
+
+    button = clickable(Gtk.Button())
+    button.add_css_class("system-action")
+
+    row = Gtk.Box(
+        orientation=Gtk.Orientation.HORIZONTAL,
+        spacing=8
+    )
+
+    icon = glyph_widget("panel-row-icon")
+    label = Gtk.Label()
+    label.set_xalign(0)
+    label.set_hexpand(True)
+
+    row.append(icon)
+    row.append(label)
+    button.set_child(row)
+
+    return button, icon, label
+
+
 class SystemMenu(Gtk.MenuButton):
     """Cog at the right end: light/dark mode, then lock and restart, with suspend, log
     out and power off behind More.
@@ -3748,7 +3812,7 @@ class SystemMenu(Gtk.MenuButton):
 
         if self.interface:
             content.append(self.menu_heading("Appearance"))
-            self.mode_button, self.mode_icon, self.mode_label = self.action_row()
+            self.mode_button, self.mode_icon, self.mode_label = action_row()
             self.mode_button.connect("clicked", self.on_mode_clicked)
             content.append(self.mode_button)
 
@@ -3760,7 +3824,7 @@ class SystemMenu(Gtk.MenuButton):
         )
 
         for key, glyph, title, confirm, command in self.ACTIONS:
-            button, icon, label = self.action_row()
+            button, icon, label = action_row()
             library.set_glyph(icon, glyph)
             label.set_label(title)
             button.connect("clicked", self.on_action_clicked, key)
@@ -3773,7 +3837,7 @@ class SystemMenu(Gtk.MenuButton):
 
         # More stays where it is when it opens, with the rows below it: a double-click
         # on it then lands on Less, not on a row that has just appeared under the pointer.
-        self.more_button, self.more_icon, self.more_label = self.action_row()
+        self.more_button, self.more_icon, self.more_label = action_row()
         self.more_button.connect("clicked", self.on_more_clicked)
         content.append(self.more_button)
         content.append(self.more_rows)
@@ -3847,26 +3911,6 @@ class SystemMenu(Gtk.MenuButton):
 
         # Reload even after a partial failure: whatever was written should show.
         self.on_mode_changed()
-
-    def action_row(self):
-        button = clickable(Gtk.Button())
-        button.add_css_class("system-action")
-
-        row = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL,
-            spacing=8
-        )
-
-        icon = glyph_widget("panel-row-icon")
-        label = Gtk.Label()
-        label.set_xalign(0)
-        label.set_hexpand(True)
-
-        row.append(icon)
-        row.append(label)
-        button.set_child(row)
-
-        return button, icon, label
 
     def on_action_clicked(self, _button, key):
         button, label, title, confirm, command = self.rows[key]
@@ -4305,6 +4349,137 @@ class LevelOverlay(Gtk.Window):
         return False
 
 
+class TaskStrip(Gtk.Widget):
+    """Holds the task list and asks for no minimum width, so a full list can never
+    widen the panel or push the clock and the icons aside. Given less than its list's
+    natural width, the list's names shorten with "…"; given less than even the
+    shortened list needs, the buttons that do not fit are cut off at the right."""
+
+    def __init__(self, child):
+        super().__init__()
+        self.set_overflow(Gtk.Overflow.HIDDEN)
+        self.child = child
+        child.set_parent(self)
+
+    def do_measure(self, orientation, for_size):
+        minimum, natural, _base, _nat_base = self.child.measure(orientation, for_size)
+
+        if orientation == Gtk.Orientation.HORIZONTAL:
+            minimum = 0
+
+        return minimum, natural, -1, -1
+
+    def do_size_allocate(self, width, height, baseline):
+        minimum = self.child.measure(Gtk.Orientation.HORIZONTAL, height)[0]
+        self.child.allocate(max(width, minimum), height, baseline, None)
+
+
+class PanelRow(Gtk.Widget):
+    """The panel's row: tasks at the start, the clock centred on the panel, the icons
+    at the end. The icons get their full width and the clock stays centred (moved left
+    only if the icons would reach it); the tasks get what is left of the clock, never
+    more. The clock does not count toward the row's height, so its larger text does not
+    make the panel taller (it is centred on the row and may overhang it)."""
+
+    def __init__(self, start, center, end, spacing):
+        super().__init__()
+        self.start, self.center, self.end = start, center, end
+        self.spacing = spacing
+
+        for child in (start, center, end):
+            child.set_parent(self)
+
+    def do_measure(self, orientation, for_size):
+        if orientation == Gtk.Orientation.VERTICAL:
+            sizes = [child.measure(orientation, -1) for child in (self.start, self.end)]
+            return max(s[0] for s in sizes), max(s[1] for s in sizes), -1, -1
+
+        sizes = [child.measure(orientation, -1) for child in (self.start, self.center, self.end)]
+        gaps = 2 * self.spacing
+        return sum(s[0] for s in sizes) + gaps, sum(s[1] for s in sizes) + gaps, -1, -1
+
+    def do_size_allocate(self, width, height, baseline):
+        end_min, end_nat = self.end.measure(Gtk.Orientation.HORIZONTAL, -1)[:2]
+        end_width = max(end_min, min(end_nat, width))
+        center_width = self.center.measure(Gtk.Orientation.HORIZONTAL, -1)[1]
+        center_height = self.center.measure(Gtk.Orientation.VERTICAL, center_width)[1]
+        center_x = min(
+            (width - center_width) // 2,
+            width - end_width - self.spacing - center_width
+        )
+        center_x = max(center_x, 0)
+        start_width = max(0, center_x - self.spacing)
+
+        self.place(self.start, 0, 0, start_width, height)
+        self.place(self.center, center_x, (height - center_height) // 2, center_width, center_height)
+        self.place(self.end, width - end_width, 0, end_width, height)
+
+    @staticmethod
+    def place(child, x, y, width, height):
+        area = Gdk.Rectangle()
+        area.x, area.y, area.width, area.height = x, y, width, height
+        child.size_allocate(area, -1)
+
+
+class TaskMenu(Gtk.Popover):
+    """Right-click menu of a task button: the app's name and Close, which closes
+    every window the app has. One popover, moved to the button it opens from."""
+
+    def __init__(self, library, on_close):
+        super().__init__()
+
+        self.on_close = on_close
+        self.app_id = None
+
+        content = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=4
+        )
+
+        content.add_css_class("system-popover")
+
+        self.heading = Gtk.Label()
+        self.heading.set_xalign(0)
+        self.heading.set_ellipsize(Pango.EllipsizeMode.END)
+        self.heading.set_max_width_chars(30)
+        self.heading.add_css_class("panel-heading")
+        content.append(self.heading)
+
+        self.close_button, icon, self.close_label = action_row()
+        library.set_glyph(icon, "xmark")
+        self.close_button.connect("clicked", self.on_close_clicked)
+        content.append(self.close_button)
+
+        self.set_child(content)
+        place_below_panel(self)
+
+    def open_for(self, button, app_id, name, count):
+        if self.get_parent() is not button:
+            self.release()
+            self.set_parent(button)
+
+        self.app_id = app_id
+        self.heading.set_label(name)
+        self.close_label.set_label(task_close_label(count))
+        self.popup()
+
+    def release(self, button=None):
+        """Take the menu off its button (only `button`, when given), before the
+        button goes."""
+
+        parent = self.get_parent()
+
+        if parent is None or (button is not None and parent is not button):
+            return
+
+        self.popdown()
+        self.unparent()
+
+    def on_close_clicked(self, _button):
+        self.popdown()
+        self.on_close(self.app_id)
+
+
 class TinyBar(Gtk.Application):
     def __init__(self):
         super().__init__(
@@ -4376,32 +4551,13 @@ class TinyBar(Gtk.Application):
             window
         )
 
-        overlay = Gtk.Overlay()
-
-        row = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL,
-            spacing=12
-        )
-
-        row.set_margin_start(12)
-        row.set_margin_end(12)
-        row.set_margin_top(5)
-        row.set_margin_bottom(5)
-
-        left = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL,
-            spacing=8
-        )
-
-        left.set_hexpand(True)
-
         self.task_list = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=4
         )
 
         self.task_list.add_css_class("task-list")
-        left.append(self.task_list)
+        self.task_list.set_halign(Gtk.Align.START)
 
         self.system_info = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
@@ -4413,6 +4569,7 @@ class TinyBar(Gtk.Application):
         )
 
         self.icons = IconLibrary()
+        self.task_menu = TaskMenu(self.icons, self.close_app_windows)
         self.notifications = NotificationCenter(self.icons)
         self.cpu = StatusIndicator(self.icons, "cpu")
         self.memory = StatusIndicator(self.icons, "memory")
@@ -4459,29 +4616,20 @@ class TinyBar(Gtk.Application):
             widget.add_css_class("system-info")
             self.system_info.append(widget)
 
-        row.append(left)
-        row.append(self.system_info)
-
-        overlay.set_child(row)
-
         self.clock = Gtk.Label()
         self.clock.add_css_class("clock")
-
-        self.clock.set_halign(
-            Gtk.Align.CENTER
-        )
-
-        self.clock.set_valign(
-            Gtk.Align.CENTER
-        )
-
         self.clock.set_can_target(False)
 
-        overlay.add_overlay(
-            self.clock
-        )
+        # TaskStrip lets the tasks take less than their own minimum, so a full list
+        # never pushes the clock or the icons aside.
+        row = PanelRow(TaskStrip(self.task_list), self.clock, self.system_info, spacing=12)
 
-        window.set_child(overlay)
+        row.set_margin_start(12)
+        row.set_margin_end(12)
+        row.set_margin_top(5)
+        row.set_margin_bottom(5)
+
+        window.set_child(row)
 
         css = self.css = Gtk.CssProvider()
 
@@ -4703,9 +4851,9 @@ class TinyBar(Gtk.Application):
             if app_id in current_ids:
                 continue
 
-            self.task_list.remove(
-                self.task_buttons.pop(app_id)
-            )
+            button = self.task_buttons.pop(app_id)
+            self.task_menu.release(button)
+            self.task_list.remove(button)
 
         for position, (app_id, windows) in enumerate(
             self.toplevel_groups.items()
@@ -4720,17 +4868,27 @@ class TinyBar(Gtk.Application):
                     self.on_task_clicked,
                     app_id
                 )
+                menu_click = Gtk.GestureClick(button=Gdk.BUTTON_SECONDARY)
+                menu_click.connect("pressed", self.on_task_menu_pressed, button, app_id)
+                button.add_controller(menu_click)
                 content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
                 icon = self.icons.application_widget(app_id)
                 if icon is not None:
                     content.append(icon)
+                # A long name ends in "…" (the tooltip has it whole); the window count
+                # has its own label so it never does.
                 button.name_label = Gtk.Label()
+                button.name_label.set_ellipsize(Pango.EllipsizeMode.END)
+                button.name_label.set_max_width_chars(TASK_NAME_MAX_CHARS)
+                button.count_label = Gtk.Label()
                 # The first app shows its icon alone when it has one.
                 icon_only = app_id == FIRST_APP_ID and icon is not None
                 button.name_label.set_visible(not icon_only)
+                button.icon_only = icon_only
                 if icon_only:
                     icon.add_css_class("icon-only")
                 content.append(button.name_label)
+                content.append(button.count_label)
                 button.set_child(content)
                 self.task_buttons[app_id] = button
                 # A None sibling inserts at the start of the box.
@@ -4742,12 +4900,10 @@ class TinyBar(Gtk.Application):
 
             count = len(windows)
             name = self.display_name_for_app(app_id)
-            label = name
 
-            if count > 1:
-                label = f"{label} ({count})"
-
-            button.name_label.set_text(label)
+            button.name_label.set_text(name)
+            button.count_label.set_text(f"({count})")
+            button.count_label.set_visible(count > 1 and not button.icon_only)
             button.set_tooltip_text(task_tooltip(
                 name,
                 [str(window.get("title") or "") for window in windows]
@@ -4769,37 +4925,34 @@ class TinyBar(Gtk.Application):
         if not windows:
             return
 
-        target_id = self.last_active_toplevel.get(app_id)
-        target = next(
-            (
-                window
-                for window in windows
-                if window["id"] == target_id
-            ),
-            windows[0]
+        verb, target = task_click_action(
+            windows,
+            self.last_active_toplevel.get(app_id)
         )
 
-        if (
-            self.active_toplevel is not None
-            and self.active_toplevel["app_id"] == app_id
-            and len(windows) > 1
-        ):
-            try:
-                index = windows.index(self.active_toplevel)
-            except ValueError:
-                index = -1
+        if self.send_toplevel_command(verb, target["id"]):
+            self.last_active_toplevel[app_id] = target["id"]
 
-            target = windows[(index + 1) % len(windows)]
+    def on_task_menu_pressed(self, gesture, _presses, _x, _y, button, app_id):
+        windows = self.toplevel_groups.get(app_id, [])
 
-        try:
-            self.toplevel_helper.stdin.write(
-                f"activate {target['id']}\n"
-            )
-            self.toplevel_helper.stdin.flush()
-        except (AttributeError, BrokenPipeError, OSError):
+        if not windows:
             return
 
-        self.last_active_toplevel[app_id] = target["id"]
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+        self.task_menu.open_for(
+            button,
+            app_id,
+            self.display_name_for_app(app_id),
+            len(windows)
+        )
+
+    def close_app_windows(self, app_id):
+        """Ask each of the app's windows to close, as its own close button would: an
+        app with unsaved work can still ask first."""
+
+        for window in self.toplevel_groups.get(app_id, []):
+            self.send_toplevel_command("close", window["id"])
 
     def send_toplevel_command(self, verb, window_id):
         try:

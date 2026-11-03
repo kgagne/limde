@@ -54,8 +54,14 @@ lists windows through the wlr foreign-toplevel protocol.
   touching anything, e.g. `["com.freerdp.client.sdl3"]` for a remote desktop.
   If Tinybar restarts while windows are hidden, it forgets them; bring them back from
   the panel.
-- Windows: each one's desktop entry is found by its app ID, or, as Labwc's window
-  switcher does, by the entry's `StartupWMClass` (FreeRDP's SDL client, for one).
+- Windows: one button per app. Click it to raise the app's window; click the focused
+  app's button to minimise its window, or, when the app has several, to raise the next
+  one (a click never minimises one of several). Right-click for Close, which asks
+  every window of the app to close, as its own close button would. Long names end in
+  "…" (hover for the whole name); with many apps open they shorten further, so the
+  list stops short of the clock instead of pushing it and the icons aside. Each app's
+  desktop entry is found by its app ID, or, as Labwc's window switcher does, by the
+  entry's `StartupWMClass` (FreeRDP's SDL client, for one).
 - Battery: the panel shows the time left; hover for the percentage and time left in
   words, the live draw, a 3-hour average, and CPU and memory use (sampled with the
   battery every 5 seconds, not recorded). Click it for a graph of the draw over the

@@ -691,6 +691,40 @@ class TooltipTests(unittest.TestCase):
         self.assertEqual(tinybar.task_tooltip("Foot", []), "Foot")
         self.assertEqual(tinybar.task_tooltip("Firefox", ["a", "b", "c"]), "Firefox\n3 windows")
         self.assertEqual(tinybar.task_tooltip("Foot", ["x" * 80], limit=10), "Foot\nxxxxxxxxx\u2026")
+        self.assertEqual(tinybar.task_close_label(1), "Close")
+        self.assertEqual(tinybar.task_close_label(3), "Close 3 windows")
+
+
+def task_window(window_id, active=False, minimized=False):
+    return {"id": window_id, "app_id": "foot", "active": active, "minimized": minimized}
+
+
+class TaskClickTests(unittest.TestCase):
+    def action(self, windows, last=None):
+        verb, target = tinybar.task_click_action(windows, last)
+        return verb, target["id"]
+
+    def test_focused_only_window_is_minimised(self):
+        self.assertEqual(self.action([task_window(1, active=True)]), ("minimize", 1))
+
+    def test_unfocused_window_is_raised(self):
+        self.assertEqual(self.action([task_window(1)]), ("activate", 1))
+
+    def test_minimised_window_comes_back(self):
+        # Some compositors keep the activated state on a minimised window.
+        self.assertEqual(self.action([task_window(1, active=True, minimized=True)]), ("activate", 1))
+        self.assertEqual(self.action([task_window(1, minimized=True)]), ("activate", 1))
+
+    def test_several_windows_cycle_and_never_minimise(self):
+        windows = [task_window(1), task_window(2, active=True), task_window(3)]
+        self.assertEqual(self.action(windows), ("activate", 3))
+        windows = [task_window(1), task_window(2), task_window(3, active=True)]
+        self.assertEqual(self.action(windows), ("activate", 1))
+
+    def test_unfocused_app_raises_its_last_focused_window(self):
+        windows = [task_window(1), task_window(2), task_window(3)]
+        self.assertEqual(self.action(windows, last=2), ("activate", 2))
+        self.assertEqual(self.action(windows, last=9), ("activate", 1))
 
     def test_state_strings_still_pick_the_icons(self):
         # The indicators' first argument is parsed for the icon; the words are not.

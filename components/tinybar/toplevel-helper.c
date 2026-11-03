@@ -239,7 +239,7 @@ static void run_command(const char *line)
     unsigned int id;
     struct window *window;
 
-    /* activate ID, minimize ID or unminimize ID */
+    /* activate ID, minimize ID, unminimize ID or close ID */
     if (sscanf(line, "%15s %u", verb, &id) != 2)
         return;
 
@@ -252,6 +252,8 @@ static void run_command(const char *line)
             zwlr_foreign_toplevel_handle_v1_set_minimized(window->handle);
         else if (strcmp(verb, "unminimize") == 0)
             zwlr_foreign_toplevel_handle_v1_unset_minimized(window->handle);
+        else if (strcmp(verb, "close") == 0)
+            zwlr_foreign_toplevel_handle_v1_close(window->handle);
         else
             return;
         wl_display_flush(display);
