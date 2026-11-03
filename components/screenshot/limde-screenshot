@@ -3,7 +3,8 @@
 #   region  drag a rectangle; save a PNG and copy it
 #   screen  every output; save a PNG and copy it
 #   clip    drag a rectangle; copy only, nothing is written to disk
-# Escape or a click-away in the selector cancels quietly.
+# Escape or a click-away in the selector cancels quietly; so does a click without a drag
+# (slurp then returns a 1x1 region).
 
 set -eu
 
@@ -21,12 +22,21 @@ notify() {
         limde-screenshot 0 '' "$1" "$2" '[]' '{}' 3000 >/dev/null 2>&1 || true
 }
 
+# A click without a drag: slurp prints "X,Y 1x1" (or 0x0). Nothing worth keeping.
+is_click() {
+    case "${1##* }" in
+        [012]x[012]) return 0 ;;
+    esac
+    return 1
+}
+
 mode="${1:-}"
 stamp=$(date +%Y%m%d-%H%M%S)
 
 case "$mode" in
     region)
         geometry=$("$SLURP" 2>/dev/null) || exit 0
+        ! is_click "$geometry" || exit 0
         mkdir -p "$DIR"
         file="$DIR/screenshot-$stamp.png"
         "$GRIM" -g "$geometry" "$file"
@@ -42,6 +52,7 @@ case "$mode" in
         ;;
     clip)
         geometry=$("$SLURP" 2>/dev/null) || exit 0
+        ! is_click "$geometry" || exit 0
         "$GRIM" -g "$geometry" - | "$WLCOPY" --type image/png
         notify "Screenshot copied" "Clipboard only; nothing saved"
         ;;

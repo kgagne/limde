@@ -68,6 +68,20 @@ class ScreenshotTests(unittest.TestCase):
             self.assertFalse(self.clip.exists())
             self.assertFalse(self.args.exists())
 
+    def test_click_without_drag_is_quiet(self):
+        for mode in ("region", "clip"):
+            for size in ("1x1", "0x0"):
+                r = self.run_mode(mode, slurp=f"echo '412,9 {size}'")
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertFalse(self.out.exists())
+                self.assertFalse(self.clip.exists())
+                self.assertFalse(self.args.exists())
+
+    def test_small_real_region_still_saves(self):
+        r = self.run_mode("region", slurp="echo '10,20 12x3'")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(len(list(self.out.glob("screenshot-*.png"))), 1)
+
     def test_bad_argument(self):
         self.assertEqual(self.run_mode("bogus").returncode, 2)
 
