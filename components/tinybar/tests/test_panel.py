@@ -759,11 +759,12 @@ class BrightnessSliderTests(unittest.TestCase):
 
 class FakeMenu:
     """A panel menu button for PanelMenus: popup and popdown report back as GTK's
-    show and hide signals do."""
+    show and hide signals do; CSS classes are kept in a set."""
 
     def __init__(self, menus):
         self.menus = menus
         self.showing = False
+        self.classes = set()
 
     def popup(self):
         self.showing = True
@@ -774,76 +775,104 @@ class FakeMenu:
             self.showing = False
             self.menus.hidden(self)
 
+    def add_css_class(self, name):
+        self.classes.add(name)
+
+    def remove_css_class(self, name):
+        self.classes.discard(name)
+
 
 class PanelMenuTests(unittest.TestCase):
-    """The panel's popovers swap like a menu bar's (PanelMenus)."""
+    """The panel's popovers work like a menu bar's (PanelMenus)."""
 
     def setUp(self):
         self.now = 100.0
-        self.menus = tinybar.PanelMenus(clock=lambda: self.now)
-        self.wifi, self.volume = FakeMenu(self.menus), FakeMenu(self.menus)
+        self.pending = []
+        self.menus = tinybar.PanelMenus(clock=lambda: self.now,
+                                        later=lambda _seconds, callback: self.pending.append(callback))
+        self.cog, self.battery, self.volume = (FakeMenu(self.menus) for _ in range(3))
+
+    def settle(self):
+        self.now += 1
+        for callback in self.pending:
+            callback()
+        self.pending.clear()
 
     def click_closes(self, menu):
-        """GTK closing the popover on a press, then reporting the pointer back."""
+        """GTK closing the popover on a press on its button, then reporting the pointer
+        back over the button."""
         menu.popdown()
         self.now += 0.01
         self.menus.pointed(menu)
+
+    def look(self, menu):
+        return ("anchor" if tinybar.PanelMenus.ANCHOR in menu.classes else
+                "preview" if tinybar.PanelMenus.PREVIEW in menu.classes else None)
 
     def test_pointing_does_nothing_while_none_is_open(self):
         self.menus.pointed(self.volume)
         self.assertFalse(self.volume.showing)
 
-    def test_pointing_swaps_to_another_popover(self):
-        self.wifi.popup()
-        self.now += 2
-        self.menus.pointed(self.volume)
-        self.assertFalse(self.wifi.showing)
-        self.assertTrue(self.volume.showing)
-        self.assertIs(self.menus.open, self.volume)
-        # Pointing at the open one's own button changes nothing.
-        self.menus.pointed(self.volume)
-        self.assertTrue(self.volume.showing)
+    def test_a_click_opens_the_anchor(self):
+        self.cog.popup()
+        self.assertEqual(self.look(self.cog), "anchor")
 
-    def test_click_right_after_a_swap_keeps_it_open(self):
-        self.wifi.popup()
+    def test_pointing_previews_and_the_anchor_keeps_its_highlight(self):
+        self.cog.popup()
+        self.menus.pointed(self.battery)
+        self.assertFalse(self.cog.showing)
+        self.assertTrue(self.battery.showing)
+        self.assertEqual((self.look(self.cog), self.look(self.battery)), ("anchor", "preview"))
         self.menus.pointed(self.volume)
-        self.now += 0.5
-        self.click_closes(self.volume)
-        self.assertTrue(self.volume.showing)
-        # The next click closes it.
-        self.now += 0.3
-        self.click_closes(self.volume)
-        self.assertFalse(self.volume.showing)
+        self.assertEqual((self.look(self.battery), self.look(self.volume)), (None, "preview"))
+        # Back at the anchor: its popover, no preview.
+        self.menus.pointed(self.cog)
+        self.assertTrue(self.cog.showing)
+        self.assertEqual((self.look(self.cog), self.look(self.volume)), ("anchor", None))
 
-    def test_late_click_after_a_swap_closes(self):
-        self.wifi.popup()
-        self.menus.pointed(self.volume)
-        self.now += tinybar.HOVER_CLICK_SECONDS + 0.5
-        self.click_closes(self.volume)
-        self.assertFalse(self.volume.showing)
+    def test_clicking_a_preview_takes_it_whenever_it_comes(self):
+        self.cog.popup()
+        self.menus.pointed(self.battery)
+        self.now += 30
+        self.click_closes(self.battery)
+        self.settle()
+        self.assertTrue(self.battery.showing)
+        self.assertEqual((self.look(self.cog), self.look(self.battery)), (None, "anchor"))
+        # Now it is the anchor, the next click closes it and the highlight goes.
+        self.click_closes(self.battery)
+        self.settle()
+        self.assertFalse(self.battery.showing)
+        self.assertEqual(self.look(self.battery), None)
 
-    def test_clicked_open_popover_closes_on_click(self):
+    def test_clicking_the_open_anchor_closes(self):
         self.volume.popup()
-        self.now += 0.2
         self.click_closes(self.volume)
+        self.settle()
         self.assertFalse(self.volume.showing)
+        self.assertEqual(self.look(self.volume), None)
+
+    def test_closing_a_preview_elsewhere_clears_both(self):
+        self.cog.popup()
+        self.menus.pointed(self.battery)
+        self.battery.popdown()  # a click in another window
+        self.settle()
+        self.assertFalse(self.battery.showing)
+        self.assertEqual((self.look(self.cog), self.look(self.battery)), (None, None))
 
     def test_escape_closes_for_good(self):
-        self.wifi.popup()
-        self.menus.pointed(self.volume)
-        self.now += 0.2
+        self.cog.popup()
+        self.menus.pointed(self.battery)
         self.menus.escaping = True
-        self.click_closes(self.volume)
-        self.assertFalse(self.volume.showing)
+        self.click_closes(self.battery)
+        self.assertFalse(self.battery.showing)
 
     def test_pointer_returning_later_does_not_reopen(self):
-        self.wifi.popup()
-        self.menus.pointed(self.volume)
-        self.now += 0.3
-        self.volume.popdown()
+        self.cog.popup()
+        self.menus.pointed(self.battery)
+        self.battery.popdown()
         self.now += tinybar.REENTER_SECONDS + 0.1
-        self.menus.pointed(self.volume)
-        self.assertFalse(self.volume.showing)
+        self.menus.pointed(self.battery)
+        self.assertFalse(self.battery.showing)
 
 
 class CalendarTests(unittest.TestCase):
@@ -955,7 +984,7 @@ class TooltipTests(unittest.TestCase):
     def test_battery_rows(self):
         rows = tinybar.battery_rows
         self.assertEqual(rows(80, "Not charging", end=80, start=50),
-                         [("plug", "Battery 80%, plugged in"), ("shield-check", "Held at 80%")])
+                         [("battery-plug", "Battery 80%, plugged in"), ("shield-check", "Held at 80%")])
         self.assertEqual(rows(64, "Charging", "40m", 25.04, end=80),
                          [("battery-bolt", "Battery 64%, charging to 80%"),
                           ("bolt", "Charging at 25.0 W"), ("clock", "80% in 40m")])
@@ -1040,6 +1069,13 @@ class TaskClickTests(unittest.TestCase):
         ]
         for kind, state, icon in cases:
             self.assertEqual(library.status_name(kind, state), icon, state)
+
+    def test_plugged_in_battery_shows_a_plug_when_the_theme_has_one(self):
+        library = IconLibrary.__new__(IconLibrary)
+        with mock.patch.object(IconLibrary, "has", lambda _self, name: True):
+            self.assertEqual(library.status_name("battery", "BAT 61% PLUG"), "battery-plug")
+        with mock.patch.object(IconLibrary, "has", lambda _self, name: False):
+            self.assertEqual(library.status_name("battery", "BAT 61% PLUG"), "battery-half")
 
 
 HCI0, HCI1 = "/org/bluez/hci0", "/org/bluez/hci1"

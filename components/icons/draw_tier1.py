@@ -28,6 +28,9 @@ for name, fraction in (('battery-empty', 0), ('battery-quarter', .25), ('battery
     write(name, *BATTERY, *level)
 write('battery-bolt', *BATTERY, path('M12 8.5L8.75 12.25H12.75L9.5 16'))
 write('battery-exclamation', *BATTERY, path('M10.75 8.75v3.75'), dot(10.75, 15))
+# Plugged in, not charging (held by a charge limit): a plug where the bolt goes.
+write('battery-plug', *BATTERY, path('M9.5 8.25v1.5M12 8.25v1.5'),
+      path('M8 9.75h5.5v1a2.75 2.75 0 0 1-5.5 0z'), path('M10.75 13.5v2.25'))
 
 # --- Wi-Fi family -------------------------------------------------------------------
 def wifi_arcs(count):

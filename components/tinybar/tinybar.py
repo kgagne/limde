@@ -90,11 +90,8 @@ TEMP_SAMPLE_SECONDS = 30
 NOTIFICATION_SAMPLE_SECONDS = 2
 # Log out, restart and power off ask for a second click; the question clears after this.
 CONFIRM_SECONDS = 4
-# While a panel popover is open, pointing at another panel button opens its popover
-# (PanelMenus). A click on that button this soon after is the click the user was
-# already making, so it keeps the popover open instead of closing it.
-HOVER_CLICK_SECONDS = 1.0
-# GTK reports the pointer back over a button this soon after a click closed its popover.
+# GTK reports the pointer back over a panel button this soon after a click on it closed
+# its popover (PanelMenus).
 REENTER_SECONDS = 0.25
 # GTK's own default double-click time, for when its setting cannot be read. A second
 # click sooner than the double-click time is the rest of a double-click, not an answer.
@@ -530,7 +527,7 @@ def battery_rows(percent, status, runtime_text=None, watts=None, end=None, start
     if status == "Charging":
         glyph = "battery-bolt"
     elif status == "Not charging":
-        glyph = "plug"
+        glyph = "battery-plug"
     else:
         glyph = battery_glyph(percent) if percent is not None else "battery-exclamation"
 
@@ -1183,38 +1180,46 @@ def open_below_panel(button):
     PANEL_MENUS.add(button)
 
 
-def reopens_after_click(button, now, closed, swapped):
-    """True when the pointer coming back over button (at monotonic now) means a click
-    just closed the popover that pointing at the button had opened: the click the user
-    was making anyway. closed and swapped are PanelMenus' (button, time) records."""
+def reopens_after_click(button, now, closed):
+    """True when the pointer coming back over button (at monotonic now) means a click on
+    it just closed a popover that pointing had opened (a preview): the click takes it
+    instead. closed is PanelMenus' (button, time, was a preview) record."""
 
     return (
         closed is not None
-        and swapped is not None
         and closed[0] is button
-        and swapped[0] is button
+        and closed[2]
         and now - closed[1] <= REENTER_SECONDS
-        and closed[1] - swapped[1] <= HOVER_CLICK_SECONDS
     )
 
 
 class PanelMenus:
     """The panel's popover buttons, working like a menu bar.
 
-    GTK closes an open popover on any press outside it and drops that press, so a
-    click on another panel button would only close the first popover. Instead, while
-    one popover is open, pointing at another panel button swaps to its popover at
-    once. The click that usually follows would close the new popover; nothing sees
-    that press, but GTK reports the pointer leaving the button while its popover is
-    open and coming back as the popover closes, so that return reopens it
-    (reopens_after_click). Escape closes for good.
+    A click opens a popover; its button is the anchor and keeps its highlight. While a
+    popover is open, pointing at another panel button previews that one's popover (its
+    button drawn with an outline only), and a click on a previewed button takes it, as
+    if it had opened it. A click on the open anchor, Escape or a click elsewhere closes.
+
+    GTK closes an open popover on any press outside it and drops the press, so no
+    widget sees a click on a previewed button. GTK reports the pointer leaving the
+    button while its popover is open and coming back as the popover closes, so that
+    return (reopens_after_click) is the click.
     """
 
-    def __init__(self, clock=time.monotonic):
+    ANCHOR = "menu-anchor"
+    PREVIEW = "menu-preview"
+
+    def __init__(self, clock=time.monotonic, later=None):
         self.clock = clock
+        # later(seconds, callback): runs callback once, after seconds.
+        self.later = later or (lambda seconds, callback: GLib.timeout_add(
+            round(seconds * 1000), lambda: callback() and False))
         self.open = None      # the button whose popover is showing
-        self.swapped = None   # (button, time) of the last swap by pointing
-        self.closed = None    # (button, time) of the last close, not by Escape
+        self.anchor = None    # the button last opened by a click
+        self.preview = None   # the button opened by pointing, while it is open
+        self.swapping = False
+        self.closed = None    # (button, time, was a preview) of the last close
         self.escaping = False
 
     def add(self, button):
@@ -1236,27 +1241,55 @@ class PanelMenus:
         self.escaping = keyval == Gdk.KEY_Escape
         return False
 
+    def mark(self, anchor, preview):
+        for old, new, name in ((self.anchor, anchor, self.ANCHOR),
+                               (self.preview, preview, self.PREVIEW)):
+            if old is not new:
+                if old is not None:
+                    old.remove_css_class(name)
+                if new is not None:
+                    new.add_css_class(name)
+        self.anchor, self.preview = anchor, preview
+
     def shown(self, button):
         self.open = button
+
+        if self.swapping and button is not self.anchor:
+            self.mark(self.anchor, button)
+        else:
+            # Opened by a click (or by pointing back at the anchor).
+            self.mark(button, None)
 
     def hidden(self, button):
         if self.open is button:
             self.open = None
 
-        self.closed = None if self.escaping else (button, self.clock())
+        if self.swapping:
+            return
+
+        was_preview = button is self.preview and not self.escaping
+        self.closed = (button, self.clock(), was_preview)
         self.escaping = False
+        self.later(REENTER_SECONDS * 2, self.settle)
+
+    def settle(self):
+        """After a close: nothing reopened, so the menu bar is done with."""
+        if self.open is None:
+            self.mark(None, None)
 
     def pointed(self, button):
-        now = self.clock()
         current = self.open
 
         if current is not None and current is not button:
-            self.swapped = (button, now)
-            current.popdown()
-            button.popup()
-        elif current is None and reopens_after_click(button, now, self.closed, self.swapped):
-            self.swapped = None  # the next click closes it
-            button.popup()
+            self.swapping = True
+            try:
+                current.popdown()
+                button.popup()
+            finally:
+                self.swapping = False
+        elif current is None and reopens_after_click(button, self.clock(), self.closed):
+            self.closed = None
+            button.popup()  # shown() makes it the anchor
 
 
 PANEL_MENUS = PanelMenus()
@@ -6150,12 +6183,16 @@ class TinyBar(Gtk.Application):
             )
 
         # The state string IconLibrary.status_name picks the icon from: the
-        # level, and "+" while charging. The hover words are battery_tooltip's.
+        # level, "+" while charging, "PLUG" while plugged in but not charging
+        # (held by the charge limit). The hover words are battery_tooltip's.
         icon_state = f"BAT {capacity}%"
         smoothed_watts = None
 
         if status == "Charging":
             icon_state += " +"
+
+        elif status == "Not charging":
+            icon_state += " PLUG"
 
         elif status == "Full":
             icon_state += " FULL"

@@ -200,6 +200,8 @@ class IconLibrary:
             match = re.search(r'(\d+)%', text)
             if '+' in text.split('|')[0]:
                 name = 'battery-bolt'
+            elif 'PLUG' in text and self.has('battery-plug'):
+                name = 'battery-plug'
             elif match:
                 name = battery_glyph(int(match.group(1)))
             else:

@@ -60,6 +60,7 @@
  "src/battery-exclamation.svg": "b36b0a1ae5f621b7a7ef9da48d80dac1f94072f402ecea81314e56a762e914df",
  "src/battery-full.svg": "32ee90dcddfb81fc1a615747b88368e22aa39e37b3ff77522d0a141e178dcef7",
  "src/battery-half.svg": "397139ace1c7e2e1c17ed51ab9a295ba487951b5f8ca95846904d76149d07f0b",
+ "src/battery-plug.svg": "492cb6f33cdab598e4ede2898f4ebb262c3d1776456627d188cb7cb595fe4e40",
  "src/battery-quarter.svg": "44419daa33dd293721aa16f8440fb45b2514012663d5e92d9830353864b7b237",
  "src/battery-three-quarters.svg": "30a6f1fa487328a05f5c5a418fbf413619b0bb6e2454207fa6d91bb6f70c8c8f",
  "src/bell-slash.svg": "bc5e5ba806bbf4319e6ce1ee05ac1190f6622f6fa3b723f834384ee7e687bcc2",
