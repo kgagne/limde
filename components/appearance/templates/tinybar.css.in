@@ -199,6 +199,11 @@ popover > contents {
     color: ${colors_text};
 }
 
+/* Do not disturb with no crossed-out bell in the icon theme: a dimmed bell. */
+.notification-button.do-not-disturb > button image {
+    opacity: 0.5;
+}
+
 .notification-empty {
     padding: 10px 8px;
     font-size: 13px;

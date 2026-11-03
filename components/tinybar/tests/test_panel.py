@@ -683,6 +683,17 @@ class TooltipTests(unittest.TestCase):
         self.assertEqual(tinybar.notification_tooltip(0), "No notifications")
         self.assertEqual(tinybar.notification_tooltip(1), "1 notification")
         self.assertEqual(tinybar.notification_tooltip(3), "3 notifications")
+        self.assertEqual(tinybar.notification_tooltip(0, quiet=True),
+                         "No notifications\nDo not disturb: on")
+        self.assertEqual(tinybar.notification_tooltip(2, quiet=True),
+                         "2 notifications\nDo not disturb: on")
+
+    def test_do_not_disturb_modes(self):
+        mode = tinybar.DO_NOT_DISTURB_MODE
+        self.assertEqual(tinybar.with_mode(["default"], mode, True), ["default", mode])
+        self.assertEqual(tinybar.with_mode(["default", mode], mode, True), ["default", mode])
+        self.assertEqual(tinybar.with_mode([mode, "away"], mode, False), ["away"])
+        self.assertEqual(tinybar.with_mode([], mode, False), [])
 
     def test_task_buttons(self):
         self.assertEqual(tinybar.task_tooltip("Foot", ["~/code"]), "Foot\n~/code")

@@ -37,3 +37,12 @@ default-timeout=4000
 border-color=${colors_error_background}
 # Critical alerts persist until acted on, as they do on a phone.
 default-timeout=0
+
+# Do not disturb, the switch in the Tinybar bell (makoctl mode -a do-not-disturb):
+# no pop-ups, but every notification still arrives and is listed in the bell.
+# Critical ones (the 5 % battery warning) still show. Later sections win.
+[mode=do-not-disturb]
+invisible=1
+
+[mode=do-not-disturb urgency=critical]
+invisible=0

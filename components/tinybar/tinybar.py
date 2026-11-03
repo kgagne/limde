@@ -147,6 +147,9 @@ MAKO_INTERFACE = "fr.emersion.Mako"
 # Mako answers immediately; a short ceiling keeps a wedged daemon from
 # stalling the panel's main loop on every poll.
 MAKO_TIMEOUT_MS = 500
+# The Mako mode that hides pop-ups; mako.conf's [mode=do-not-disturb] section makes
+# every notification but a critical one invisible while it is set.
+DO_NOT_DISTURB_MODE = "do-not-disturb"
 
 # The standard notification interface, which Mako serves under the same bus name;
 # the battery warnings are posted through it.
@@ -1085,12 +1088,20 @@ def shorten(text, limit):
     return text[:limit - 1].rstrip() + "\u2026"
 
 
-def notification_tooltip(count):
-    """Hover text for the bell."""
+def notification_tooltip(count, quiet=False):
+    """Hover text for the bell; a second line while do not disturb is on."""
     if not count:
-        return "No notifications"
+        text = "No notifications"
+    else:
+        text = "1 notification" if count == 1 else f"{count} notifications"
 
-    return "1 notification" if count == 1 else f"{count} notifications"
+    return text + "\nDo not disturb: on" if quiet else text
+
+
+def with_mode(modes, mode, enabled):
+    """Mako's mode list with mode added or removed, the others kept in order."""
+    kept = [name for name in modes if name != mode]
+    return kept + [mode] if enabled else kept
 
 
 def task_tooltip(name, titles, limit=60):
@@ -1242,6 +1253,11 @@ class NotificationCenter(Gtk.MenuButton):
     a row that is closed here is recorded as acknowledged and filtered out. The
     acknowledged set is pruned against what Mako still reports, so it stays the
     size of the history buffer rather than growing for the session's lifetime.
+
+    The do not disturb switch sets Mako's do-not-disturb mode, which hides pop-ups
+    (all but critical ones) while they still arrive and are listed here. The mode
+    lives in Mako, so it is read back on every refresh: a Tinybar restart or a
+    `makoctl mode` change shows truly, and a new session (a new Mako) starts with it off.
     """
 
     def __init__(self, library):
@@ -1252,6 +1268,8 @@ class NotificationCenter(Gtk.MenuButton):
         self.entries = []
         self.acknowledged = set()
         self.last_count = None
+        self.last_quiet = None
+        self.updating_switch = False
 
         self.set_has_frame(False)
         self.add_css_class("notification-button")
@@ -1300,12 +1318,45 @@ class NotificationCenter(Gtk.MenuButton):
         self.clear.add_css_class("notification-clear")
         self.clear.connect("clicked", self.on_clear_clicked)
 
+        header = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=8
+        )
+
+        header.add_css_class("network-header")
+
+        words = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=1
+        )
+
+        words.set_hexpand(True)
+
+        title = Gtk.Label(label="Do not disturb")
+        title.set_xalign(0)
+        title.add_css_class("notification-summary")
+
+        detail = Gtk.Label(label="Hides pop-ups; urgent ones still show")
+        detail.set_xalign(0)
+        detail.add_css_class("notification-body")
+
+        words.append(title)
+        words.append(detail)
+
+        self.switch = clickable(Gtk.Switch())
+        self.switch.set_valign(Gtk.Align.CENTER)
+        self.switch.connect("state-set", self.on_switch_set)
+
+        header.append(words)
+        header.append(self.switch)
+
         content = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
             spacing=6
         )
 
         content.add_css_class("notification-popover")
+        content.append(header)
         content.append(self.empty)
         content.append(scroller)
         content.append(self.clear)
@@ -1317,8 +1368,8 @@ class NotificationCenter(Gtk.MenuButton):
         self.set_popover(popover)
         open_below_panel(self)
 
-        if self.library.set_glyph(self.icon, "bell"):
-            self.icon.add_css_class("icon-only")
+        self.show_bell()
+        self.icon.add_css_class("icon-only")
 
     # ---------- Mako ----------
 
@@ -1366,6 +1417,13 @@ class NotificationCenter(Gtk.MenuButton):
             reverse=True
         )
 
+    def read_modes(self):
+        return list(self.call("ListModes").unpack()[0])
+
+    def set_quiet(self, enabled):
+        modes = with_mode(self.read_modes(), DO_NOT_DISTURB_MODE, enabled)
+        self.call("SetModes", GLib.Variant("(as)", (modes,)))
+
     def dismiss(self, entry):
         # History rows no longer exist for Mako; acknowledging is the whole job.
         if not entry["live"]:
@@ -1389,6 +1447,15 @@ class NotificationCenter(Gtk.MenuButton):
             # Mako may be absent or restarting; keep the last known count.
             return True
 
+        try:
+            quiet = DO_NOT_DISTURB_MODE in self.read_modes()
+            self.switch.set_sensitive(True)
+
+        except GLib.Error:
+            # A Mako without modes: the switch could not do anything.
+            quiet = False
+            self.switch.set_sensitive(False)
+
         known = {entry["id"] for entry in found}
         self.acknowledged &= known
 
@@ -1399,7 +1466,16 @@ class NotificationCenter(Gtk.MenuButton):
 
         count = len(self.entries)
 
-        if count != self.last_count:
+        quiet_changed = quiet != self.last_quiet
+
+        if quiet_changed:
+            self.last_quiet = quiet
+            self.show_bell()
+            self.updating_switch = True
+            self.switch.set_active(quiet)
+            self.updating_switch = False
+
+        if quiet_changed or count != self.last_count:
             self.last_count = count
             self.count.set_text(str(count) if count else "")
             self.count.set_visible(bool(count))
@@ -1409,7 +1485,7 @@ class NotificationCenter(Gtk.MenuButton):
             else:
                 self.icon.add_css_class("icon-only")
 
-            label = notification_tooltip(count)
+            label = notification_tooltip(count, quiet)
 
             self.set_tooltip_text(label)
 
@@ -1501,6 +1577,42 @@ class NotificationCenter(Gtk.MenuButton):
         row.append(close)
 
         return row
+
+    def show_bell(self):
+        """The bell, or a crossed-out bell while do not disturb is on. Without one in
+        the theme, the plain bell is dimmed instead (the do-not-disturb class)."""
+        quiet = bool(self.last_quiet)
+        crossed = quiet and any(
+            self.library.set_glyph(self.icon, name)
+            for name in ("bell-slash", "notifications-disabled")
+        )
+
+        if not crossed:
+            self.library.set_glyph(self.icon, "bell")
+
+        if quiet and not crossed:
+            self.add_css_class("do-not-disturb")
+        else:
+            self.remove_css_class("do-not-disturb")
+
+    def on_switch_set(self, _switch, enabled):
+        if self.updating_switch:
+            return False
+
+        try:
+            self.set_quiet(enabled)
+
+        except GLib.Error as error:
+            print(f"tinybar: could not set do not disturb: {error}", flush=True)
+            # Put the switch back to what Mako has.
+            self.last_quiet = None
+
+        GLib.idle_add(self.refresh_once)
+        return False
+
+    def refresh_once(self):
+        self.refresh()
+        return False
 
     def on_popover_shown(self, _popover):
         self.refresh()
