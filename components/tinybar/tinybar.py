@@ -55,7 +55,10 @@ def first_device(pattern, fallback):
 
 
 BATTERY = first_device("power_supply/BAT*", "power_supply/BAT0")
-BACKLIGHT = first_device("backlight/*", "backlight/none")
+# TINYBAR_BACKLIGHT_DIR stands in another backlight folder (a test's fake one); the
+# tinybar-brightness it runs reads the same variable.
+BACKLIGHT = (Path(os.environ["TINYBAR_BACKLIGHT_DIR"]) if os.environ.get("TINYBAR_BACKLIGHT_DIR")
+             else first_device("backlight/*", "backlight/none"))
 HAS_BATTERY = (BATTERY / "capacity").exists()
 HAS_BACKLIGHT = (BACKLIGHT / "brightness").exists()
 
@@ -256,6 +259,14 @@ AUDIO_EVENT_MS = 100
 # quitting at once (PipeWire down), each wait doubles, up to the maximum.
 AUDIO_MONITOR_RETRY_SECONDS = 5
 AUDIO_MONITOR_RETRY_MAX_SECONDS = 60
+
+# The brightness slider changes the backlight as the keys do, through tinybar-brightness
+# (1-100 %, never 0), which needs brightnessctl (optional laptop install group). The
+# copy beside this file when run from the source tree, else the installed one.
+BRIGHTNESSCTL = os.environ.get("TINYBAR_BRIGHTNESSCTL", "/usr/bin/brightnessctl")
+BRIGHTNESS_COMMAND = Path(__file__).resolve().with_name("tinybar-brightness")
+# Backlight changes this soon after the slider's last one are the slider's: no overlay.
+BRIGHTNESS_SLIDER_QUIET_SECONDS = 0.5
 
 # How long the brightness/volume readout stays up after the last change.
 LEVEL_OVERLAY_MS = 1500
@@ -4105,6 +4116,37 @@ def volume_tooltip(level, microphone=None):
     return "\n".join(lines)
 
 
+def brightness_percent(current, maximum):
+    """The backlight's level in percent (0-100) from its sysfs brightness and
+    max_brightness texts; None when they cannot be read."""
+    try:
+        current, maximum = int(current), int(maximum)
+    except (TypeError, ValueError):
+        return None
+    if maximum <= 0:
+        return None
+    return max(0, min(round(current / maximum * 100), 100))
+
+
+def brightness_command():
+    """tinybar-brightness: beside this file in the source tree, else from PATH."""
+    if BRIGHTNESS_COMMAND.exists():
+        return str(BRIGHTNESS_COMMAND)
+    return shutil.which("tinybar-brightness") or "/usr/local/bin/tinybar-brightness"
+
+
+def can_set_brightness():
+    """True when brightnessctl, which tinybar-brightness runs, is installed."""
+    return os.access(BRIGHTNESSCTL, os.X_OK)
+
+
+def brightness_change_announced(now, quiet_until, slider_sending):
+    """Whether a backlight change shows the level overlay: not while the slider is
+    sending, nor until quiet_until after its last change (both monotonic seconds).
+    The slider shows the level itself; the keys still get the overlay."""
+    return not slider_sending and now >= quiet_until
+
+
 def brightness_tooltip(percent):
     """Hover text for the brightness icon; percent is None when unreadable."""
     return "Brightness: unavailable" if percent is None else f"Brightness {percent}%"
@@ -4221,10 +4263,94 @@ def audio_monitor_delay(ran_seconds, last_delay):
     return min(last_delay * 2, AUDIO_MONITOR_RETRY_MAX_SECONDS)
 
 
+def run_command(argv, then=None):
+    """Run a command without blocking, in the C locale; then(output, or None if it
+    failed)."""
+    launcher = Gio.SubprocessLauncher.new(
+        Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE)
+    launcher.setenv("LC_ALL", "C", True)
+    try:
+        proc = launcher.spawnv(argv)
+    except GLib.Error as error:
+        print(f"tinybar: cannot run {argv[0]}: {error.message}", flush=True)
+        if then:
+            then(None)
+        return
+    proc.communicate_utf8_async(None, None, on_command_done, then)
+
+
+def on_command_done(proc, result, then):
+    try:
+        _ok, output, _err = proc.communicate_utf8_finish(result)
+    except GLib.Error:
+        output = None
+    if then:
+        then(output if proc.get_successful() else None)
+
+
+class LevelSlider(Gtk.Box):
+    """A slider from minimum to 100 % and its value. show() puts a level read back into
+    it; moving it calls send(percent, then) with its newest value, one change at a time
+    (send calls then() when that change is done), and done() after the last."""
+
+    def __init__(self, name, send, done, minimum=0):
+        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self.send = send
+        self.done = done
+        # The slider's newest value not yet sent; one change runs at a time.
+        self.wanted = None
+        self.sending = False
+        self.updating = False
+        # The level last shown or asked for: a click can report the same value twice.
+        self.last = None
+        self.set_hexpand(True)
+
+        self.slider = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, minimum, 100, 1)
+        self.slider.set_hexpand(True)
+        self.slider.add_css_class("volume-slider")
+        self.slider.update_property([Gtk.AccessibleProperty.LABEL], [name])
+        self.slider.connect("value-changed", self.on_slider_changed)
+        self.value = Gtk.Label()
+        self.value.set_width_chars(4)
+        self.value.set_xalign(1)
+        self.value.add_css_class("notification-body")
+        self.append(self.slider)
+        self.append(self.value)
+
+    def show(self, percent):
+        """Show a level read back; a drag in progress keeps the slider."""
+        if self.sending:
+            return
+        self.updating = True
+        self.slider.set_value(percent)
+        self.value.set_text(f"{percent}%")
+        self.last = percent
+        self.updating = False
+
+    def on_slider_changed(self, slider):
+        percent = round(slider.get_value())
+        if self.updating or percent == self.last:
+            return
+        self.wanted = self.last = percent
+        self.value.set_text(f"{self.wanted}%")
+        if not self.sending:
+            self.send_next()
+
+    def send_next(self, _output=None):
+        # A drag sends its newest value once the change before it ends.
+        if self.wanted is None:
+            self.sending = False
+            self.done()
+            return
+        self.sending = True
+        percent, self.wanted = self.wanted, None
+        self.send(percent, self.send_next)
+
+
 class LevelControls(Gtk.Box):
-    """A mute toggle, a 0-100 % slider and its value, for one wpctl target (the default
-    output or microphone). show() puts a level read back into them; a change runs
-    wpctl through run(), then done() so the owner reads the level back."""
+    """A mute toggle and a LevelSlider, for one wpctl target (the default output or
+    microphone). show() puts a level read back into them; a change runs wpctl through
+    run(), then done() so the owner reads the level back."""
 
     def __init__(self, library, target, name, glyph, run, done):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
@@ -4234,9 +4360,6 @@ class LevelControls(Gtk.Box):
         self.glyph = glyph
         self.run = run
         self.done = done
-        # The slider's newest value not yet sent; one set-volume runs at a time.
-        self.wanted = None
-        self.sending = False
         self.updating = False
 
         self.mute = clickable(Gtk.ToggleButton())
@@ -4245,17 +4368,9 @@ class LevelControls(Gtk.Box):
         self.mute_icon = glyph_widget()
         self.mute.set_child(self.mute_icon)
         self.mute.connect("toggled", self.on_mute_toggled)
-        self.slider = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
-        self.slider.set_hexpand(True)
-        self.slider.add_css_class("volume-slider")
-        self.slider.update_property([Gtk.AccessibleProperty.LABEL], [name])
-        self.slider.connect("value-changed", self.on_slider_changed)
-        self.value = Gtk.Label()
-        self.value.set_width_chars(4)
-        self.value.set_xalign(1)
-        self.value.add_css_class("notification-body")
-        for widget in (self.mute, self.slider, self.value):
-            self.append(widget)
+        self.level = LevelSlider(name, self.send_volume, done)
+        self.append(self.mute)
+        self.append(self.level)
 
     def show(self, percent, muted):
         """Show a level read back; a drag in progress keeps the slider."""
@@ -4264,30 +4379,13 @@ class LevelControls(Gtk.Box):
         words = "Unmute" if muted else "Mute"
         self.mute.set_tooltip_text(words if self.name == "Volume" else f"{words} {self.name.lower()}")
         self.library.set_glyph(self.mute_icon, self.glyph(percent, muted))
-        (self.slider.add_css_class if muted else self.slider.remove_css_class)("muted")
-        if not self.sending:
-            self.slider.set_value(percent)
-            self.value.set_text(f"{percent}%")
+        (self.level.slider.add_css_class if muted else self.level.slider.remove_css_class)("muted")
+        self.level.show(percent)
         self.updating = False
 
-    def on_slider_changed(self, slider):
-        if self.updating:
-            return
-        self.wanted = round(slider.get_value())
-        self.value.set_text(f"{self.wanted}%")
-        if not self.sending:
-            self.send_volume()
-
-    def send_volume(self, _output=None):
-        # A drag sends its newest value once the set-volume before it ends.
-        if self.wanted is None:
-            self.sending = False
-            self.done()
-            return
-        self.sending = True
-        percent, self.wanted = self.wanted, None
+    def send_volume(self, percent, then):
         # The same 100 % cap as the keys.
-        self.run("set-volume", "-l", "1.0", self.target, f"{percent}%", then=self.send_volume)
+        self.run("set-volume", "-l", "1.0", self.target, f"{percent}%", then=then)
 
     def on_mute_toggled(self, button):
         if not self.updating:
@@ -4368,27 +4466,7 @@ class VolumeMenu(Gtk.MenuButton):
         self.spawn([WPCTL, *args], then)
 
     def spawn(self, argv, then=None):
-        """Run a command without blocking, in the C locale; then(output, or None if it
-        failed)."""
-        launcher = Gio.SubprocessLauncher.new(
-            Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE)
-        launcher.setenv("LC_ALL", "C", True)
-        try:
-            proc = launcher.spawnv(argv)
-        except GLib.Error as error:
-            print(f"tinybar: cannot run {argv[0]}: {error.message}", flush=True)
-            if then:
-                then(None)
-            return
-        proc.communicate_utf8_async(None, None, self.on_wpctl_done, then)
-
-    def on_wpctl_done(self, proc, result, then):
-        try:
-            _ok, output, _err = proc.communicate_utf8_finish(result)
-        except GLib.Error:
-            output = None
-        if then:
-            then(output if proc.get_successful() else None)
+        run_command(argv, then)
 
     def refresh(self, _output=None):
         """Read the default output's volume into the state file, as a key would, and the
@@ -4503,6 +4581,76 @@ class VolumeMenu(Gtk.MenuButton):
         if self.get_popover().get_visible():
             self.rebuild_lists()
         return False
+
+
+class BrightnessMenu(Gtk.MenuButton):
+    """Brightness glyph; its popover holds a slider for the screen without brightness
+    keys (an external keyboard). The slider runs `tinybar-brightness set`, the keys'
+    command, so it keeps their 1 % floor. The panel reads the level back from sysfs
+    (show), as for the keys, but a change the slider made shows no level overlay
+    (announce). Without brightnessctl the slider is greyed out and says why."""
+
+    def __init__(self, library):
+        super().__init__()
+        self.library = library
+        # Monotonic time until which backlight changes count as the slider's.
+        self.quiet_until = 0.0
+        # Called after the slider's last change, to read the level back (the panel's
+        # update_brightness), so a failed change does not leave the slider wrong.
+        self.refresh = None
+        self.set_has_frame(False)
+        self.add_css_class("panel-menu")
+        self.indicator = StatusIndicator(library, "brightness", show_value=False)
+        self.set_child(self.indicator)
+
+        self.icon = glyph_widget("level-glyph")
+        self.level = LevelSlider("Brightness", self.send_brightness, self.on_sent, minimum=1)
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        row.append(self.icon)
+        row.append(self.level)
+
+        self.missing = Gtk.Label(label="Install brightnessctl to change the brightness here.")
+        self.missing.set_xalign(0)
+        self.missing.set_wrap(True)
+        self.missing.add_css_class("notification-body")
+
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        content.add_css_class("notification-popover")
+        content.append(row)
+        content.append(self.missing)
+
+        popover = Gtk.Popover()
+        popover.set_child(content)
+        popover.connect("show", self.on_popover_shown)
+        self.set_popover(popover)
+        open_below_panel(self)
+
+    def set_text(self, text, **kwargs):
+        self.indicator.set_text(text, **kwargs)
+
+    def show(self, percent):
+        """Show a level read from sysfs in the popover."""
+        self.library.set_glyph(self.icon, brightness_glyph(percent))
+        self.level.show(percent)
+
+    def announce(self):
+        """Whether the change just read should show the level overlay."""
+        return brightness_change_announced(time.monotonic(), self.quiet_until,
+                                           self.level.sending)
+
+    def on_popover_shown(self, _popover):
+        # brightnessctl may have been installed since the panel started.
+        usable = can_set_brightness()
+        self.level.set_sensitive(usable)
+        self.missing.set_visible(not usable)
+
+    def send_brightness(self, percent, then):
+        run_command([brightness_command(), "set", str(percent)], then)
+
+    def on_sent(self):
+        self.quiet_until = time.monotonic() + BRIGHTNESS_SLIDER_QUIET_SECONDS
+        if self.refresh:
+            self.refresh()
 
 
 class LevelOverlay(Gtk.Window):
@@ -4832,11 +4980,8 @@ class TinyBar(Gtk.Application):
         self.tailscale = None
         if TAILSCALE is True or (TAILSCALE == "auto" and shutil.which("tailscale")):
             self.tailscale = TailscaleButton(self.icons)
-        self.brightness = StatusIndicator(
-            self.icons,
-            "brightness",
-            show_value=False
-        )
+        self.brightness = BrightnessMenu(self.icons)
+        self.brightness.refresh = self.update_brightness
         self.volume = VolumeMenu(self.icons)
         # A new microphone level rewrites the speaker's tooltip, which names it too.
         self.volume.on_microphone = self.update_volume_from_state
@@ -5595,7 +5740,7 @@ class TinyBar(Gtk.Application):
 
     def refresh_brightness_after_event(self):
         self.brightness_refresh_source = None
-        self.update_brightness(announce=True)
+        self.update_brightness(announce=self.brightness.announce())
 
         return False
 
@@ -5603,53 +5748,18 @@ class TinyBar(Gtk.Application):
         # announce: the backlight changed, so also show the level overlay.
         if not HAS_BACKLIGHT:
             return
-        current = read_path(
-            BACKLIGHT / "brightness"
-        )
+        percent = brightness_percent(read_path(BACKLIGHT / "brightness"),
+                                     read_path(BACKLIGHT / "max_brightness"))
 
-        maximum = read_path(
-            BACKLIGHT / "max_brightness"
-        )
+        if percent is None:
+            self.brightness.set_text("BRI ?", tooltip=brightness_tooltip(None))
+            return
 
-        try:
-            current = int(current)
-            maximum = int(maximum)
+        self.brightness.set_text(f"BRI {percent}%", tooltip=brightness_tooltip(percent))
+        self.brightness.show(percent)
 
-            if maximum <= 0:
-                raise ValueError
-
-            percent = round(
-                current / maximum * 100
-            )
-
-            percent = max(
-                0,
-                min(
-                    percent,
-                    100
-                )
-            )
-
-            self.brightness.set_text(
-                f"BRI {percent}%",
-                tooltip=brightness_tooltip(percent)
-            )
-
-            if announce:
-                self.level_overlay.show_level(
-                    brightness_glyph(percent),
-                    percent
-                )
-
-        except (
-            TypeError,
-            ValueError
-        ):
-            self.brightness.set_text(
-                "BRI ?",
-                tooltip=brightness_tooltip(None)
-            )
-
+        if announce:
+            self.level_overlay.show_level(brightness_glyph(percent), percent)
 
     # ---------- battery ----------
 

@@ -44,6 +44,13 @@ lists windows through the wlr foreign-toplevel protocol.
   mic-mute`) toggles the default microphone and shows the overlay with a microphone.
   Only the keys show the level overlay. Changes made elsewhere, such as another app or a
   new default output, show at once: Tinybar follows PipeWire through `pw-dump --monitor`.
+- Brightness (on a screen with a backlight): click the sun for a slider, for keyboards
+  without brightness keys. It changes the backlight as the keys do (`tinybar-brightness
+  set`), never below 1 %, and shows no level overlay: the slider shows the level, and
+  only the keys bring up the overlay. Changing it needs `brightnessctl` (the optional
+  `laptop` install group, like the keys); without it the slider is greyed out and says so.
+  `TINYBAR_BACKLIGHT_DIR` and `TINYBAR_BRIGHTNESSCTL` point Tinybar and
+  `tinybar-brightness` at a stand-in backlight, for tests.
 - Tailscale (optional, not installed by limDE): a button left of Wi-Fi turns Tailscale
   on and off with `tailscale up` and `tailscale down`. Tailscale's logo means connected;
   all nine dots greyed with a slash means off or not ready (Tailscale's own tray greys

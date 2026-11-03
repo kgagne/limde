@@ -68,6 +68,27 @@ class BrightnessTests(unittest.TestCase):
         self.assertEqual(self.step("down", 0), self.pct(1))
         self.assertEqual(self.step("up", MAX), MAX)
 
+    def set_to(self, value, raw=9600):
+        (self.dev / "brightness").write_text(str(raw))
+        env = dict(os.environ, TINYBAR_BRIGHTNESSCTL=str(self.ctl), TINYBAR_BACKLIGHT_DIR=str(self.dev))
+        r = subprocess.run(["sh", str(SCRIPT), "set", value], env=env, stderr=subprocess.DEVNULL)
+        return r.returncode, int((self.dev / "brightness").read_text())
+
+    def test_set_a_level(self):
+        self.assertEqual(self.set_to("40"), (0, self.pct(40)))
+        self.assertEqual(self.set_to("08"), (0, self.pct(8)))
+        self.assertEqual(self.set_to("100"), (0, MAX))
+
+    def test_set_keeps_the_floor_and_the_ceiling(self):
+        self.assertEqual(self.set_to("0"), (0, self.pct(1)))
+        self.assertEqual(self.set_to("000"), (0, self.pct(1)))
+        self.assertEqual(self.set_to("250"), (0, MAX))
+        self.assertEqual(self.set_to("99999999999999999999"), (0, MAX))
+
+    def test_set_refuses_anything_but_a_number(self):
+        for value in ("", "-5", "4.5", "40%", "abc"):
+            self.assertEqual(self.set_to(value), (2, 9600), value)
+
     def test_bad_argument(self):
         (self.dev / "brightness").write_text("9600")
         env = dict(os.environ, TINYBAR_BRIGHTNESSCTL=str(self.ctl), TINYBAR_BACKLIGHT_DIR=str(self.dev))

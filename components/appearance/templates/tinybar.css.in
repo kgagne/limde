@@ -292,6 +292,12 @@ popover > contents {
     color: ${colors_text};
 }
 
+/* Brightness popover: the glyph before the slider, placed like the volume's mute toggle. */
+.level-glyph {
+    padding: 2px 6px;
+    color: ${colors_muted};
+}
+
 /* Wi-Fi popover: the on/off header, network rows that join on click, the join form. */
 /* 6 + the 18 px switch + 6 keeps the header row 30 px, like a one-line row. */
 .network-header {
@@ -436,6 +442,8 @@ window.level-window {
 
 .level-bar.muted progress,
 .volume-slider.muted highlight,
-.volume-slider.muted slider {
+.volume-slider.muted slider,
+.volume-slider:disabled highlight,
+.volume-slider:disabled slider {
     background: ${colors_muted};
 }

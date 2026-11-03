@@ -1,7 +1,8 @@
 #!/bin/sh
 # Step the built-in screen's backlight: 10% steps from 100% down to 10%, then 1%
 # steps from 10% down to 1%. The floor is 1%, never 0%, so the panel cannot be
-# switched fully dark by a key press. Tinybar watches the sysfs file itself.
+# switched fully dark by a key press. `set PERCENT` (Tinybar's slider) sets a level
+# directly, held to the same 1-100% range. Tinybar watches the sysfs file itself.
 
 set -eu
 
@@ -44,8 +45,23 @@ case "${1:-}" in
         [ "$target" -ge 1 ] || target=1
         ;;
 
+    set)
+        case "${2:-}" in
+            ''|*[!0-9]*)
+                echo "usage: tinybar-brightness set PERCENT" >&2
+                exit 2
+                ;;
+        esac
+        # Without leading zeros, so "08" is not read as octal; long ones are over 100.
+        target=${2#"${2%%[!0]*}"}
+        [ -n "$target" ] || target=0
+        [ "${#target}" -le 3 ] || target=100
+        [ "$target" -ge 1 ] || target=1
+        [ "$target" -le 100 ] || target=100
+        ;;
+
     *)
-        echo "usage: tinybar-brightness {up|down}" >&2
+        echo "usage: tinybar-brightness {up|down|set PERCENT}" >&2
         exit 2
         ;;
 esac

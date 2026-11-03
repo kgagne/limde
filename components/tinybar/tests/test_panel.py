@@ -688,6 +688,36 @@ def network(wifi=None, wifi_connected=False, wired=None, device="/d/1", enabled=
             "hardware_enabled": hardware, "nearby": []}
 
 
+class BrightnessSliderTests(unittest.TestCase):
+    def test_percent_from_sysfs(self):
+        self.assertEqual(tinybar.brightness_percent("38400", "96000"), 40)
+        self.assertEqual(tinybar.brightness_percent("960", "96000"), 1)
+        self.assertEqual(tinybar.brightness_percent("0", "96000"), 0)
+        self.assertEqual(tinybar.brightness_percent("97000", "96000"), 100)
+        self.assertIsNone(tinybar.brightness_percent(None, "96000"))
+        self.assertIsNone(tinybar.brightness_percent("5", "0"))
+        self.assertIsNone(tinybar.brightness_percent("x", "96000"))
+
+    def test_slider_changes_show_no_overlay(self):
+        # The keys' changes do; the slider's (while sending, and just after) do not.
+        self.assertTrue(tinybar.brightness_change_announced(10.0, 0.0, False))
+        self.assertFalse(tinybar.brightness_change_announced(10.0, 0.0, True))
+        self.assertFalse(tinybar.brightness_change_announced(10.0, 10.4, False))
+        self.assertTrue(tinybar.brightness_change_announced(10.5, 10.4, False))
+
+    def test_slider_needs_brightnessctl(self):
+        with mock.patch.object(tinybar, "BRIGHTNESSCTL", "/nonexistent/brightnessctl"):
+            self.assertFalse(tinybar.can_set_brightness())
+        with mock.patch.object(tinybar, "BRIGHTNESSCTL", "/bin/sh"):
+            self.assertTrue(tinybar.can_set_brightness())
+
+    def test_command_is_the_keys_command(self):
+        self.assertEqual(Path(tinybar.brightness_command()).name, "tinybar-brightness")
+        with mock.patch.object(tinybar, "BRIGHTNESS_COMMAND", Path("/nonexistent/tinybar-brightness")), \
+                mock.patch.object(tinybar.shutil, "which", return_value=None):
+            self.assertEqual(tinybar.brightness_command(), "/usr/local/bin/tinybar-brightness")
+
+
 class TooltipTests(unittest.TestCase):
     """Hover words are plain phrases, never the state strings the icons are picked from."""
 
