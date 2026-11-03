@@ -4147,6 +4147,16 @@ def brightness_change_announced(now, quiet_until, slider_sending):
     return not slider_sending and now >= quiet_until
 
 
+def calendar_heading(day):
+    """The calendar popover's title: the date in words, "Monday, November 2, 2026"."""
+    return f"{day:%A}, {day:%B} {day.day}, {day.year}"
+
+
+def calendar_shows_today(year, month, day, today):
+    """True while the calendar is on today (month 1-12), so Today has nothing to do."""
+    return (year, month, day) == (today.year, today.month, today.day)
+
+
 def brightness_tooltip(percent):
     """Hover text for the brightness icon; percent is None when unreadable."""
     return "Brightness: unavailable" if percent is None else f"Brightness {percent}%"
@@ -4653,6 +4663,79 @@ class BrightnessMenu(Gtk.MenuButton):
             self.refresh()
 
 
+class CalendarMenu(Gtk.MenuButton):
+    """The clock. Its popover is a month calendar opened on today, which GTK marks;
+    Today comes back to it after browsing other months. The clock keeps its label's
+    look: the button's padding is cancelled by its margin (.panel-menu)."""
+
+    def __init__(self):
+        super().__init__()
+        self.set_has_frame(False)
+        self.add_css_class("panel-menu")
+        self.add_css_class("clock-menu")
+        self.label = Gtk.Label()
+        self.label.add_css_class("clock")
+        self.set_child(self.label)
+
+        self.heading = Gtk.Label()
+        self.heading.set_xalign(0)
+        self.heading.set_hexpand(True)
+        self.heading.add_css_class("power-title")
+        self.today = clickable(Gtk.Button(label="Today"))
+        self.today.add_css_class("network-action")
+        self.today.connect("clicked", self.show_today)
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        header.add_css_class("calendar-header")
+        header.append(self.heading)
+        header.append(self.today)
+
+        self.calendar = Gtk.Calendar()
+        for name in ("year", "month", "day"):
+            self.calendar.connect(f"notify::{name}", self.update_today)
+        # The month arrows are the calendar's own buttons.
+        for widget in descendants(self.calendar):
+            if isinstance(widget, Gtk.Button):
+                clickable(widget)
+
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        content.add_css_class("calendar-popover")
+        content.append(header)
+        content.append(self.calendar)
+
+        popover = Gtk.Popover()
+        popover.set_child(content)
+        popover.connect("show", self.show_today)
+        self.set_popover(popover)
+        open_below_panel(self)
+
+    def set_text(self, text):
+        self.label.set_text(text)
+
+    def show_today(self, *_args):
+        self.heading.set_text(calendar_heading(datetime.date.today()))
+        now = GLib.DateTime.new_now_local()
+        if hasattr(self.calendar, "set_date"):
+            self.calendar.set_date(now)
+        else:
+            self.calendar.select_day(now)
+        self.update_today()
+
+    def update_today(self, *_args):
+        calendar = self.calendar
+        self.today.set_sensitive(not calendar_shows_today(
+            calendar.get_year(), calendar.get_month() + 1, calendar.get_day(),
+            datetime.date.today()))
+
+
+def descendants(widget):
+    """Every widget inside widget, depth first."""
+    child = widget.get_first_child()
+    while child is not None:
+        yield child
+        yield from descendants(child)
+        child = child.get_next_sibling()
+
+
 class LevelOverlay(Gtk.Window):
     """Brief brightness or volume readout near the bottom of the screen.
 
@@ -5017,9 +5100,7 @@ class TinyBar(Gtk.Application):
             widget.add_css_class("system-info")
             self.system_info.append(widget)
 
-        self.clock = Gtk.Label()
-        self.clock.add_css_class("clock")
-        self.clock.set_can_target(False)
+        self.clock = CalendarMenu()
 
         # TaskStrip lets the tasks take less than their own minimum, so a full list
         # never pushes the clock or the icons aside.

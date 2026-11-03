@@ -718,6 +718,21 @@ class BrightnessSliderTests(unittest.TestCase):
             self.assertEqual(tinybar.brightness_command(), "/usr/local/bin/tinybar-brightness")
 
 
+class CalendarTests(unittest.TestCase):
+    def test_heading(self):
+        import datetime
+        self.assertEqual(tinybar.calendar_heading(datetime.date(2026, 11, 2)),
+                         "Monday, November 2, 2026")
+
+    def test_today_button_only_away_from_today(self):
+        import datetime
+        today = datetime.date(2026, 11, 2)
+        self.assertTrue(tinybar.calendar_shows_today(2026, 11, 2, today))
+        self.assertFalse(tinybar.calendar_shows_today(2026, 12, 2, today))
+        self.assertFalse(tinybar.calendar_shows_today(2027, 11, 2, today))
+        self.assertFalse(tinybar.calendar_shows_today(2026, 11, 3, today))
+
+
 class TooltipTests(unittest.TestCase):
     """Hover words are plain phrases, never the state strings the icons are picked from."""
 

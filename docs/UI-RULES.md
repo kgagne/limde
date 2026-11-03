@@ -57,6 +57,7 @@ Every control must fit the 18 px line of 13 px text, so rows stay 30 px (one lin
 | Framed text button | 26 tall | `.network-action`: `min-height: 0; padding: 3px 10px` |
 | Icon button | 20 tall | `padding: 2px 6px`, no frame (`.power-arrow`, `.volume-mute`) |
 | Slider | 18 tall | `.volume-slider`: knob 14, no border |
+| Calendar day | 30 × 30 | `popover calendar > grid > label`: 6 + 18 + 6 |
 
 Sizing rules for switches and entries already apply to every popover; reuse the classes
 above for buttons and sliders instead of new values.

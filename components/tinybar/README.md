@@ -1,7 +1,8 @@
 # Tinybar
 
 limDE's panel: open windows (with the agent-web window always leftmost), Wi-Fi,
-Bluetooth, volume, brightness, battery, a power menu, notifications and the clock.
+Bluetooth, volume, brightness, battery, a power menu, notifications and the clock
+(with a calendar).
 Python with GTK 4 and gtk4-layer-shell, plus a small C helper (`toplevel-helper`) that
 lists windows through the wlr foreign-toplevel protocol.
 
@@ -51,6 +52,9 @@ lists windows through the wlr foreign-toplevel protocol.
   `laptop` install group, like the keys); without it the slider is greyed out and says so.
   `TINYBAR_BACKLIGHT_DIR` and `TINYBAR_BRIGHTNESSCTL` point Tinybar and
   `tinybar-brightness` at a stand-in backlight, for tests.
+- Clock: click it for this month's calendar, opened on today, which is outlined (and
+  highlighted until another day is clicked). The arrows browse months and years; Today
+  comes back. Dates only: no events.
 - Tailscale (optional, not installed by limDE): a button left of Wi-Fi turns Tailscale
   on and off with `tailscale up` and `tailscale down`. Tailscale's logo means connected;
   all nine dots greyed with a slash means off or not ready (Tailscale's own tray greys
