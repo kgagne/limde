@@ -21,6 +21,15 @@ lists windows through the wlr foreign-toplevel protocol.
   kept the way NetworkManager keeps them by default: readable only by root, with the
   connection. NetworkManager's calls are in `WifiControl`; `tests/vm/test-wifi` runs
   them against simulated access points in a VM.
+- Sign-in pages (hotel, airport and café Wi-Fi): when NetworkManager reports that a
+  captive portal is in the way, the Wi-Fi menu says "Sign-in needed" and offers "Sign
+  in to the network", which opens the page in the default browser; the icon's tooltip
+  says so too, and one notification is sent per network (a middle click on it, Mako's default action, opens the page).
+  The page opened is NetworkManager's own check address over plain http, which the
+  portal redirects to its sign-in page. This needs NetworkManager's connectivity check,
+  which limDE turns on with `network-manager-config-connectivity-ubuntu`
+  ([docs/DEPENDENCIES.md](../../docs/DEPENDENCIES.md)); with the check off, nothing about
+  sign-in is ever shown.
 - Bluetooth (with the optional `bluetooth` install group): click the Bluetooth icon
   for paired devices, connected ones first; click one for Connect or Disconnect and
   Forget. "Pair new device" searches while the menu stays open and lists nearby devices

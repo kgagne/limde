@@ -682,11 +682,45 @@ class WifiJoinRaceTests(unittest.TestCase):
 
 
 def network(wifi=None, wifi_connected=False, wired=None, device="/d/1", enabled=True,
-            hardware=True):
+            hardware=True, portal=None):
     """A NetworkMenu.read_state result."""
     return {"wifi": wifi, "wifi_connected": wifi_connected or wifi is not None,
             "wired": wired, "wifi_device": device, "enabled": enabled,
-            "hardware_enabled": hardware, "nearby": []}
+            "hardware_enabled": hardware, "nearby": [], "portal": portal}
+
+
+class CaptivePortalTests(unittest.TestCase):
+    CHECK = "http://connectivity-check.ubuntu.com/"
+
+    def test_sign_in_page_is_the_check_address_over_http(self):
+        self.assertEqual(tinybar.portal_url(self.CHECK), self.CHECK)
+        self.assertEqual(tinybar.portal_url("https://check.example/hotspot.txt"),
+                         "http://check.example/hotspot.txt")
+        self.assertEqual(tinybar.portal_url("HTTP://check.example/"), "http://check.example/")
+        for unusable in ("", None, "check.example", "ftp://check.example/", "http://"):
+            self.assertIsNone(tinybar.portal_url(unusable))
+
+    def test_tooltip_adds_a_line(self):
+        hotel = {**point("Hotel", 70), "address": None}
+        self.assertEqual(tinybar.network_tooltip(network(hotel, portal=self.CHECK)),
+                         "Wi-Fi: Hotel, 70% signal\n"
+                         "Sign-in needed: click to open the Wi-Fi menu")
+        self.assertEqual(tinybar.network_tooltip(network(wired={"address": None},
+                                                         portal=self.CHECK)),
+                         "Wired: connected\nSign-in needed: click to open the Wi-Fi menu")
+        # Not connected: nothing to sign in to.
+        self.assertEqual(tinybar.network_tooltip(network(portal=self.CHECK)),
+                         "Wi-Fi: not connected")
+
+    def test_notice_names_the_network(self):
+        hotel = {**point("Hotel", 70), "address": None}
+        summary, body = tinybar.portal_notice(network(hotel, portal=self.CHECK))
+        self.assertEqual(summary, "Sign-in needed")
+        self.assertTrue(body.startswith("Hotel asks you to sign in"))
+        self.assertEqual(tinybar.portal_name(network({**hotel, "ssid": ""})),
+                         "The Wi-Fi network")
+        self.assertEqual(tinybar.portal_name(network(wired={"address": None})),
+                         "The wired network")
 
 
 class BrightnessSliderTests(unittest.TestCase):

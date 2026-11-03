@@ -24,6 +24,15 @@ From `packages/runtime.list`: what the desktop needs to run.
   See the network switch in [INSTALL.md](INSTALL.md#the-network-switch).
 - `wpasupplicant`: joins Wi-Fi networks; NetworkManager only recommends it, so it is
   listed.
+- `network-manager-config-connectivity-ubuntu`: one NetworkManager setting
+  (`/usr/lib/NetworkManager/conf.d/20-connectivity-ubuntu.conf`) that turns on its
+  connectivity check, as Ubuntu Desktop does. NetworkManager then fetches
+  `http://connectivity-check.ubuntu.com/` now and then (every 5 minutes, and after each
+  connection), which tells Canonical's server that an Ubuntu machine with NetworkManager
+  is online; it sends no user data. With the check, NetworkManager notices a hotel or
+  airport sign-in page (a captive portal) and Tinybar's Wi-Fi menu offers to open it.
+  To turn the check off, remove the package or write `[connectivity]` and `enabled=false`
+  in a file in `/etc/NetworkManager/conf.d/`; the Wi-Fi menu then never mentions sign-in.
 
 ### Panel and launcher
 

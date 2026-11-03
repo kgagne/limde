@@ -206,6 +206,10 @@ NM_DEVICE_STATE_FAILED = 120
 NM_DEVICE_REASON_NO_SECRETS = 7
 NM_DEVICE_REASON_SSID_NOT_FOUND = 53
 # Joining a network: NetworkManager's own attempt rarely runs past half a minute.
+# NetworkManager's Connectivity property. It reports PORTAL (a hotel or airport
+# sign-in page is in the way) only while its connectivity check is on, which the
+# network-manager-config-connectivity-ubuntu package turns on.
+NM_CONNECTIVITY_PORTAL = 2
 NM_CONNECT_SECONDS = 45
 NM_ACTION_TIMEOUT_MS = 10000
 # "Other network…": hidden networks, enterprise logins and anything else nmtui handles.
@@ -1843,13 +1847,19 @@ def network_tooltip(state):
     wifi = state["wifi"]
 
     if wifi:
-        return f"Wi-Fi: {wifi['ssid'] or 'hidden network'}, {wifi['strength']}% signal"
+        words = f"Wi-Fi: {wifi['ssid'] or 'hidden network'}, {wifi['strength']}% signal"
+    elif state["wifi_connected"]:
+        words = "Wi-Fi: connected"
+    elif state["wired"]:
+        words = "Wired: connected"
+    else:
+        words = None
 
-    if state["wifi_connected"]:
-        return "Wi-Fi: connected"
+    if words:
+        if state.get("portal"):
+            words += "\nSign-in needed: click to open the Wi-Fi menu"
 
-    if state["wired"]:
-        return "Wired: connected"
+        return words
 
     if not state["wifi_device"]:
         return "Wi-Fi: no Wi-Fi device"
@@ -1861,6 +1871,47 @@ def network_tooltip(state):
         return "Wi-Fi: off"
 
     return "Wi-Fi: not connected"
+
+
+def portal_url(check_uri):
+    """The page that leads to a captive portal's sign-in: NetworkManager's own
+    connectivity-check address (ConnectivityCheckUri), over plain http. The portal
+    intercepts that request and redirects it to its sign-in page; that is how
+    NetworkManager noticed it. No third-party site is involved, and the address is one
+    the computer already contacts. None when there is no usable address."""
+
+    scheme, separator, rest = (check_uri or "").partition("://")
+
+    if not separator or scheme.lower() not in ("http", "https") or not rest:
+        return None
+
+    # A portal cannot answer an https request without a certificate warning.
+    return f"http://{rest}"
+
+
+def portal_name(state):
+    """The connection a captive portal sits on, for the notification."""
+
+    wifi = state["wifi"]
+
+    if wifi and wifi["ssid"]:
+        return wifi["ssid"]
+
+    if state["wifi_connected"] or not state["wired"]:
+        return "The Wi-Fi network"
+
+    return "The wired network"
+
+
+def portal_notice(state):
+    """Summary and body of the notification sent once when a network asks to sign
+    in, from a NetworkMenu.read_state result with "portal" set."""
+
+    return (
+        "Sign-in needed",
+        f"{portal_name(state)} asks you to sign in before it connects to the "
+        "internet. Choose Sign in to the network in the Wi-Fi menu."
+    )
 
 
 def wifi_security(flags, wpa_flags, rsn_flags):
@@ -2335,6 +2386,8 @@ class NetworkMenu(Gtk.MenuButton):
         self.target = None
         self.busy = False
         self.updating_switch = False
+        # The network a captive-portal notification was last sent for.
+        self.portal_notified = None
 
         self.set_has_frame(False)
         self.add_css_class("panel-menu")
@@ -2382,6 +2435,18 @@ class NetworkMenu(Gtk.MenuButton):
         self.forget_button = self.action_button("Forget", self.on_forget)
         self.actions.append(self.disconnect_button)
         self.actions.append(self.forget_button)
+
+        # Shown while a captive portal (hotel or airport sign-in page) is in the way.
+        sign_in = clickable(Gtk.Button())
+        sign_in.set_has_frame(False)
+        sign_in.add_css_class("network-row")
+        sign_in.set_child(
+            panel_row(library, "key", "Sign in to the network",
+                      "Opens its sign-in page in the browser")
+        )
+        sign_in.connect("clicked", self.on_sign_in_clicked)
+        sign_in.set_visible(False)
+        self.sign_in = sign_in
 
         self.heading = Gtk.Label(label="Available networks")
         self.heading.set_xalign(0)
@@ -2457,6 +2522,7 @@ class NetworkMenu(Gtk.MenuButton):
         content.add_css_class("notification-popover")
         content.append(header)
         content.append(self.current)
+        content.append(self.sign_in)
         content.append(self.actions)
         content.append(self.heading)
         content.append(self.none)
@@ -2610,6 +2676,9 @@ class NetworkMenu(Gtk.MenuButton):
             "wifi_connected": False,
             "wired": None,
             "nearby": [],
+            # The sign-in page to open while a captive portal is in the way.
+            "portal": portal_url(manager.get("ConnectivityCheckUri", ""))
+            if manager.get("Connectivity") == NM_CONNECTIVITY_PORTAL else None,
         }
 
         wireless_paths = []
@@ -2735,8 +2804,30 @@ class NetworkMenu(Gtk.MenuButton):
         else:
             self.indicator.set_text("WIFI OFF", tooltip=words)
 
+        self.notice_portal(state)
+
         if listing:
             self.rebuild(state)
+
+    def notice_portal(self, state):
+        """Notify once when a network asks to sign in; again only after it has
+        stopped asking, or for another network."""
+
+        if not state["portal"]:
+            self.portal_notified = None
+            return
+
+        name = portal_name(state)
+
+        if name == self.portal_notified:
+            return
+
+        self.portal_notified = name
+        summary, body = portal_notice(state)
+        wired = state["wired"] and not state["wifi_connected"]
+        # Mako binds the default action (opening the page) to a middle click.
+        post_notification(summary, body, "network-wired" if wired else "network-wireless",
+                          on_click=self.open_portal)
 
     def rebuild(self, state):
         clear_box(self.current)
@@ -2749,7 +2840,8 @@ class NetworkMenu(Gtk.MenuButton):
         wifi = state["wifi"]
 
         if wifi:
-            detail = ["Connected", f"{wifi['strength']}%"]
+            detail = ["Sign-in needed" if state["portal"] else "Connected",
+                      f"{wifi['strength']}%"]
             band = describe_frequency(wifi["frequency"])
 
             if band:
@@ -2770,7 +2862,8 @@ class NetworkMenu(Gtk.MenuButton):
 
         elif state["wifi_connected"]:
             self.current.append(
-                panel_row(self.library, "wifi", "Wi-Fi", "Connected")
+                panel_row(self.library, "wifi", "Wi-Fi",
+                          "Sign-in needed" if state["portal"] else "Connected")
             )
 
         elif not state["wifi_device"]:
@@ -2794,7 +2887,8 @@ class NetworkMenu(Gtk.MenuButton):
             )
 
         if state["wired"]:
-            detail = "Connected"
+            portal_here = state["portal"] and not state["wifi_connected"]
+            detail = "Sign-in needed" if portal_here else "Connected"
 
             if state["wired"]["address"]:
                 detail += f" · {state['wired']['address']}"
@@ -2803,6 +2897,7 @@ class NetworkMenu(Gtk.MenuButton):
                 panel_row(self.library, "network-wired", "Wired", detail)
             )
 
+        self.sign_in.set_visible(bool(state["portal"]))
         self.actions.set_visible(state["wifi_connected"])
         self.forget_button.set_visible(bool(wifi and wifi["ssid"] in self.saved))
         self.disconnect_button.set_sensitive(not self.busy)
@@ -3030,6 +3125,49 @@ class NetworkMenu(Gtk.MenuButton):
         except GLib.Error as error:
             print(f"tinybar: could not open nmtui: {error}", flush=True)
 
+    # ---------- captive portal ----------
+
+    def on_sign_in_clicked(self, _button):
+        self.popdown()
+        self.open_portal()
+
+    def open_portal(self):
+        """Open the sign-in page (portal_url) in the default browser."""
+
+        url = self.state and self.state["portal"]
+
+        if not url:
+            return
+
+        # Without Tinybar's own preload and GTK settings: Firefox crashes at start
+        # with gtk4-layer-shell preloaded.
+        context = Gio.AppLaunchContext()
+
+        for name in ("LD_PRELOAD", "GSK_RENDERER", "GTK_A11Y"):
+            context.unsetenv(name)
+
+        try:
+            Gio.AppInfo.launch_default_for_uri(url, context)
+        except GLib.Error as error:
+            print(f"tinybar: could not open the sign-in page: {error.message}", flush=True)
+
+    def check_connectivity(self):
+        """Ask NetworkManager to check again now, so a finished sign-in shows without
+        waiting for its next scheduled check. Refused outside the session; it then
+        checks on its own schedule."""
+
+        self.bus.call(
+            NM_NAME, NM_PATH, NM_NAME, "CheckConnectivity", None,
+            GLib.VariantType.new("(u)"), Gio.DBusCallFlags.NONE, NM_ACTION_TIMEOUT_MS,
+            None, self.on_connectivity_checked
+        )
+
+    def on_connectivity_checked(self, bus, result):
+        try:
+            bus.call_finish(result)
+        except GLib.Error:
+            pass  # A change arrives as PropertiesChanged anyway.
+
     # ---------- popover ----------
 
     def on_popover_shown(self, _popover):
@@ -3044,6 +3182,9 @@ class NetworkMenu(Gtk.MenuButton):
 
         self.refresh()
         self.request_scan()
+
+        if self.state and self.state["portal"]:
+            self.check_connectivity()
 
     def on_popover_hidden(self, _popover):
         Gtk4LayerShell.set_keyboard_mode(
@@ -6212,62 +6353,109 @@ class TinyBar(Gtk.Application):
         return True
 
     def send_battery_warning(self, percent, threshold, runtime_text):
-        """Post a low-battery notification through the session's notification
-        service (Mako). Asynchronous, so a missing or slow service never stalls
-        the panel; a failure is only logged. Each warning replaces the previous
-        one, so at most one stays on screen (Mako keeps urgent ones until
-        dismissed); one already dismissed is simply posted anew."""
+        """Post a low-battery notification (post_notification). Each warning
+        replaces the previous one, so at most one stays on screen (Mako keeps
+        urgent ones until dismissed); one already dismissed is simply posted anew."""
 
         urgent = threshold == BATTERY_CRITICAL_PERCENT
         summary, body = battery_warning_text(percent, threshold, runtime_text)
 
-        def finished(bus, result):
-            try:
-                (self.battery_notification,) = bus.call_finish(result).unpack()
-            except GLib.Error as error:
-                print(
-                    f"tinybar: battery warning not shown: {error.message}",
-                    flush=True
-                )
+        def posted(notification_id):
+            self.battery_notification = notification_id
 
+        post_notification(
+            summary,
+            body,
+            "battery-caution" if urgent else "battery-low",
+            urgent=urgent,
+            replaces=self.battery_notification,
+            on_posted=posted
+        )
+
+
+def post_notification(summary, body, icon, urgent=False, replaces=0, on_posted=None,
+                      on_click=None):
+    """Post a notification through the session's notification service (Mako).
+    Asynchronous, so a missing or slow service never stalls the panel; a failure is
+    only logged. on_posted(id) gets its id, for replacing it later. With on_click,
+    clicking the notification calls it (the "default" action)."""
+
+    try:
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    except GLib.Error as error:
+        print(f"tinybar: notification not shown: {error.message}", flush=True)
+        return
+
+    def finished(bus, result):
         try:
-            bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+            (notification_id,) = bus.call_finish(result).unpack()
         except GLib.Error as error:
-            print(
-                f"tinybar: battery warning not shown: {error.message}",
-                flush=True
-            )
+            print(f"tinybar: notification not shown: {error.message}", flush=True)
             return
 
-        bus.call(
-            MAKO_NAME,
-            NOTIFICATIONS_PATH,
-            NOTIFICATIONS_INTERFACE,
-            "Notify",
-            GLib.Variant(
-                "(susssasa{sv}i)",
-                (
-                    "Tinybar",
-                    self.battery_notification,
-                    "battery-caution" if urgent else "battery-low",
-                    summary,
-                    body,
-                    [],
-                    {
-                        "urgency": GLib.Variant(
-                            "y",
-                            NOTIFY_URGENCY_CRITICAL if urgent else NOTIFY_URGENCY_NORMAL
-                        )
-                    },
-                    -1
-                )
-            ),
-            GLib.VariantType.new("(u)"),
-            Gio.DBusCallFlags.NONE,
-            -1,
-            None,
-            finished
-        )
+        if on_posted:
+            on_posted(notification_id)
+
+        if on_click:
+            follow_notification_click(bus, notification_id, on_click)
+
+    bus.call(
+        MAKO_NAME,
+        NOTIFICATIONS_PATH,
+        NOTIFICATIONS_INTERFACE,
+        "Notify",
+        GLib.Variant(
+            "(susssasa{sv}i)",
+            (
+                "Tinybar",
+                replaces,
+                icon,
+                summary,
+                body,
+                ["default", "Open"] if on_click else [],
+                {
+                    "urgency": GLib.Variant(
+                        "y",
+                        NOTIFY_URGENCY_CRITICAL if urgent else NOTIFY_URGENCY_NORMAL
+                    )
+                },
+                -1
+            )
+        ),
+        GLib.VariantType.new("(u)"),
+        Gio.DBusCallFlags.NONE,
+        -1,
+        None,
+        finished
+    )
+
+
+def follow_notification_click(bus, notification_id, on_click):
+    """Call on_click when notification_id's default action is invoked; stop
+    listening once it closes."""
+
+    subscriptions = []
+
+    def stop():
+        for subscription in subscriptions:
+            bus.signal_unsubscribe(subscription)
+        subscriptions.clear()
+
+    def on_action(_bus, _sender, _path, _interface, _signal, parameters):
+        invoked_id, action = parameters.unpack()
+        if invoked_id == notification_id and action == "default":
+            stop()
+            on_click()
+
+    def on_closed(_bus, _sender, _path, _interface, _signal, parameters):
+        if parameters.unpack()[0] == notification_id:
+            stop()
+
+    for signal, handler in (("ActionInvoked", on_action), ("NotificationClosed", on_closed)):
+        subscriptions.append(bus.signal_subscribe(
+            None, NOTIFICATIONS_INTERFACE, signal, NOTIFICATIONS_PATH, None,
+            Gio.DBusSignalFlags.NONE, handler
+        ))
 
 
 # Guarded so the tests can import the pure helpers without starting a panel.
