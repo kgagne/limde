@@ -40,7 +40,7 @@ Test: `python3 -m unittest discover -s components/tinybar/tests`. Installed by
 Test: `scripts/check`; `./install --plan` shows the plan without changing anything.
 - **steps, order** — `install` sources each `lib/install/*.sh` (NN-name.sh) and calls the `step_*` functions in the list at its end; shared helpers in `lib/install/common.sh::changed`. Trap: order is that call list, not the file numbers. A second run must print "No changes".
 - **packages** — `packages/runtime.list`, `packages/build.list`, optional groups in `packages/optional`: `lib/install/30-packages.sh::step_packages`, `lib/install/20-plan.sh::step_plan`. Trap: apt runs without recommends, so list anything only recommended.
-- **labwc build** — commits pinned in `pins/labwc::LABWC_COMMIT`; built by `lib/install/60-labwc.sh::step_labwc`. Trap: rebuilds only when the stamp differs; a build must pass a headless `labwc -S true`.
+- **labwc build** — release tag and commit pinned in `pins/labwc::LABWC_TAG`, `pins/labwc::LABWC_COMMIT`; built by `lib/install/60-labwc.sh::step_labwc`. Trap: rebuilds only when the stamp differs; a build must pass a headless `labwc -S true`.
 - **other pins** — Walker/Elephant `pins/launcher::LAUNCHER_ASSETS`, PCManFM `pins/pcmanfm::PCMANFM_COMMIT`, `pins/firefox`. Trap: bump the Walker version together with its asset name, URL and sha256.
 - **launcher config** — `config/home/.config/walker`, `config/home/.config/elephant`, started by `config/autostart.d/30-elephant.sh` and `config/autostart.d/50-launcher.sh`.
 - **network** — switches netplan to NetworkManager and rolls back if it can't connect in 30 s: `lib/install/40-network.sh::step_network`, `lib/install/40-network.sh::nm_connected`.

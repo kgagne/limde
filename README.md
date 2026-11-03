@@ -53,9 +53,9 @@ Two goals shaped limDE from the start, and they come before everything else:
   suspends.
 - **Trackpad motion and scrolling that feel like a MacBook.** Slow, precise pointer
   movement that speeds up smoothly, and two-finger scrolling that follows your fingers.
-  That needs labwc's custom acceleration and scroll curves, which is why labwc is built
-  from source: the newest pointer-acceleration and scrolling work is often not in a
-  release or in Ubuntu's package yet. limDE ships tuned curves, turned on for touchpads.
+  That needs labwc's custom acceleration and scroll curves (labwc 0.20.3 and later),
+  which is why labwc is built from source: Ubuntu 26.04's labwc package is older.
+  limDE ships tuned curves, turned on for touchpads.
 
 Memory use, measured on the Dell XPS 15 9520 described under
 [Known gaps](#known-gaps) with only the agent window open (proportional set size, so
@@ -78,7 +78,7 @@ And three habits that follow from those goals:
   reason for it, before installing anything. Optional pieces are optional, and you choose
   them.
 - **Built from source only where it matters.** labwc is built from a pinned upstream
-  commit, for the curves above. Everything else comes from Ubuntu or from pinned upstream
+  release, for the curves above. Everything else comes from Ubuntu or from pinned upstream
   releases.
 - **Yours to change.** Shipped defaults sit apart from your own changes, so updates
   don't overwrite them.
