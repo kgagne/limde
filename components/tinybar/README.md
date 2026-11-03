@@ -66,8 +66,9 @@ lists windows through the wlr foreign-toplevel protocol.
   until dismissed. Each comes once per discharge, and again only after the battery has
   charged more than 3 points above it, so a charger that keeps dropping out cannot repeat it; a
   new warning replaces the one on screen.
-- Power menu: the power icon at the right end offers Lock, Suspend, Log out, Restart
-  and Power off. Log out, Restart and Power off turn red and ask for a second click
+- System menu: the cog at the right end has Appearance (light or dark) and Power: Lock
+  and Restart, with Suspend, Log out and Power off under More. Log out, Restart and
+  Power off turn red and ask for a second click
   within 4 seconds (a double-click does not count as both); Suspend locks the screen
   first (swayidle's `before-sleep`), and Log out ends labwc (`labwc --exit`), back to
   the tty1 login.

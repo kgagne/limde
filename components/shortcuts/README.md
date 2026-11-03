@@ -18,14 +18,12 @@ closes the window; another native shortcut rule can be added when needed.
 
 ## Installed files
 
-- `~/.config/labwc/rc.xml`: two global keyboard bindings.
-- `~/.local/bin/app-shortcut`: one-shot Wayland helper.
-- `~/.local/share/mac-style-shortcuts/`: helper source, protocol, build script and this guide.
-- `~/.local/state/mac-style-shortcuts/installation.json`: backup location and installation metadata.
+- `/usr/local/bin/app-shortcut`: one-shot Wayland helper, built and installed by
+  `./install` (`lib/install/82-helpers.sh`).
+- `/etc/xdg/labwc/rc.xml`: the two key bindings, among limDE's other defaults.
 
-The backup contains the complete pre-change `rc.xml`. To undo only this change
-without overwriting subsequent desktop edits, remove the W-w and W-q keybinds
-whose commands refer to `app-shortcut`, then reload labwc.
+To turn the keys off, bind W-w and W-q to something else in your own
+`~/.config/labwc/rc.xml`, then reload labwc.
 
 ## Diagnostics and maintenance
 
@@ -40,13 +38,13 @@ never used to close unrelated apps. Group closing excludes child dialogs so
 existing confirmation dialogs are not automatically dismissed.
 
 Run `sh build.sh` to rebuild (requires gcc, wayland-scanner and wayland-client
-development files); copy `build/app-shortcut` to `~/.local/bin/app-shortcut`.
+development files); `./install` does this and copies `build/app-shortcut` to `/usr/local/bin`.
 The runtime needs the installed `wtype` command and labwc's foreign-toplevel
 protocol. No background daemon or startup program is added.
 
 ## Validation
 
-The workspace's `tests/check_shortcuts.py` runs a separate headless compositor
+`components/shortcuts/tests/check_shortcuts.py` runs a separate headless compositor
 using a temporary Wayland socket. Seven integration checks passed:
 
 1. No focused app produces no action.

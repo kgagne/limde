@@ -102,8 +102,8 @@ network connection. Choose no extra snaps or server roles in Ubuntu's installer.
    ```
 
 3. Install. The installer shows each package and its reason, asks about the optional
-   parts, then installs. labwc, PCManFM and the launcher are built from source, which takes
-   a while (about 20–40 minutes on a slow disk).
+   parts, then installs. labwc and PCManFM are built from source and the launcher is
+   downloaded as a release, which takes a while (about 20–40 minutes on a slow disk).
 
    ```
    ./install
@@ -111,8 +111,8 @@ network connection. Choose no extra snaps or server roles in Ubuntu's installer.
 
 4. Log out and back in on tty1. labwc starts by itself; there is no display manager.
 
-Wi-Fi: if Ubuntu's installer didn't join a network, click the Wi-Fi icon in the panel
-and pick one. NetworkManager remembers it after that.
+The installer needs a working network connection. Once the desktop is running, join
+Wi-Fi from the Wi-Fi icon in the panel; NetworkManager remembers it after that.
 
 ### Optional parts
 
@@ -132,6 +132,17 @@ when it finds a Bluetooth adapter. For unattended installs, name the groups your
 
 If you install from a VM onto a USB stick or another disk for a laptop, add
 `--with=laptop`: the VM has no backlight, so it won't be suggested.
+
+### Documentation
+
+- [Installing](docs/INSTALL.md): every step, the questions, the network switch, and
+  what to do when a step fails.
+- [Trying it in a VM](docs/VM-TRIAL.md): a trial run before you install on hardware.
+- [Dependencies](docs/DEPENDENCIES.md): every package and pinned download, and why.
+- [Customizing](docs/CUSTOMIZE.md): where defaults and your own files live, and what
+  each setting does.
+- [Updating](docs/UPDATE.md): `limde-update`, releases, and going back.
+- [Recovery](docs/RECOVERY.md): when the desktop does not start, or an update goes wrong.
 
 ## Using it
 
@@ -204,7 +215,9 @@ If you'd rather use a desktop app anyway, turn agent-web off as
 
 ## Customizing
 
-Your own files override limDE's, and the installer never overwrites them:
+Your own files override limDE's, and the installer never overwrites them. The exception
+is the theme files it generates from your appearance settings, which it replaces and backs
+up (listed in [docs/CUSTOMIZE.md](docs/CUSTOMIZE.md)):
 
 - **labwc:** put only the settings you change in `~/.config/labwc/rc.xml`. labwc merges it
   over limDE's defaults in `/etc/xdg/labwc/`.
