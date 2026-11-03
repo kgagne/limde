@@ -226,6 +226,12 @@ popover > contents {
     color: ${colors_muted};
 }
 
+/* Battery popover's state list: rows laid out like the system menu's, with no
+   background, since they only show. */
+.panel-row.battery-fact {
+    background: transparent;
+}
+
 /* System menu: plain rows that highlight on hover. */
 .system-popover {
     padding: 8px;

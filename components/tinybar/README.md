@@ -82,10 +82,18 @@ lists windows through the wlr foreign-toplevel protocol.
   entry's `StartupWMClass` (FreeRDP's SDL client, for one).
 - Battery: the panel shows the time left; hover for the percentage and time left in
   words, the live draw, a 3-hour average, and CPU and memory use (sampled with the
-  battery every 5 seconds, not recorded). Click it for a graph of the draw over the
-  last 3 hours, 24 hours or 7 days (arrows or Left/Right cycle through them). The data
-  is the history Tinybar keeps in `~/.local/state/tinybar/history.jsonl`: 5-minute
-  summaries while on battery, kept for 7 days. Gaps are time on mains power.
+  battery every 5 seconds, not recorded). Click it for a list of the battery's state
+  (on battery, charging, plugged in), the draw on battery or the charge rate while
+  charging, the time left or to full, and the charge limit; under it a graph of the
+  draw over the last 3 hours, 24 hours or 7 days (arrows or Left/Right cycle through
+  them). The data is the history Tinybar keeps in `~/.local/state/tinybar/history.jsonl`:
+  5-minute summaries while on battery, kept for 7 days. Gaps are time on mains power.
+- Charge limit: when the battery driver has `charge_control_end_threshold` below 100,
+  the popover and the tooltip say what it does: "Held at 80%" while plugged in at the
+  limit, "Charging to 80%" (and the time to reach it) while charging, "Not charging
+  until below 50%" between the start and end thresholds, else "Charge limit 80%". It
+  is read only; set it in the firmware or with your laptop's tools.
+  `TINYBAR_BATTERY_DIR` points Tinybar at a stand-in battery folder, for tests and VMs.
 - Low battery: on battery, a notification at 10 % and an urgent one at 5 %, which stays
   until dismissed. Each comes once per discharge, and again only after the battery has
   charged more than 3 points above it, so a charger that keeps dropping out cannot repeat it; a

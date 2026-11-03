@@ -2,6 +2,7 @@
 from pathlib import Path
 import shutil
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -779,6 +780,70 @@ class TooltipTests(unittest.TestCase):
                          ["Battery 80%, plugged in, not charging"])
         self.assertEqual(tinybar.battery_lines(80, "Unknown"), ["Battery 80%"])
         self.assertEqual(tinybar.battery_lines(None, "Unknown"), ["Battery level unknown"])
+
+    def test_charge_limit_text(self):
+        text = tinybar.charge_limit_text
+        # Keith's laptop: plugged in, held at its 80 % limit (start 50).
+        self.assertEqual(text("Not charging", 80, 80, 50), "Held at 80%")
+        self.assertEqual(text("Not charging", 79, 80, 50), "Held at 80%")
+        self.assertEqual(text("Not charging", 78, 80), "Held at 80%")
+        self.assertEqual(text("Full", 80, 80), "Held at 80%")
+        self.assertEqual(text("Charging", 64, 80, 50), "Charging to 80%")
+        # Between the thresholds the firmware waits for the start one.
+        self.assertEqual(text("Not charging", 70, 80, 50), "Not charging until below 50%")
+        # Well below the limit with no start threshold (or under it): some other
+        # cause, so the limit is only stated.
+        self.assertEqual(text("Not charging", 60, 80), "Charge limit 80%")
+        self.assertEqual(text("Not charging", 40, 80, 50), "Charge limit 80%")
+        self.assertEqual(text("Not charging", None, 80), "Charge limit 80%")
+        self.assertEqual(text("Discharging", 64, 80, 50), "Charge limit 80%")
+        # No threshold file: nothing.
+        for status in ("Not charging", "Charging", "Discharging", "Full"):
+            self.assertIsNone(text(status, 80, None))
+
+    def test_read_charge_limit(self):
+        with tempfile.TemporaryDirectory() as folder:
+            battery = Path(folder)
+            with mock.patch.object(tinybar, "BATTERY", battery):
+                self.assertEqual(tinybar.read_charge_limit(), (None, None))
+                (battery / "charge_control_end_threshold").write_text("80\n")
+                self.assertEqual(tinybar.read_charge_limit(), (80, None))
+                (battery / "charge_control_start_threshold").write_text("50\n")
+                self.assertEqual(tinybar.read_charge_limit(), (80, 50))
+                # 100 % is no limit; a start at or over the end is ignored.
+                (battery / "charge_control_end_threshold").write_text("100\n")
+                self.assertEqual(tinybar.read_charge_limit(), (None, None))
+                (battery / "charge_control_end_threshold").write_text("50\n")
+                self.assertEqual(tinybar.read_charge_limit(), (50, None))
+
+    def test_battery_lines_with_charge_limit(self):
+        lines = tinybar.battery_lines
+        self.assertEqual(lines(80, "Not charging", end=80, start=50),
+                         ["Battery 80%, plugged in", "Held at 80%"])
+        self.assertEqual(lines(64, "Charging", "40m", end=80),
+                         ["Battery 64%, charging to 80% in 40m"])
+        self.assertEqual(lines(64, "Charging", end=80), ["Battery 64%, charging to 80%"])
+        self.assertEqual(lines(64, "Discharging", "2h 10m", 9.84, end=80),
+                         ["Battery 64%, 2h 10m left", "Drawing 9.8 W", "Charge limit 80%"])
+        self.assertEqual(lines(60, "Not charging", end=80),
+                         ["Battery 60%, plugged in, not charging", "Charge limit 80%"])
+
+    def test_battery_rows(self):
+        rows = tinybar.battery_rows
+        self.assertEqual(rows(80, "Not charging", end=80, start=50),
+                         [("plug", "Battery 80%, plugged in"), ("shield-check", "Held at 80%")])
+        self.assertEqual(rows(64, "Charging", "40m", 25.04, end=80),
+                         [("battery-bolt", "Battery 64%, charging to 80%"),
+                          ("bolt", "Charging at 25.0 W"), ("clock", "80% in 40m")])
+        self.assertEqual(rows(64, "Charging", "1h 05m"),
+                         [("battery-bolt", "Battery 64%, charging"), ("clock", "Full in 1h 05m")])
+        self.assertEqual(rows(64, "Discharging", "2h 10m", 9.84, end=80),
+                         [("battery-half", "Battery 64%, on battery"), ("bolt", "Drawing 9.8 W"),
+                          ("clock", "2h 10m left"), ("shield-check", "Charge limit 80%")])
+        self.assertEqual(rows(64, "Discharging"), [("battery-half", "Battery 64%, on battery")])
+        self.assertEqual(rows(100, "Full"), [("battery-full", "Battery 100%, charged")])
+        self.assertEqual(rows(None, "Unknown"),
+                         [("battery-exclamation", "Battery level unknown")])
 
     def test_battery_average(self):
         window = tinybar.HISTORY_WINDOW_SECONDS

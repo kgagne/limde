@@ -18,6 +18,13 @@ def brightness_glyph(percent):
     return 'brightness-low' if percent < 34 else 'brightness' if percent < 67 else 'sun-bright'
 
 
+def battery_glyph(percent):
+    """The battery outline for a charge level (percent, 0 to 100)."""
+    return ('battery-full' if percent >= 90 else 'battery-three-quarters' if percent >= 65
+            else 'battery-half' if percent >= 40 else 'battery-quarter' if percent >= 15
+            else 'battery-empty')
+
+
 def volume_glyph(percent, muted=False):
     if muted:
         return 'volume-xmark'
@@ -194,10 +201,7 @@ class IconLibrary:
             if '+' in text.split('|')[0]:
                 name = 'battery-bolt'
             elif match:
-                level = int(match.group(1))
-                name = ('battery-full' if level >= 90 else 'battery-three-quarters' if level >= 65
-                        else 'battery-half' if level >= 40 else 'battery-quarter' if level >= 15
-                        else 'battery-empty')
+                name = battery_glyph(int(match.group(1)))
             else:
                 name = 'battery-exclamation'
         return name

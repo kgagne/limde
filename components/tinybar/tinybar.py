@@ -16,6 +16,7 @@ import gi
 from tinybar_icons import (
     IconLibrary,
     StatusIndicator,
+    battery_glyph,
     brightness_glyph,
     desktop_entry,
     glyph_widget,
@@ -54,7 +55,9 @@ def first_device(pattern, fallback):
     return found[0] if found else Path("/sys/class") / fallback
 
 
-BATTERY = first_device("power_supply/BAT*", "power_supply/BAT0")
+# TINYBAR_BATTERY_DIR stands in another battery folder (a test's or VM's fake one).
+BATTERY = (Path(os.environ["TINYBAR_BATTERY_DIR"]) if os.environ.get("TINYBAR_BATTERY_DIR")
+           else first_device("power_supply/BAT*", "power_supply/BAT0"))
 # TINYBAR_BACKLIGHT_DIR stands in another backlight folder (a test's fake one); the
 # tinybar-brightness it runs reads the same variable.
 BACKLIGHT = (Path(os.environ["TINYBAR_BACKLIGHT_DIR"]) if os.environ.get("TINYBAR_BACKLIGHT_DIR")
@@ -289,6 +292,10 @@ BATTERY_CRITICAL_PERCENT = 5
 # points above it, so a charger that flaps between charging and not cannot repeat it.
 BATTERY_REARM_POINTS = 3
 
+# A battery held by its charge limit reads at, or a point or two under, the end
+# threshold (the firmware stops a little early, and capacity is rounded).
+CHARGE_LIMIT_NEAR_POINTS = 2
+
 # The battery popover's graph views, cycled with its arrows: name, span, bin
 # size, and hours between gridlines (24 puts them at local midnight).
 POWER_VIEWS = (
@@ -436,26 +443,130 @@ def format_coverage(seconds):
     return f"{m}m"
 
 
-def battery_lines(percent, status, runtime_text=None, watts=None, average=None):
-    """Hover-text lines for the battery: level and state, then the draw. percent is
-    None when unreadable; runtime_text is the time to empty (or to full while
-    charging); watts the smoothed draw while discharging; average the history's
-    (watts, seconds on battery) over the last HISTORY_WINDOW_SECONDS, or None. An
-    average over less than a minute is left out: it is only the current draw."""
+def read_charge_limit():
+    """The battery's charge limit as (end, start) percentages, each None when the
+    driver has no such file. An end of 100 (or an unreadable one) is no limit."""
+
+    end = read_battery_int("charge_control_end_threshold")
+    start = read_battery_int("charge_control_start_threshold")
+
+    if end is None or not 0 < end < 100:
+        return None, None
+
+    return end, start if start is not None and 0 <= start < end else None
+
+
+def charge_limit_text(status, percent, end, start=None):
+    """What the charge limit is doing, or None without one (end is None).
+
+    Charging: it will stop at the limit. Plugged in and not charging (or reported
+    full) at or near the end threshold: the limit holds the battery there. Between
+    the start and end thresholds the firmware waits to drop below the start before
+    it charges again. Otherwise "Not charging" has some other cause, so the limit is
+    only stated, never given as the reason."""
+
+    if end is None:
+        return None
+
+    if status == "Charging":
+        return f"Charging to {end}%"
+
+    if status in ("Not charging", "Full") and percent is not None:
+        if percent >= end - CHARGE_LIMIT_NEAR_POINTS:
+            return f"Held at {end}%"
+
+        if start is not None and start <= percent < end:
+            return f"Not charging until below {start}%"
+
+    return f"Charge limit {end}%"
+
+
+def battery_state(percent, status, end=None, start=None):
+    """The battery's state line and its charge-limit line (None when there is no
+    limit or the state line already says it): ("Battery 64%, charging to 80%",
+    None), ("Battery 80%, plugged in", "Held at 80%")."""
 
     level = "Battery level unknown" if percent is None else f"Battery {percent}%"
+    limit = charge_limit_text(status, percent, end, start)
+
+    if status == "Charging":
+        if end is not None:
+            return f"{level}, charging to {end}%", None
+        return f"{level}, charging", None
+
+    if status == "Discharging":
+        return f"{level}, on battery", limit
+
+    if limit is not None and not limit.startswith("Charge limit"):
+        # The limit explains why it is not charging.
+        return f"{level}, plugged in", limit
+
+    if status == "Full":
+        return f"{level}, charged", limit
+
+    if status == "Not charging":
+        return f"{level}, plugged in, not charging", limit
+
+    return level, limit
+
+
+def battery_rows(percent, status, runtime_text=None, watts=None, end=None, start=None):
+    """The battery popover's list, as (glyph, text) rows: the state, the draw on
+    battery or the charge rate while charging, the time left or to full (or to the
+    limit), then what the charge limit is doing. Rows without a reading are left
+    out."""
+
+    state, limit = battery_state(percent, status, end, start)
+
+    if status == "Charging":
+        glyph = "battery-bolt"
+    elif status == "Not charging":
+        glyph = "plug"
+    else:
+        glyph = battery_glyph(percent) if percent is not None else "battery-exclamation"
+
+    rows = [(glyph, state)]
+
+    if status == "Discharging":
+        if watts is not None:
+            rows.append(("bolt", f"Drawing {watts:.1f} W"))
+        if runtime_text:
+            rows.append(("clock", f"{runtime_text} left"))
+    elif status == "Charging":
+        if watts is not None:
+            rows.append(("bolt", f"Charging at {watts:.1f} W"))
+        if runtime_text:
+            target = f"{end}%" if end is not None else "Full"
+            rows.append(("clock", f"{target} in {runtime_text}"))
+
+    if limit is not None:
+        rows.append(("shield-check", limit))
+
+    return rows
+
+
+def battery_lines(percent, status, runtime_text=None, watts=None, average=None,
+                  end=None, start=None):
+    """Hover-text lines for the battery: level and state, then the draw. percent is
+    None when unreadable; runtime_text is the time to empty (or to full, or to the
+    charge limit, while charging); watts the smoothed draw while discharging; average
+    the history's (watts, seconds on battery) over the last HISTORY_WINDOW_SECONDS, or
+    None. An average over less than a minute is left out: it is only the current
+    draw. end and start are the charge limit's thresholds (read_charge_limit)."""
+
+    level = "Battery level unknown" if percent is None else f"Battery {percent}%"
+    state, limit = battery_state(percent, status, end, start)
 
     if status == "Discharging":
         lines = [f"{level}, {runtime_text} left" if runtime_text else f"{level}, discharging"]
         lines.append(f"Drawing {watts:.1f} W" if watts is not None else "Power draw unavailable")
-    elif status == "Charging":
-        lines = [f"{level}, charging" + (f", full in {runtime_text}" if runtime_text else "")]
-    elif status == "Full":
-        lines = [f"{level}, charged"]
-    elif status == "Not charging":
-        lines = [f"{level}, plugged in, not charging"]
+    elif status == "Charging" and runtime_text:
+        lines = [state + (f" in {runtime_text}" if end is not None else f", full in {runtime_text}")]
     else:
-        lines = [level]
+        lines = [state]
+
+    if limit is not None:
+        lines.append(limit)
 
     if average is not None and average[0] is not None and average[1] >= 60:
         watts_avg, covered = average
@@ -3674,9 +3785,11 @@ class PowerGraph(Gtk.Widget):
 
 
 class BatteryMenu(Gtk.MenuButton):
-    """Battery icon and time left. The popover graphs the draw over the last 3
-    hours, 24 hours or 7 days from Tinybar's history file; its arrows (or the
-    Left and Right keys) cycle through the three and wrap around."""
+    """Battery icon and time left. The popover lists the battery's state (the rows
+    battery_rows makes: state, draw or charge rate, time left, charge limit), then
+    graphs the draw over the last 3 hours, 24 hours or 7 days from Tinybar's history
+    file; its arrows (or the Left and Right keys) cycle through the three and wrap
+    around."""
 
     def __init__(self, library, history):
         super().__init__()
@@ -3684,6 +3797,7 @@ class BatteryMenu(Gtk.MenuButton):
         self.library = library
         self.history = history
         self.view = 0
+        self.status_rows = None
 
         self.set_has_frame(False)
         self.add_css_class("panel-menu")
@@ -3717,7 +3831,14 @@ class BatteryMenu(Gtk.MenuButton):
             spacing=6
         )
 
+        # Filled by show_status on every battery tick, open or not.
+        self.status = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=4
+        )
+
         content.add_css_class("notification-popover")
+        content.append(self.status)
         content.append(header)
         content.append(self.graph)
         content.append(self.summary)
@@ -3766,6 +3887,23 @@ class BatteryMenu(Gtk.MenuButton):
 
     def set_text(self, text, **kwargs):
         self.indicator.set_text(text, **kwargs)
+
+    def show_status(self, rows):
+        """Show battery_rows' (glyph, text) list above the graph; rebuilt only when it
+        changes."""
+
+        if rows == self.status_rows:
+            return
+
+        self.status_rows = rows
+
+        while child := self.status.get_first_child():
+            self.status.remove(child)
+
+        for glyph, text in rows:
+            row = panel_row(self.library, glyph, text)
+            row.add_css_class("battery-fact")
+            self.status.append(row)
 
     def refresh(self):
         name, span, bin_seconds, every_hours = POWER_VIEWS[self.view]
@@ -5879,6 +6017,13 @@ class TinyBar(Gtk.Application):
             "voltage_now"
         )
 
+        # Batteries that report energy instead of charge give power_now (µW).
+        power_now = read_battery_int(
+            "power_now"
+        )
+
+        limit_end, limit_start = read_charge_limit()
+
         if status != self.last_battery_status:
             self.current_samples.clear()
             self.last_battery_status = status
@@ -5928,16 +6073,21 @@ class TinyBar(Gtk.Application):
                 now
             )
 
-        if (
-            status == "Discharging"
-            and average_current
-            and voltage_now is not None
-        ):
-            smoothed_watts = (
-                average_current
-                * voltage_now
-                / 1_000_000_000_000
-            )
+        # The smoothed draw on battery, or the charge rate while charging.
+        rate_watts = None
+
+        if status in ("Discharging", "Charging"):
+            if average_current and voltage_now is not None:
+                rate_watts = (
+                    average_current
+                    * voltage_now
+                    / 1_000_000_000_000
+                )
+            elif power_now:
+                rate_watts = power_now / 1_000_000
+
+        if status == "Discharging":
+            smoothed_watts = rate_watts
 
         trailing_average = (
             self.history.trailing_average(
@@ -5963,8 +6113,15 @@ class TinyBar(Gtk.Application):
                 and charge_now is not None
                 and charge_full is not None
             ):
+                # To the charge limit when there is one, not to full.
+                target = (
+                    charge_full * limit_end / 100
+                    if limit_end is not None
+                    else charge_full
+                )
+
                 remaining = max(
-                    charge_full - charge_now,
+                    target - charge_now,
                     0
                 )
 
@@ -5983,7 +6140,20 @@ class TinyBar(Gtk.Application):
             status,
             runtime_text,
             smoothed_watts,
-            trailing_average
+            trailing_average,
+            limit_end,
+            limit_start
+        )
+
+        self.battery.show_status(
+            battery_rows(
+                percent,
+                status,
+                runtime_text,
+                rate_watts,
+                limit_end,
+                limit_start
+            )
         )
 
         # Low-battery notifications, each threshold once per discharge.
