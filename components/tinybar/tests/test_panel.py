@@ -152,6 +152,11 @@ class BatteryTests(unittest.TestCase):
         self.assertEqual(tinybar.usage_lines(12.0, None), ["CPU 12%"])
         self.assertEqual(tinybar.usage_lines(None, None), [])
 
+    def test_usage_rows_for_the_popover(self):
+        self.assertEqual(tinybar.usage_rows(7.4, (2.94, 14.79)),
+                         [("microchip", "CPU 7%"), ("memory", "Memory 2.9 of 14.8 GiB")])
+        self.assertEqual(tinybar.usage_rows(None, None), [])
+
 
 def warnings_over(readings, warned=None):
     """The thresholds announced over a run of (percent, status) battery readings."""
@@ -700,14 +705,13 @@ class CaptivePortalTests(unittest.TestCase):
         for unusable in ("", None, "check.example", "ftp://check.example/", "http://"):
             self.assertIsNone(tinybar.portal_url(unusable))
 
-    def test_tooltip_adds_a_line(self):
+    def test_tooltip_says_so(self):
         hotel = {**point("Hotel", 70), "address": None}
         self.assertEqual(tinybar.network_tooltip(network(hotel, portal=self.CHECK)),
-                         "Wi-Fi: Hotel, 70% signal\n"
-                         "Sign-in needed: click to open the Wi-Fi menu")
+                         "Wi-Fi: Hotel, 70% signal, sign-in needed")
         self.assertEqual(tinybar.network_tooltip(network(wired={"address": None},
                                                          portal=self.CHECK)),
-                         "Wired: connected\nSign-in needed: click to open the Wi-Fi menu")
+                         "Wired: connected, sign-in needed")
         # Not connected: nothing to sign in to.
         self.assertEqual(tinybar.network_tooltip(network(portal=self.CHECK)),
                          "Wi-Fi: not connected")
@@ -753,6 +757,95 @@ class BrightnessSliderTests(unittest.TestCase):
             self.assertEqual(tinybar.brightness_command(), "/usr/local/bin/tinybar-brightness")
 
 
+class FakeMenu:
+    """A panel menu button for PanelMenus: popup and popdown report back as GTK's
+    show and hide signals do."""
+
+    def __init__(self, menus):
+        self.menus = menus
+        self.showing = False
+
+    def popup(self):
+        self.showing = True
+        self.menus.shown(self)
+
+    def popdown(self):
+        if self.showing:
+            self.showing = False
+            self.menus.hidden(self)
+
+
+class PanelMenuTests(unittest.TestCase):
+    """The panel's popovers swap like a menu bar's (PanelMenus)."""
+
+    def setUp(self):
+        self.now = 100.0
+        self.menus = tinybar.PanelMenus(clock=lambda: self.now)
+        self.wifi, self.volume = FakeMenu(self.menus), FakeMenu(self.menus)
+
+    def click_closes(self, menu):
+        """GTK closing the popover on a press, then reporting the pointer back."""
+        menu.popdown()
+        self.now += 0.01
+        self.menus.pointed(menu)
+
+    def test_pointing_does_nothing_while_none_is_open(self):
+        self.menus.pointed(self.volume)
+        self.assertFalse(self.volume.showing)
+
+    def test_pointing_swaps_to_another_popover(self):
+        self.wifi.popup()
+        self.now += 2
+        self.menus.pointed(self.volume)
+        self.assertFalse(self.wifi.showing)
+        self.assertTrue(self.volume.showing)
+        self.assertIs(self.menus.open, self.volume)
+        # Pointing at the open one's own button changes nothing.
+        self.menus.pointed(self.volume)
+        self.assertTrue(self.volume.showing)
+
+    def test_click_right_after_a_swap_keeps_it_open(self):
+        self.wifi.popup()
+        self.menus.pointed(self.volume)
+        self.now += 0.5
+        self.click_closes(self.volume)
+        self.assertTrue(self.volume.showing)
+        # The next click closes it.
+        self.now += 0.3
+        self.click_closes(self.volume)
+        self.assertFalse(self.volume.showing)
+
+    def test_late_click_after_a_swap_closes(self):
+        self.wifi.popup()
+        self.menus.pointed(self.volume)
+        self.now += tinybar.HOVER_CLICK_SECONDS + 0.5
+        self.click_closes(self.volume)
+        self.assertFalse(self.volume.showing)
+
+    def test_clicked_open_popover_closes_on_click(self):
+        self.volume.popup()
+        self.now += 0.2
+        self.click_closes(self.volume)
+        self.assertFalse(self.volume.showing)
+
+    def test_escape_closes_for_good(self):
+        self.wifi.popup()
+        self.menus.pointed(self.volume)
+        self.now += 0.2
+        self.menus.escaping = True
+        self.click_closes(self.volume)
+        self.assertFalse(self.volume.showing)
+
+    def test_pointer_returning_later_does_not_reopen(self):
+        self.wifi.popup()
+        self.menus.pointed(self.volume)
+        self.now += 0.3
+        self.volume.popdown()
+        self.now += tinybar.REENTER_SECONDS + 0.1
+        self.menus.pointed(self.volume)
+        self.assertFalse(self.volume.showing)
+
+
 class CalendarTests(unittest.TestCase):
     def test_heading(self):
         import datetime
@@ -792,28 +885,26 @@ class TooltipTests(unittest.TestCase):
         self.assertEqual(tinybar.volume_tooltip((65, False)), "Volume 65%")
         self.assertEqual(tinybar.volume_tooltip((65, True)), "Volume: muted")
         self.assertEqual(tinybar.volume_tooltip(None), "Volume: unavailable")
-        self.assertEqual(tinybar.volume_tooltip((65, False), (80, False)),
-                         "Volume 65%\nMicrophone 80%")
+        # The microphone is named only while muted.
+        self.assertEqual(tinybar.volume_tooltip((65, False), (80, False)), "Volume 65%")
+        self.assertEqual(tinybar.volume_tooltip((65, False), (80, True)),
+                         "Volume 65%, microphone muted")
         self.assertEqual(tinybar.volume_tooltip((65, True), (80, True)),
-                         "Volume: muted\nMicrophone: muted")
-        self.assertEqual(tinybar.volume_tooltip(None, (0, False)),
-                         "Volume: unavailable\nMicrophone 0%")
+                         "Volume: muted, microphone muted")
+        self.assertEqual(tinybar.volume_tooltip(None, (0, False)), "Volume: unavailable")
         self.assertEqual(tinybar.brightness_tooltip(40), "Brightness 40%")
         self.assertEqual(tinybar.brightness_tooltip(None), "Brightness: unavailable")
 
     def test_battery_level_and_time(self):
-        self.assertEqual(tinybar.battery_lines(64, "Discharging", "2h 10m", 9.84),
-                         ["Battery 64%, 2h 10m left", "Drawing 9.8 W"])
-        self.assertEqual(tinybar.battery_lines(64, "Discharging"),
-                         ["Battery 64%, discharging", "Power draw unavailable"])
-        self.assertEqual(tinybar.battery_lines(64, "Charging", "1h 05m"),
-                         ["Battery 64%, charging, full in 1h 05m"])
-        self.assertEqual(tinybar.battery_lines(64, "Charging"), ["Battery 64%, charging"])
-        self.assertEqual(tinybar.battery_lines(100, "Full"), ["Battery 100%, charged"])
-        self.assertEqual(tinybar.battery_lines(80, "Not charging"),
-                         ["Battery 80%, plugged in, not charging"])
-        self.assertEqual(tinybar.battery_lines(80, "Unknown"), ["Battery 80%"])
-        self.assertEqual(tinybar.battery_lines(None, "Unknown"), ["Battery level unknown"])
+        tooltip = tinybar.battery_tooltip
+        self.assertEqual(tooltip(64, "Discharging", "2h 10m"), "Battery 64%, 2h 10m left")
+        self.assertEqual(tooltip(64, "Discharging"), "Battery 64%, discharging")
+        self.assertEqual(tooltip(64, "Charging", "1h 05m"), "Battery 64%, charging, full in 1h 05m")
+        self.assertEqual(tooltip(64, "Charging"), "Battery 64%, charging")
+        self.assertEqual(tooltip(100, "Full"), "Battery 100%, charged")
+        self.assertEqual(tooltip(80, "Not charging"), "Battery 80%, plugged in, not charging")
+        self.assertEqual(tooltip(80, "Unknown"), "Battery 80%")
+        self.assertEqual(tooltip(None, "Unknown"), "Battery level unknown")
 
     def test_charge_limit_text(self):
         text = tinybar.charge_limit_text
@@ -850,17 +941,16 @@ class TooltipTests(unittest.TestCase):
                 (battery / "charge_control_end_threshold").write_text("50\n")
                 self.assertEqual(tinybar.read_charge_limit(), (50, None))
 
-    def test_battery_lines_with_charge_limit(self):
-        lines = tinybar.battery_lines
-        self.assertEqual(lines(80, "Not charging", end=80, start=50),
-                         ["Battery 80%, plugged in", "Held at 80%"])
-        self.assertEqual(lines(64, "Charging", "40m", end=80),
-                         ["Battery 64%, charging to 80% in 40m"])
-        self.assertEqual(lines(64, "Charging", end=80), ["Battery 64%, charging to 80%"])
-        self.assertEqual(lines(64, "Discharging", "2h 10m", 9.84, end=80),
-                         ["Battery 64%, 2h 10m left", "Drawing 9.8 W", "Charge limit 80%"])
-        self.assertEqual(lines(60, "Not charging", end=80),
-                         ["Battery 60%, plugged in, not charging", "Charge limit 80%"])
+    def test_battery_tooltip_with_charge_limit(self):
+        # One line; what the limit is doing is in the popover (battery_rows).
+        tooltip = tinybar.battery_tooltip
+        self.assertEqual(tooltip(80, "Not charging", end=80, start=50), "Battery 80%, plugged in")
+        self.assertEqual(tooltip(64, "Charging", "40m", end=80),
+                         "Battery 64%, charging to 80% in 40m")
+        self.assertEqual(tooltip(64, "Charging", end=80), "Battery 64%, charging to 80%")
+        self.assertEqual(tooltip(64, "Discharging", "2h 10m", end=80), "Battery 64%, 2h 10m left")
+        self.assertEqual(tooltip(60, "Not charging", end=80),
+                         "Battery 60%, plugged in, not charging")
 
     def test_battery_rows(self):
         rows = tinybar.battery_rows
@@ -879,23 +969,14 @@ class TooltipTests(unittest.TestCase):
         self.assertEqual(rows(None, "Unknown"),
                          [("battery-exclamation", "Battery level unknown")])
 
-    def test_battery_average(self):
-        window = tinybar.HISTORY_WINDOW_SECONDS
-        self.assertEqual(tinybar.battery_lines(64, "Full", average=(9.84, window))[1:],
-                         ["3-hour average 9.8 W"])
-        self.assertEqual(tinybar.battery_lines(64, "Full", average=(9.84, 45 * 60))[1:],
-                         ["Average 9.8 W over 45m on battery"])
-        self.assertEqual(tinybar.battery_lines(64, "Full", average=(None, 0)), ["Battery 64%, charged"])
-        self.assertEqual(tinybar.battery_lines(64, "Full", average=(9.84, 59)), ["Battery 64%, charged"])
-
     def test_notifications(self):
         self.assertEqual(tinybar.notification_tooltip(0), "No notifications")
         self.assertEqual(tinybar.notification_tooltip(1), "1 notification")
         self.assertEqual(tinybar.notification_tooltip(3), "3 notifications")
         self.assertEqual(tinybar.notification_tooltip(0, quiet=True),
-                         "No notifications\nDo not disturb: on")
+                         "No notifications, do not disturb on")
         self.assertEqual(tinybar.notification_tooltip(2, quiet=True),
-                         "2 notifications\nDo not disturb: on")
+                         "2 notifications, do not disturb on")
 
     def test_do_not_disturb_modes(self):
         mode = tinybar.DO_NOT_DISTURB_MODE

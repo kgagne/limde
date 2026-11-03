@@ -90,14 +90,20 @@ TEMP_SAMPLE_SECONDS = 30
 NOTIFICATION_SAMPLE_SECONDS = 2
 # Log out, restart and power off ask for a second click; the question clears after this.
 CONFIRM_SECONDS = 4
+# While a panel popover is open, pointing at another panel button opens its popover
+# (PanelMenus). A click on that button this soon after is the click the user was
+# already making, so it keeps the popover open instead of closing it.
+HOVER_CLICK_SECONDS = 1.0
+# GTK reports the pointer back over a button this soon after a click closed its popover.
+REENTER_SECONDS = 0.25
 # GTK's own default double-click time, for when its setting cannot be read. A second
 # click sooner than the double-click time is the rest of a double-click, not an answer.
 DOUBLE_CLICK_MS = 400
 
 # CPU and RAM readouts are off in the panel until they show something more
 # useful. The sampling code stays; with this off it is never scheduled, so
-# those two metrics also stop being added to the history file. The battery's
-# hover text shows both anyway (see update_battery).
+# those two metrics also stop being added to the history file. The battery
+# popover shows both anyway (see update_battery).
 SHOW_USAGE = False
 TINYBAR_APP_IDS = {
     "limde.Tinybar",
@@ -145,7 +151,6 @@ TAILSCALE_UP_SECONDS = 15
 BLUETOOTH = load_settings().get("bluetooth", "auto")
 
 HISTORY_BUCKET_SECONDS = 300
-HISTORY_WINDOW_SECONDS = 3 * 60 * 60
 HISTORY_RETENTION_SECONDS = 7 * 24 * 60 * 60
 HISTORY_PRUNE_SECONDS = 24 * 60 * 60
 
@@ -549,39 +554,22 @@ def battery_rows(percent, status, runtime_text=None, watts=None, end=None, start
     return rows
 
 
-def battery_lines(percent, status, runtime_text=None, watts=None, average=None,
-                  end=None, start=None):
-    """Hover-text lines for the battery: level and state, then the draw. percent is
-    None when unreadable; runtime_text is the time to empty (or to full, or to the
-    charge limit, while charging); watts the smoothed draw while discharging; average
-    the history's (watts, seconds on battery) over the last HISTORY_WINDOW_SECONDS, or
-    None. An average over less than a minute is left out: it is only the current
-    draw. end and start are the charge limit's thresholds (read_charge_limit)."""
+def battery_tooltip(percent, status, runtime_text=None, end=None, start=None):
+    """Hover words for the battery, one line: level and state, with the time left on
+    battery (or to full, or to the charge limit, while charging). percent is None
+    when unreadable; end and start are the charge limit's thresholds
+    (read_charge_limit). The popover has the rest."""
 
     level = "Battery level unknown" if percent is None else f"Battery {percent}%"
-    state, limit = battery_state(percent, status, end, start)
+    state, _limit = battery_state(percent, status, end, start)
 
     if status == "Discharging":
-        lines = [f"{level}, {runtime_text} left" if runtime_text else f"{level}, discharging"]
-        lines.append(f"Drawing {watts:.1f} W" if watts is not None else "Power draw unavailable")
-    elif status == "Charging" and runtime_text:
-        lines = [state + (f" in {runtime_text}" if end is not None else f", full in {runtime_text}")]
-    else:
-        lines = [state]
+        return f"{level}, {runtime_text} left" if runtime_text else f"{level}, discharging"
 
-    if limit is not None:
-        lines.append(limit)
+    if status == "Charging" and runtime_text:
+        return state + (f" in {runtime_text}" if end is not None else f", full in {runtime_text}")
 
-    if average is not None and average[0] is not None and average[1] >= 60:
-        watts_avg, covered = average
-
-        if covered >= HISTORY_WINDOW_SECONDS - BATTERY_SAMPLE_SECONDS:
-            hours = HISTORY_WINDOW_SECONDS // 3600
-            lines.append(f"{hours}-hour average {watts_avg:.1f} W")
-        else:
-            lines.append(f"Average {watts_avg:.1f} W over {format_coverage(covered)} on battery")
-
-    return lines
+    return state
 
 
 def get_cpu_temperature():
@@ -697,7 +685,7 @@ def cpu_percent(previous, current):
 
 
 def usage_lines(cpu, memory):
-    """Hover-text lines for CPU and RAM; an unavailable reading is left out."""
+    """Words for CPU and RAM; an unavailable reading is left out."""
     lines = []
 
     if cpu is not None:
@@ -708,6 +696,20 @@ def usage_lines(cpu, memory):
         lines.append(f"Memory {used:.1f} of {total:.1f} GiB")
 
     return lines
+
+
+def usage_rows(cpu, memory):
+    """The battery popover's CPU and RAM rows, as (glyph, text) like battery_rows."""
+    rows = []
+
+    if cpu is not None:
+        rows.append(("microchip", f"CPU {cpu:.0f}%"))
+
+    if memory:
+        used, total = memory
+        rows.append(("memory", f"Memory {used:.1f} of {total:.1f} GiB"))
+
+    return rows
 
 
 class HistoryStore:
@@ -972,123 +974,6 @@ class HistoryStore:
             except OSError:
                 pass
 
-    def trailing_average(
-        self,
-        metric,
-        now=None,
-        window=HISTORY_WINDOW_SECONDS
-    ):
-        if now is None:
-            now = time.time()
-
-        cutoff = now - window
-
-        weighted_sum = 0.0
-        coverage_total = 0.0
-
-        for record in self.records:
-            start = record.get(
-                "start_epoch"
-            )
-
-            if start is None:
-                continue
-
-            end = (
-                start
-                + record.get(
-                    "duration_seconds",
-                    HISTORY_BUCKET_SECONDS
-                )
-            )
-
-            overlap = max(
-                0,
-                min(now, end)
-                - max(cutoff, start)
-            )
-
-            if overlap <= 0:
-                continue
-
-            data = record.get(
-                "metrics",
-                {}
-            ).get(metric)
-
-            if not data:
-                continue
-
-            avg = data.get("avg")
-            coverage = data.get(
-                "coverage_seconds",
-                0
-            )
-
-            if avg is None or coverage <= 0:
-                continue
-
-            effective_coverage = min(
-                float(coverage),
-                float(overlap)
-            )
-
-            weighted_sum += (
-                float(avg)
-                * effective_coverage
-            )
-
-            coverage_total += (
-                effective_coverage
-            )
-
-        samples = self.current.get(
-            metric,
-            []
-        )
-
-        if (
-            samples
-            and self.current_start is not None
-        ):
-            interval = METRIC_INTERVALS[metric]
-
-            overlap = max(
-                0,
-                now
-                - max(
-                    cutoff,
-                    self.current_start
-                )
-            )
-
-            coverage = min(
-                len(samples) * interval,
-                overlap,
-                HISTORY_BUCKET_SECONDS
-            )
-
-            if coverage > 0:
-                avg = (
-                    sum(samples)
-                    / len(samples)
-                )
-
-                weighted_sum += (
-                    avg
-                    * coverage
-                )
-
-                coverage_total += coverage
-
-        if coverage_total <= 0:
-            return None, 0
-
-        return (
-            weighted_sum / coverage_total,
-            coverage_total
-        )
-
 
 def power_series(records, now, span, bin_seconds, current=None):
     """Battery draw in clock-aligned bins covering the last `span` seconds.
@@ -1220,13 +1105,13 @@ def shorten(text, limit):
 
 
 def notification_tooltip(count, quiet=False):
-    """Hover text for the bell; a second line while do not disturb is on."""
+    """Hover text for the bell, saying so while do not disturb is on."""
     if not count:
         text = "No notifications"
     else:
         text = "1 notification" if count == 1 else f"{count} notifications"
 
-    return text + "\nDo not disturb: on" if quiet else text
+    return text + ", do not disturb on" if quiet else text
 
 
 def with_mode(modes, mode, enabled):
@@ -1295,6 +1180,86 @@ def open_below_panel(button):
 
     clickable(button.get_first_child())
     place_below_panel(button.get_popover())
+    PANEL_MENUS.add(button)
+
+
+def reopens_after_click(button, now, closed, swapped):
+    """True when the pointer coming back over button (at monotonic now) means a click
+    just closed the popover that pointing at the button had opened: the click the user
+    was making anyway. closed and swapped are PanelMenus' (button, time) records."""
+
+    return (
+        closed is not None
+        and swapped is not None
+        and closed[0] is button
+        and swapped[0] is button
+        and now - closed[1] <= REENTER_SECONDS
+        and closed[1] - swapped[1] <= HOVER_CLICK_SECONDS
+    )
+
+
+class PanelMenus:
+    """The panel's popover buttons, working like a menu bar.
+
+    GTK closes an open popover on any press outside it and drops that press, so a
+    click on another panel button would only close the first popover. Instead, while
+    one popover is open, pointing at another panel button swaps to its popover at
+    once. The click that usually follows would close the new popover; nothing sees
+    that press, but GTK reports the pointer leaving the button while its popover is
+    open and coming back as the popover closes, so that return reopens it
+    (reopens_after_click). Escape closes for good.
+    """
+
+    def __init__(self, clock=time.monotonic):
+        self.clock = clock
+        self.open = None      # the button whose popover is showing
+        self.swapped = None   # (button, time) of the last swap by pointing
+        self.closed = None    # (button, time) of the last close, not by Escape
+        self.escaping = False
+
+    def add(self, button):
+        popover = button.get_popover()
+        popover.connect("show", lambda _popover: self.shown(button))
+        popover.connect("hide", lambda _popover: self.hidden(button))
+
+        # Only a popover with the keyboard (the Wi-Fi one) sees Escape.
+        keys = Gtk.EventControllerKey()
+        keys.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        keys.connect("key-pressed", self.on_key)
+        popover.add_controller(keys)
+
+        motion = Gtk.EventControllerMotion()
+        motion.connect("enter", lambda *_args: self.pointed(button))
+        button.add_controller(motion)
+
+    def on_key(self, _controller, keyval, _keycode, _state):
+        self.escaping = keyval == Gdk.KEY_Escape
+        return False
+
+    def shown(self, button):
+        self.open = button
+
+    def hidden(self, button):
+        if self.open is button:
+            self.open = None
+
+        self.closed = None if self.escaping else (button, self.clock())
+        self.escaping = False
+
+    def pointed(self, button):
+        now = self.clock()
+        current = self.open
+
+        if current is not None and current is not button:
+            self.swapped = (button, now)
+            current.popdown()
+            button.popup()
+        elif current is None and reopens_after_click(button, now, self.closed, self.swapped):
+            self.swapped = None  # the next click closes it
+            button.popup()
+
+
+PANEL_MENUS = PanelMenus()
 
 
 def place_below_panel(popover):
@@ -1857,7 +1822,7 @@ def network_tooltip(state):
 
     if words:
         if state.get("portal"):
-            words += "\nSign-in needed: click to open the Wi-Fi menu"
+            words += ", sign-in needed"
 
         return words
 
@@ -4380,19 +4345,18 @@ def parse_volume(output):
 
 
 def volume_tooltip(level, microphone=None):
-    """Hover text for the speaker, from parse_volume's (percent, muted) or None; the
-    default microphone's level, the same way, on a second line when there is one."""
+    """Hover text for the speaker, from parse_volume's (percent, muted) or None. The
+    default microphone, read the same way, is named only while it is muted."""
     if level is None:
-        lines = ["Volume: unavailable"]
+        text = "Volume: unavailable"
     else:
         percent, muted = level
-        lines = ["Volume: muted" if muted else f"Volume {percent}%"]
+        text = "Volume: muted" if muted else f"Volume {percent}%"
 
-    if microphone is not None:
-        percent, muted = microphone
-        lines.append("Microphone: muted" if muted else f"Microphone {percent}%")
+    if microphone is not None and microphone[1]:
+        text += ", microphone muted"
 
-    return "\n".join(lines)
+    return text
 
 
 def brightness_percent(current, maximum):
@@ -6186,7 +6150,7 @@ class TinyBar(Gtk.Application):
             )
 
         # The state string IconLibrary.status_name picks the icon from: the
-        # level, and "+" while charging. The hover words are battery_lines'.
+        # level, and "+" while charging. The hover words are battery_tooltip's.
         icon_state = f"BAT {capacity}%"
         smoothed_watts = None
 
@@ -6230,13 +6194,6 @@ class TinyBar(Gtk.Application):
         if status == "Discharging":
             smoothed_watts = rate_watts
 
-        trailing_average = (
-            self.history.trailing_average(
-                "power_w",
-                now
-            )
-        )
-
         hours = None
 
         if average_current:
@@ -6276,15 +6233,15 @@ class TinyBar(Gtk.Application):
         )
 
         percent = int(capacity) if capacity.isdigit() else None
-        lines = battery_lines(
-            percent,
-            status,
-            runtime_text,
-            smoothed_watts,
-            trailing_average,
-            limit_end,
-            limit_start
+        # CPU and RAM ride along in the popover, sampled with the battery, so
+        # they need no timer of their own and are not recorded. CPU is the
+        # average since the previous battery sample.
+        current_cpu = read_cpu_counters()
+        usage = usage_rows(
+            cpu_percent(self.battery_cpu, current_cpu),
+            get_memory_usage()
         )
+        self.battery_cpu = current_cpu
 
         self.battery.show_status(
             battery_rows(
@@ -6294,7 +6251,7 @@ class TinyBar(Gtk.Application):
                 rate_watts,
                 limit_end,
                 limit_start
-            )
+            ) + usage
         )
 
         # Low-battery notifications, each threshold once per discharge.
@@ -6311,18 +6268,8 @@ class TinyBar(Gtk.Application):
                 runtime_text
             )
 
-        # CPU and RAM ride along in the hover text, sampled with the battery,
-        # so they need no timer of their own and are not recorded. CPU is the
-        # average since the previous battery sample.
-        current_cpu = read_cpu_counters()
-        lines += usage_lines(
-            cpu_percent(self.battery_cpu, current_cpu),
-            get_memory_usage()
-        )
-        self.battery_cpu = current_cpu
-
         # The panel shows only the time left (to empty, or to full while
-        # charging); percentage and watts stay in the tooltip. Without an
+        # charging); the percentage is in the tooltip. Without an
         # estimate yet, or when full, the icon stands alone.
         remaining = None
 
@@ -6332,7 +6279,13 @@ class TinyBar(Gtk.Application):
         self.battery.set_text(
             icon_state,
             display_text=f"BAT {remaining or ''}",
-            tooltip="\n".join(lines)
+            tooltip=battery_tooltip(
+                percent,
+                status,
+                runtime_text,
+                limit_end,
+                limit_start
+            )
         )
 
         load = (

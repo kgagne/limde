@@ -69,7 +69,10 @@ its state, in the words its popover uses.
 - A number follows the name: "Volume 65%", "Brightness 40%", "Battery 64%, 2h 10m left".
 - A word or a name follows a colon: "Wi-Fi: Home, 61% signal", "Wired: connected",
   "Wi-Fi: off", "Volume: muted", "Tailscale: connected (click to turn off)".
-- More detail goes on the lines below, one fact per line (the battery, a window's title).
+- One line for a panel button with a popover: the popover has the details. Only a task
+  button adds a second line, its window's title.
+- Say a second state after a comma: "Volume 65%, microphone muted",
+  "Wi-Fi: Hotel, 70% signal, sign-in needed", "2 notifications, do not disturb on".
 - A reading that failed says so: "Volume: unavailable".
 
 Write the words in a small function with a unit test (`components/tinybar/tests/test_panel.py`).
