@@ -82,7 +82,8 @@ question):
 ./install --with=bluetooth
 ```
 
-The record then holds the groups of that run.
+The record then holds the groups of that run. Log out and back in afterwards: for
+example, the sound server loads Bluetooth audio support only when it starts.
 
 ## Follow the main branch
 

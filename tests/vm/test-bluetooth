@@ -24,8 +24,12 @@ on_vm 'test -f /usr/local/share/limde/tinybar/tinybar.py' \
 
 packages=$(sed -e 's/#.*//' "$repo/packages/optional/bluetooth.list" | xargs)
 on_vm "set -e
+had_plugin=\$(dpkg-query -W -f '\${db:Status-Status}' libspa-0.2-bluetooth 2>/dev/null || true)
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
   $packages bluez-test-tools >/dev/null
+# WirePlumber loads PipeWire's Bluetooth plugin only at start, and without it a device
+# offers no profiles to connect to; a user gets the same by logging in again.
+[ \"\$had_plugin\" = installed ] || systemctl --user restart wireplumber
 adapters() { busctl --system tree org.bluez 2>/dev/null | grep -c '/org/bluez/hci[0-9]*\$'; }
 pkill -f '^python3 -I /tmp/bluetooth-check' || true  # a --keep run's device side
 sudo pkill -x btvirt && for _ in \$(seq 20); do ((\$(adapters) == 0)) && break; sleep 0.5; done
