@@ -1180,6 +1180,15 @@ def open_below_panel(button):
     PANEL_MENUS.add(button)
 
 
+def set_surface_cursor(widget, name):
+    """Set the cursor of the surface widget is drawn on (None for the default)."""
+    native = widget.get_native()
+    surface = native.get_surface() if native is not None else None
+
+    if surface is not None:
+        surface.set_cursor(Gdk.Cursor.new_from_name(name, None) if name else None)
+
+
 def button_widgets(button):
     """A panel button and the widgets inside it, but not its popover's."""
     yield button
@@ -1208,6 +1217,7 @@ class PanelMenus:
         self.pointer = None   # the panel button under the pointer
         self.escaping = False
         self.muted = []       # widgets whose tooltips are off while the popover is open
+        self.cursor_queued = False
 
     def add(self, button):
         popover = button.get_popover()
@@ -1231,10 +1241,40 @@ class PanelMenus:
 
     def entered(self, button):
         self.pointer = button
+        self.on_panel_motion()
 
     def left(self, button):
         if self.pointer is button:
             self.pointer = None
+            self.on_panel_motion()
+
+    def watch(self, window):
+        """Keep the cursor right over the panel while a popover is open."""
+        motion = Gtk.EventControllerMotion()
+        motion.connect("enter", self.on_panel_motion)
+        motion.connect("motion", self.on_panel_motion)
+        window.add_controller(motion)
+
+    def on_panel_motion(self, *_args):
+        # While a popover holds the pointer, the cursor shown is the popover surface's
+        # and GTK changes it only over the popover: over the panel it would stay the
+        # arrow (or a hand from the last row). A panel button opens with one click.
+        # Over empty panel space only the buttons' leave arrives, no motion. Known
+        # gap: moving from inside the popover straight to empty panel space keeps the
+        # last cursor until the pointer reaches a button (GTK ignores ours there).
+        # GTK sets its own after this handler, so this runs once it is done.
+        if self.open is not None and not self.cursor_queued:
+            self.cursor_queued = True
+            GLib.idle_add(self.update_cursor)
+
+    def update_cursor(self):
+        self.cursor_queued = False
+
+        if self.open is not None:
+            set_surface_cursor(self.open.get_popover(),
+                               "pointer" if self.pointer is not None else "default")
+
+        return False
 
     def shown(self, button):
         self.open = button
@@ -5262,6 +5302,7 @@ class TinyBar(Gtk.Application):
         )
 
         window.set_title("tinybar")
+        PANEL_MENUS.watch(window)
 
         Gtk4LayerShell.init_for_window(window)
 

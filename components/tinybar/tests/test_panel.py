@@ -780,6 +780,12 @@ class FakeMenu:
     def get_first_child(self):
         return None
 
+    def get_native(self):
+        return None
+
+    def get_popover(self):
+        return self
+
 
 class PanelMenuTests(unittest.TestCase):
     """One click on another panel button swaps popovers (PanelMenus)."""
