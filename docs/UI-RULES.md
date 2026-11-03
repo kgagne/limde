@@ -36,7 +36,7 @@ Scale: 1, 2, 4, 6, 8, 12, 16 px.
   its text (`panel_row`).
 - 1 only between a title and its detail line.
 - Panel: margins 12 at the sides and 5 top and bottom, 12 between groups, 4 between
-  items. Panel buttons use `1px 7px` with a `-7px` margin so their highlight lines up.
+  items. Task buttons use `1px 7px`; panel icon buttons `1px 5px` with a `-5px` margin, leaving a 2 px gutter between highlights. Pointing outlines a panel button (`border_width` in `border_hover`); its popover open fills it (`hover`).
 - Popovers: 4 below the panel and at least 4 from the screen's left and right edges
   (`POPOVER_GAP`). Section headings start 8 px in, like the Wi-Fi header.
 - Tooltips: padding `6px 8px`, card 16 below its widget (GTK's 4 plus a 12 margin) so

@@ -90,9 +90,9 @@ TEMP_SAMPLE_SECONDS = 30
 NOTIFICATION_SAMPLE_SECONDS = 2
 # Log out, restart and power off ask for a second click; the question clears after this.
 CONFIRM_SECONDS = 4
-# GTK reports the pointer back over a panel button this soon after a click on it closed
-# its popover (PanelMenus).
-REENTER_SECONDS = 0.25
+# A click on another panel button while a popover is open opens that button's popover
+# this long after GTK closed the first one (PanelMenus).
+SWITCH_DELAY_SECONDS = 0
 # GTK's own default double-click time, for when its setting cannot be read. A second
 # click sooner than the double-click time is the rest of a double-click, not an answer.
 DOUBLE_CLICK_MS = 400
@@ -1180,47 +1180,34 @@ def open_below_panel(button):
     PANEL_MENUS.add(button)
 
 
-def reopens_after_click(button, now, closed):
-    """True when the pointer coming back over button (at monotonic now) means a click on
-    it just closed a popover that pointing had opened (a preview): the click takes it
-    instead. closed is PanelMenus' (button, time, was a preview) record."""
-
-    return (
-        closed is not None
-        and closed[0] is button
-        and closed[2]
-        and now - closed[1] <= REENTER_SECONDS
-    )
+def button_widgets(button):
+    """A panel button and the widgets inside it, but not its popover's."""
+    yield button
+    child = button.get_first_child()
+    while child is not None:
+        if not isinstance(child, Gtk.Popover):
+            yield from button_widgets(child)
+        child = child.get_next_sibling()
 
 
 class PanelMenus:
-    """The panel's popover buttons, working like a menu bar.
+    """The panel's popover buttons: one click on another panel button while a popover
+    is open closes it and opens that button's popover.
 
-    A click opens a popover; its button is the anchor and keeps its highlight. While a
-    popover is open, pointing at another panel button previews that one's popover (its
-    button drawn with an outline only), and a click on a previewed button takes it, as
-    if it had opened it. A click on the open anchor, Escape or a click elsewhere closes.
-
-    GTK closes an open popover on any press outside it and drops the press, so no
-    widget sees a click on a previewed button. GTK reports the pointer leaving the
-    button while its popover is open and coming back as the popover closes, so that
-    return (reopens_after_click) is the click.
+    GTK closes an open popover on any press outside it and drops the press: the other
+    button sees neither the press nor the release. It does see the pointer enter and
+    leave, so the button under the pointer when the popover closes is the one clicked.
+    Escape closes for good. Pointing alone opens nothing.
     """
 
-    ANCHOR = "menu-anchor"
-    PREVIEW = "menu-preview"
-
-    def __init__(self, clock=time.monotonic, later=None):
-        self.clock = clock
+    def __init__(self, later=None):
         # later(seconds, callback): runs callback once, after seconds.
         self.later = later or (lambda seconds, callback: GLib.timeout_add(
             round(seconds * 1000), lambda: callback() and False))
         self.open = None      # the button whose popover is showing
-        self.anchor = None    # the button last opened by a click
-        self.preview = None   # the button opened by pointing, while it is open
-        self.swapping = False
-        self.closed = None    # (button, time, was a preview) of the last close
+        self.pointer = None   # the panel button under the pointer
         self.escaping = False
+        self.muted = []       # widgets whose tooltips are off while the popover is open
 
     def add(self, button):
         popover = button.get_popover()
@@ -1234,62 +1221,48 @@ class PanelMenus:
         popover.add_controller(keys)
 
         motion = Gtk.EventControllerMotion()
-        motion.connect("enter", lambda *_args: self.pointed(button))
+        motion.connect("enter", lambda *_args: self.entered(button))
+        motion.connect("leave", lambda *_args: self.left(button))
         button.add_controller(motion)
 
     def on_key(self, _controller, keyval, _keycode, _state):
         self.escaping = keyval == Gdk.KEY_Escape
         return False
 
-    def mark(self, anchor, preview):
-        for old, new, name in ((self.anchor, anchor, self.ANCHOR),
-                               (self.preview, preview, self.PREVIEW)):
-            if old is not new:
-                if old is not None:
-                    old.remove_css_class(name)
-                if new is not None:
-                    new.add_css_class(name)
-        self.anchor, self.preview = anchor, preview
+    def entered(self, button):
+        self.pointer = button
+
+    def left(self, button):
+        if self.pointer is button:
+            self.pointer = None
 
     def shown(self, button):
         self.open = button
 
-        if self.swapping and button is not self.anchor:
-            self.mark(self.anchor, button)
-        else:
-            # Opened by a click (or by pointing back at the anchor).
-            self.mark(button, None)
+        # The button's own tooltip would cover its popover: a click cancels it, but
+        # GTK dropped the click that swapped. It comes back when the popover closes.
+        self.muted = [widget for widget in button_widgets(button) if widget.get_has_tooltip()]
+        for widget in self.muted:
+            widget.set_has_tooltip(False)
 
     def hidden(self, button):
         if self.open is button:
             self.open = None
 
-        if self.swapping:
-            return
+        for widget in self.muted:
+            widget.set_has_tooltip(True)
+        self.muted = []
 
-        was_preview = button is self.preview and not self.escaping
-        self.closed = (button, self.clock(), was_preview)
+        target, escaping = self.pointer, self.escaping
         self.escaping = False
-        self.later(REENTER_SECONDS * 2, self.settle)
 
-    def settle(self):
-        """After a close: nothing reopened, so the menu bar is done with."""
-        if self.open is None:
-            self.mark(None, None)
+        if not escaping and target is not None and target is not button:
+            self.later(SWITCH_DELAY_SECONDS, lambda: self.switch(target))
 
-    def pointed(self, button):
-        current = self.open
-
-        if current is not None and current is not button:
-            self.swapping = True
-            try:
-                current.popdown()
-                button.popup()
-            finally:
-                self.swapping = False
-        elif current is None and reopens_after_click(button, self.clock(), self.closed):
-            self.closed = None
-            button.popup()  # shown() makes it the anchor
+    def switch(self, target):
+        """Open target's popover, unless something else opened or the pointer left."""
+        if self.open is None and self.pointer is target:
+            target.popup()
 
 
 PANEL_MENUS = PanelMenus()

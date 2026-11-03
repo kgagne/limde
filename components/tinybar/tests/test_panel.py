@@ -759,12 +759,11 @@ class BrightnessSliderTests(unittest.TestCase):
 
 class FakeMenu:
     """A panel menu button for PanelMenus: popup and popdown report back as GTK's
-    show and hide signals do; CSS classes are kept in a set."""
+    show and hide signals do."""
 
     def __init__(self, menus):
         self.menus = menus
         self.showing = False
-        self.classes = set()
 
     def popup(self):
         self.showing = True
@@ -775,103 +774,77 @@ class FakeMenu:
             self.showing = False
             self.menus.hidden(self)
 
-    def add_css_class(self, name):
-        self.classes.add(name)
+    def get_has_tooltip(self):
+        return False
 
-    def remove_css_class(self, name):
-        self.classes.discard(name)
+    def get_first_child(self):
+        return None
 
 
 class PanelMenuTests(unittest.TestCase):
-    """The panel's popovers work like a menu bar's (PanelMenus)."""
+    """One click on another panel button swaps popovers (PanelMenus)."""
 
     def setUp(self):
-        self.now = 100.0
         self.pending = []
-        self.menus = tinybar.PanelMenus(clock=lambda: self.now,
-                                        later=lambda _seconds, callback: self.pending.append(callback))
-        self.cog, self.battery, self.volume = (FakeMenu(self.menus) for _ in range(3))
+        self.menus = tinybar.PanelMenus(
+            later=lambda _seconds, callback: self.pending.append(callback))
+        self.cog, self.battery = FakeMenu(self.menus), FakeMenu(self.menus)
 
-    def settle(self):
-        self.now += 1
+    def run_later(self):
         for callback in self.pending:
             callback()
         self.pending.clear()
 
-    def click_closes(self, menu):
-        """GTK closing the popover on a press on its button, then reporting the pointer
-        back over the button."""
-        menu.popdown()
-        self.now += 0.01
-        self.menus.pointed(menu)
+    def click(self, menu):
+        """A click on menu's button: GTK closes the open popover and drops the press;
+        with nothing open, the button opens its own."""
+        self.menus.entered(menu)
+        if self.menus.open is not None:
+            self.menus.open.popdown()
+        else:
+            menu.popup()
+        self.run_later()
 
-    def look(self, menu):
-        return ("anchor" if tinybar.PanelMenus.ANCHOR in menu.classes else
-                "preview" if tinybar.PanelMenus.PREVIEW in menu.classes else None)
-
-    def test_pointing_does_nothing_while_none_is_open(self):
-        self.menus.pointed(self.volume)
-        self.assertFalse(self.volume.showing)
-
-    def test_a_click_opens_the_anchor(self):
-        self.cog.popup()
-        self.assertEqual(self.look(self.cog), "anchor")
-
-    def test_pointing_previews_and_the_anchor_keeps_its_highlight(self):
-        self.cog.popup()
-        self.menus.pointed(self.battery)
+    def test_one_click_swaps(self):
+        self.click(self.cog)
+        self.click(self.battery)
         self.assertFalse(self.cog.showing)
         self.assertTrue(self.battery.showing)
-        self.assertEqual((self.look(self.cog), self.look(self.battery)), ("anchor", "preview"))
-        self.menus.pointed(self.volume)
-        self.assertEqual((self.look(self.battery), self.look(self.volume)), (None, "preview"))
-        # Back at the anchor: its popover, no preview.
-        self.menus.pointed(self.cog)
+
+    def test_clicking_the_open_buttons_closes(self):
+        self.click(self.cog)
+        self.click(self.cog)
+        self.assertFalse(self.cog.showing)
+
+    def test_pointing_opens_nothing(self):
+        self.click(self.cog)
+        self.menus.entered(self.battery)
+        self.run_later()
         self.assertTrue(self.cog.showing)
-        self.assertEqual((self.look(self.cog), self.look(self.volume)), ("anchor", None))
-
-    def test_clicking_a_preview_takes_it_whenever_it_comes(self):
-        self.cog.popup()
-        self.menus.pointed(self.battery)
-        self.now += 30
-        self.click_closes(self.battery)
-        self.settle()
-        self.assertTrue(self.battery.showing)
-        self.assertEqual((self.look(self.cog), self.look(self.battery)), (None, "anchor"))
-        # Now it is the anchor, the next click closes it and the highlight goes.
-        self.click_closes(self.battery)
-        self.settle()
         self.assertFalse(self.battery.showing)
-        self.assertEqual(self.look(self.battery), None)
 
-    def test_clicking_the_open_anchor_closes(self):
-        self.volume.popup()
-        self.click_closes(self.volume)
-        self.settle()
-        self.assertFalse(self.volume.showing)
-        self.assertEqual(self.look(self.volume), None)
-
-    def test_closing_a_preview_elsewhere_clears_both(self):
-        self.cog.popup()
-        self.menus.pointed(self.battery)
-        self.battery.popdown()  # a click in another window
-        self.settle()
+    def test_closing_elsewhere_opens_nothing(self):
+        self.click(self.cog)
+        self.menus.entered(self.battery)
+        self.menus.left(self.battery)
+        self.cog.popdown()  # a click in another window
+        self.run_later()
         self.assertFalse(self.battery.showing)
-        self.assertEqual((self.look(self.cog), self.look(self.battery)), (None, None))
 
-    def test_escape_closes_for_good(self):
-        self.cog.popup()
-        self.menus.pointed(self.battery)
+    def test_escape_opens_nothing(self):
+        self.click(self.cog)
+        self.menus.entered(self.battery)
         self.menus.escaping = True
-        self.click_closes(self.battery)
+        self.cog.popdown()
+        self.run_later()
         self.assertFalse(self.battery.showing)
 
-    def test_pointer_returning_later_does_not_reopen(self):
-        self.cog.popup()
-        self.menus.pointed(self.battery)
-        self.battery.popdown()
-        self.now += tinybar.REENTER_SECONDS + 0.1
-        self.menus.pointed(self.battery)
+    def test_pointer_gone_before_the_switch_opens_nothing(self):
+        self.click(self.cog)
+        self.menus.entered(self.battery)
+        self.cog.popdown()
+        self.menus.left(self.battery)
+        self.run_later()
         self.assertFalse(self.battery.showing)
 
 

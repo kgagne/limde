@@ -99,7 +99,7 @@ popover .notification-clear label {
 /* Side padding matching the task buttons' highlight, cancelled by an equal negative
    margin so the icons keep the plain indicators' spacing. */
 .panel-menu {
-    margin: 0 -7px;
+    margin: 0 -5px;
 }
 
 .panel-menu,
@@ -115,28 +115,19 @@ popover .notification-clear label {
     transition: none;
 }
 
+/* 5 at the sides: 12 between panel items leaves a 2 px gutter between highlights. */
 .panel-menu > button {
-    padding: 1px 7px;
+    padding: 1px 5px;
 }
 
-.panel-menu > button:hover,
+/* Pointing outlines a button; the one whose popover is open is filled. */
+.panel-menu > button:hover {
+    box-shadow: inset 0 0 0 ${shape_border_width}px ${colors_border_hover};
+}
+
 .panel-menu > button:checked {
     background: ${colors_hover};
     color: ${colors_text};
-}
-
-/* Panel popovers work as a menu bar (PanelMenus): the button last opened by a click keeps
-   its highlight while pointing previews another's popover, whose button gets an outline
-   only. */
-.panel-menu.menu-anchor > button {
-    background: ${colors_hover};
-}
-
-.panel-menu.menu-preview > button,
-.panel-menu.menu-preview > button:hover,
-.panel-menu.menu-preview > button:checked {
-    background: transparent;
-    box-shadow: inset 0 0 0 ${shape_border_width}px ${colors_border_hover};
 }
 
 /* Only the rounded card is drawn; the popup surface around it stays clear. */
