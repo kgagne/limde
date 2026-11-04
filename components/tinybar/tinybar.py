@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import signal
+import sqlite3
 import subprocess
 import time
 import tomllib
@@ -81,8 +82,11 @@ STYLE_FILE = CONFIG_DIR / "style.css"
 TOPLEVEL_HELPER = Path(__file__).resolve().with_name("toplevel-helper")
 
 STATE_DIR = Path.home() / ".local/state/tinybar"
+# The history database (SQLite): 5-minute buckets and the raw samples behind them.
+HISTORY_DB = STATE_DIR / "history.sqlite"
+# Before 2026-11-04 the buckets were lines in this file; it is imported once, then renamed
+# to history.jsonl.imported.
 HISTORY_FILE = STATE_DIR / "history.jsonl"
-OLD_HISTORY_FILE = STATE_DIR / "history.json"
 
 BATTERY_SAMPLE_SECONDS = 5
 USAGE_SAMPLE_SECONDS = 2
@@ -148,8 +152,13 @@ TAILSCALE_UP_SECONDS = 15
 BLUETOOTH = load_settings().get("bluetooth", "auto")
 
 HISTORY_BUCKET_SECONDS = 300
-HISTORY_RETENTION_SECONDS = 7 * 24 * 60 * 60
+# The database keeps 30 days; the panel keeps the 7 its graph can show in memory.
+HISTORY_RETENTION_SECONDS = 30 * 24 * 60 * 60
+HISTORY_MEMORY_SECONDS = 7 * 24 * 60 * 60
 HISTORY_PRUNE_SECONDS = 24 * 60 * 60
+# Raw samples are kept for metrics read every 5 s or slower; the 2-second panel readings
+# (CPU, memory) would multiply the database's size for little more detail.
+HISTORY_RAW_MIN_INTERVAL = 5
 
 MAKO_NAME = "org.freedesktop.Notifications"
 MAKO_PATH = "/fr/emersion/Mako"
@@ -710,111 +719,127 @@ def usage_rows(cpu, memory):
 
 
 class HistoryStore:
-    def __init__(self):
-        STATE_DIR.mkdir(
-            parents=True,
-            exist_ok=True
-        )
+    """Bucketed history in an SQLite database, written once per 5-minute bucket.
+
+    Tables: `buckets` (one row per bucket and metric: sample count, coverage, avg, min,
+    max) and `samples` (time, metric, value for metrics read every
+    HISTORY_RAW_MIN_INTERVAL seconds or slower). Times are Unix seconds. `records` holds
+    the last HISTORY_MEMORY_SECONDS as dicts for the power graph. A database error never
+    stops the panel; the bucket is then kept in memory only."""
+
+    def __init__(self, path=None, legacy=None):
+        self.path = Path(path or HISTORY_DB)
+        self.legacy = Path(legacy or HISTORY_FILE)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
 
         self.records = deque()
         self.current_start = None
+        self.current = {metric: [] for metric in METRIC_INTERVALS}
+        self.raw = []
+        self.last_prune = 0
+        self.db = None
 
-        self.current = {
-            metric: []
-            for metric in METRIC_INTERVALS
-        }
-
-        self.last_prune = time.time()
-
+        self.open()
+        self.import_legacy()
         self.load()
+        self.prune_if_needed()
 
-    def load(self):
-        cutoff = (
-            time.time()
-            - HISTORY_RETENTION_SECONDS
-        )
+    def open(self):
+        try:
+            self.db = sqlite3.connect(self.path, timeout=2)
+            self.db.executescript("""
+                PRAGMA journal_mode = WAL;
+                PRAGMA synchronous = NORMAL;
+                CREATE TABLE IF NOT EXISTS buckets (
+                    start INTEGER NOT NULL,
+                    metric TEXT NOT NULL,
+                    duration INTEGER NOT NULL,
+                    sample_count INTEGER NOT NULL,
+                    coverage_seconds INTEGER NOT NULL,
+                    avg REAL, min REAL, max REAL,
+                    PRIMARY KEY (start, metric)
+                ) WITHOUT ROWID;
+                CREATE TABLE IF NOT EXISTS samples (
+                    time REAL NOT NULL,
+                    metric TEXT NOT NULL,
+                    value REAL NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS samples_time ON samples (time);
+            """)
+        except sqlite3.Error:
+            self.db = None
 
-        if HISTORY_FILE.exists():
+    def write(self, sql, rows):
+        if self.db is None:
+            return False
+
+        try:
+            with self.db:
+                self.db.executemany(sql, rows)
+            return True
+        except sqlite3.Error:
+            return False
+
+    def import_legacy(self):
+        """Buckets from history.jsonl, once; the file is then renamed, not deleted."""
+        if self.db is None or not self.legacy.exists():
+            return
+
+        rows = []
+
+        try:
+            lines = self.legacy.read_text().splitlines()
+        except OSError:
+            return
+
+        for line in lines:
             try:
-                for line in HISTORY_FILE.read_text().splitlines():
-                    try:
-                        record = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
 
-                    if record.get("schema_version") != 1:
-                        continue
+            if record.get("schema_version") != 1:
+                continue
 
-                    if record.get("start_epoch", 0) >= cutoff:
-                        self.records.append(record)
+            rows.extend(bucket_rows(record))
 
+        if self.write(
+            "INSERT OR IGNORE INTO buckets VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows
+        ):
+            try:
+                self.legacy.rename(self.legacy.with_name(self.legacy.name + ".imported"))
             except OSError:
                 pass
 
+    def load(self):
+        if self.db is None:
             return
 
-        # One-time migration of v0.4 power history.
-        if OLD_HISTORY_FILE.exists():
-            try:
-                old = json.loads(
-                    OLD_HISTORY_FILE.read_text()
-                )
+        cutoff = time.time() - HISTORY_MEMORY_SECONDS
 
-                if old.get("version") == 1:
-                    for bucket in old.get(
-                        "power",
-                        {}
-                    ).get("buckets", []):
-                        start_epoch = bucket.get(
-                            "start_epoch",
-                            0
-                        )
+        try:
+            rows = self.db.execute(
+                "SELECT start, metric, duration, sample_count, coverage_seconds,"
+                " avg, min, max FROM buckets WHERE start >= ? ORDER BY start",
+                (cutoff,),
+            ).fetchall()
+        except sqlite3.Error:
+            return
 
-                        if start_epoch < cutoff:
-                            continue
+        record = None
 
-                        metric = {
-                            "sample_count": bucket.get(
-                                "samples",
-                                0
-                            ),
-                            "coverage_seconds": bucket.get(
-                                "coverage_seconds",
-                                0
-                            ),
-                            "avg": bucket.get(
-                                "avg_w"
-                            ),
-                            "min": bucket.get(
-                                "min_w"
-                            ),
-                            "max": bucket.get(
-                                "max_w"
-                            ),
-                        }
+        for start, metric, duration, count, coverage, avg, low, high in rows:
+            if record is None or record["start_epoch"] != start:
+                record = bucket_record(start, duration, {})
+                self.records.append(record)
 
-                        record = {
-                            "schema_version": 1,
-                            "start": bucket.get(
-                                "start"
-                            ),
-                            "start_epoch": start_epoch,
-                            "duration_seconds":
-                                HISTORY_BUCKET_SECONDS,
-                            "metrics": {
-                                "power_w": metric
-                            }
-                        }
-
-                        self.records.append(record)
-
-            except (
-                OSError,
-                json.JSONDecodeError
-            ):
-                pass
-
-        self.rewrite()
+            record["metrics"][metric] = {
+                "sample_count": count,
+                "coverage_seconds": coverage,
+                "avg": avg,
+                "min": low,
+                "max": high,
+            }
 
     def ensure_bucket(self, now):
         bucket_start = (
@@ -844,6 +869,9 @@ class HistoryStore:
             float(value)
         )
 
+        if METRIC_INTERVALS[metric] >= HISTORY_RAW_MIN_INTERVAL:
+            self.raw.append((round(now, 1), metric, round(float(value), 3)))
+
     def flush(self):
         if self.current_start is None:
             return
@@ -856,120 +884,102 @@ class HistoryStore:
 
             interval = METRIC_INTERVALS[metric]
 
-            coverage = min(
-                len(samples) * interval,
-                HISTORY_BUCKET_SECONDS
-            )
-
             metrics[metric] = {
                 "sample_count": len(samples),
-                "coverage_seconds": coverage,
-                "avg": round(
-                    sum(samples) / len(samples),
-                    3
+                "coverage_seconds": min(
+                    len(samples) * interval,
+                    HISTORY_BUCKET_SECONDS
                 ),
-                "min": round(
-                    min(samples),
-                    3
-                ),
-                "max": round(
-                    max(samples),
-                    3
-                ),
+                "avg": round(sum(samples) / len(samples), 3),
+                "min": round(min(samples), 3),
+                "max": round(max(samples), 3),
             }
 
         if metrics:
-            start_datetime = (
-                datetime.datetime
-                .fromtimestamp(self.current_start)
-                .astimezone()
+            record = bucket_record(
+                self.current_start, HISTORY_BUCKET_SECONDS, metrics
             )
-
-            record = {
-                "schema_version": 1,
-                "start": start_datetime.isoformat(
-                    timespec="seconds"
-                ),
-                "start_epoch": self.current_start,
-                "duration_seconds":
-                    HISTORY_BUCKET_SECONDS,
-                "metrics": metrics,
-            }
-
             self.records.append(record)
 
-            try:
-                with HISTORY_FILE.open("a") as file:
-                    file.write(
-                        json.dumps(
-                            record,
-                            separators=(",", ":")
+            if self.db is not None:
+                try:
+                    with self.db:
+                        # A restart within a bucket writes it twice: merge the halves.
+                        self.db.executemany(
+                            "INSERT INTO buckets VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                            " ON CONFLICT (start, metric) DO UPDATE SET"
+                            " avg = round((avg * sample_count + excluded.avg"
+                            " * excluded.sample_count) / (sample_count"
+                            " + excluded.sample_count), 3),"
+                            " sample_count = sample_count + excluded.sample_count,"
+                            " coverage_seconds = min(duration, coverage_seconds"
+                            " + excluded.coverage_seconds),"
+                            " min = min(min, excluded.min),"
+                            " max = max(max, excluded.max)",
+                            bucket_rows(record),
                         )
-                        + "\n"
-                    )
-            except OSError:
-                pass
+                        self.db.executemany(
+                            "INSERT INTO samples VALUES (?, ?, ?)", self.raw
+                        )
+                except sqlite3.Error:
+                    pass
 
-        self.current = {
-            metric: []
-            for metric in METRIC_INTERVALS
-        }
+        self.current = {metric: [] for metric in METRIC_INTERVALS}
+        self.raw = []
 
         self.prune_if_needed()
 
     def prune_if_needed(self):
         now = time.time()
 
-        if (
-            now - self.last_prune
-            < HISTORY_PRUNE_SECONDS
-        ):
+        if now - self.last_prune < HISTORY_PRUNE_SECONDS:
             return
 
-        cutoff = (
-            now
-            - HISTORY_RETENTION_SECONDS
-        )
-
-        self.records = deque(
-            record
-            for record in self.records
-            if record.get(
-                "start_epoch",
-                0
-            ) >= cutoff
-        )
-
-        self.rewrite()
-
         self.last_prune = now
+        memory_cutoff = now - HISTORY_MEMORY_SECONDS
 
-    def rewrite(self):
-        temp = HISTORY_FILE.with_suffix(
-            ".jsonl.tmp"
+        while self.records and self.records[0].get("start_epoch", 0) < memory_cutoff:
+            self.records.popleft()
+
+        cutoff = now - HISTORY_RETENTION_SECONDS
+        self.write("DELETE FROM buckets WHERE start < ?", [(cutoff,)])
+        self.write("DELETE FROM samples WHERE time < ?", [(cutoff,)])
+
+    def close(self):
+        if self.db is not None:
+            self.db.close()
+            self.db = None
+
+
+def bucket_record(start, duration, metrics):
+    """The in-memory form of one bucket (the layout history.jsonl used)."""
+    return {
+        "schema_version": 1,
+        "start": datetime.datetime.fromtimestamp(start).astimezone().isoformat(
+            timespec="seconds"
+        ),
+        "start_epoch": start,
+        "duration_seconds": duration,
+        "metrics": metrics,
+    }
+
+
+def bucket_rows(record):
+    """Database rows (start, metric, duration, count, coverage, avg, min, max)."""
+    start = record.get("start_epoch")
+    duration = record.get("duration_seconds", HISTORY_BUCKET_SECONDS)
+
+    if not isinstance(start, (int, float)):
+        return []
+
+    return [
+        (
+            int(start), metric, duration,
+            values.get("sample_count", 0), values.get("coverage_seconds", 0),
+            values.get("avg"), values.get("min"), values.get("max"),
         )
-
-        try:
-            with temp.open("w") as file:
-                for record in self.records:
-                    file.write(
-                        json.dumps(
-                            record,
-                            separators=(",", ":")
-                        )
-                        + "\n"
-                    )
-
-            os.replace(
-                temp,
-                HISTORY_FILE
-            )
-
-        except OSError:
-            try:
-                temp.unlink()
-            except OSError:
-                pass
+        for metric, values in record.get("metrics", {}).items()
+    ]
 
 
 def power_series(records, now, span, bin_seconds, current=None):

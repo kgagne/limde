@@ -95,8 +95,13 @@ lists windows through the wlr foreign-toplevel protocol.
   (on battery, charging, plugged in), the draw on battery or the charge rate while
   charging, the time left or to full, and the charge limit; under it a graph of the
   draw over the last 3 hours, 24 hours or 7 days (arrows or Left/Right cycle through
-  them). The data is the history Tinybar keeps in `~/.local/state/tinybar/history.jsonl`:
-  5-minute summaries while on battery, kept for 7 days. Gaps are time on mains power.
+  them). Gaps are time on mains power. The data is the history Tinybar keeps in the
+  SQLite database `~/.local/state/tinybar/history.sqlite` for 30 days: table `buckets`
+  has 5-minute summaries (count, average, minimum, maximum) per metric, table `samples`
+  the raw readings behind them for metrics read every 5 seconds or slower (battery draw
+  and temperature). It is written once per 5 minutes; a `history.jsonl` from older
+  versions is imported once and kept as `history.jsonl.imported`. Python's `sqlite3`
+  module or any SQLite tool reads it.
 - Charge limit: when the battery driver has `charge_control_end_threshold` below 100,
   the popover and the tooltip say what it does: "Held at 80%" while plugged in at the
   limit, "Charging to 80%" (and the time to reach it) while charging, "Not charging
