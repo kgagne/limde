@@ -15,7 +15,7 @@ step_agent_web() {
   local entry=/usr/local/share/applications/limde.AgentWeb.desktop want
   want='[Desktop Entry]
 Type=Application
-Name=Agent
+Name=Agent Web
 GenericName=Web agent
 Comment=Your web AI agent in its own window
 Exec=agent-web
