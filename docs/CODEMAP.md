@@ -75,7 +75,7 @@ Test: `scripts/check` (icons, both themes, contrast); `python3 components/appear
 - **outlines** — after any `src` or `brands` SVG change run `components/icons/tools/outline.py` (records `components/icons/outlined/SOURCES.json`); `scripts/check` flags stale ones.
 
 ## Other components
-- **agent-web** — the AI agent window: `components/agent-web/agent-web`, link routing `components/agent-web/agent-web.cfg::openInMain`, `components/agent-web/welcome.html`. Trap: the `.cfg` is copied into Firefox at each start and its first line must stay a comment.
+- **agent-web** — the AI agent window: `components/agent-web/agent-web`, link routing `components/agent-web/agent-web.cfg::openInMain`, `components/agent-web/welcome.html`. Trap: the `.cfg` is copied into Firefox at each start and its first line must stay a comment. `agent-web stop` pkills every command line containing `agent-web --keep-open`, including a shell that merely mentions it.
 - **firefox** — AppArmor profile `components/firefox/apparmor-profile`; installed by `lib/install/85-firefox.sh::step_firefox`, then updates itself.
 - **pcmanfm** — focus patch `components/pcmanfm/pcmanfm-focus-file-shortcuts.patch`; built by `lib/install/70-pcmanfm.sh::step_pcmanfm`.
 - **space preview** — `components/preview/limde-preview::classify`; the Space patch is `components/preview/pcmanfm-space-preview.patch`. Trap: needs `preview_cmd` in `config/home/.config/pcmanfm/default/pcmanfm.conf`.

@@ -26,3 +26,11 @@ user_pref("browser.quitShortcut.disabled", true);
 user_pref("ui.key.menuAccessKeyFocuses", false);
 // Agent sites probe for read-aloud; without speech-dispatcher Firefox shows a bar about it.
 user_pref("media.webspeech.synth.dont_notify_on_error", true);
+// Power: this window streams text most of the day, so it draws less. Sites drop their
+// animations (prefers-reduced-motion), Firefox paints at most 30 frames a second
+// (scrolling looks a little less smooth), and no usage data is collected or sent.
+user_pref("ui.prefersReducedMotion", 1);
+user_pref("layout.frame_rate", 30);
+user_pref("datareporting.healthreport.uploadEnabled", false);
+user_pref("datareporting.usage.uploadEnabled", false);
+user_pref("toolkit.telemetry.unified", false);
