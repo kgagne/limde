@@ -14,7 +14,7 @@ dark), and `scripts/check` holds both to WCAG 2.2's contrast minimums.
 It's made for laptops first: careful with the battery, with trackpad motion and scrolling
 modelled on a MacBook's.
 
-> **Status: beta (`v1.0.0-beta.3`).** It's in daily use on one laptop, and installs from
+> **Status: beta (`v1.0.0-beta.4`).** It's in daily use on one laptop, and installs from
 > scratch have only been tested in QEMU and from a USB stick on that same laptop. Expect
 > rough edges, and see [Known gaps](#known-gaps).
 
@@ -31,9 +31,10 @@ modelled on a MacBook's.
 | ![foot running htop, with a "Cut" notification at the top right](docs/screenshots/terminal-notification.png) | ![The swaylock lock screen](docs/screenshots/lock.png) |
 | **Terminal and notifications:** foot with htop, and a notification after a file is cut. | **Lock:** Super+L, or after 5 idle minutes. |
 
-![Tinybar's battery popover: a week of battery draw in watts, with average, peak and time on battery](docs/screenshots/battery-graph.png)
-
-**Battery:** click the battery for its draw over the last 3 hours, 24 hours or 7 days.
+| | |
+| --- | --- |
+| ![Tinybar's battery popover: plugged in and held at 80 %, CPU and memory, above a week of battery draw in watts](docs/screenshots/battery-graph.png) | ![Tinybar's system menu: Light mode, Lock, Restart and More](docs/screenshots/system-menu.png) |
+| **Battery:** click the battery for its state and charge limit (draw and time left when on battery), CPU and memory, above its draw over the last 3 hours, 24 hours or 7 days. | **System menu:** the cog at the right end switches between light and dark, and locks or restarts; More has Suspend, Log out and Power off. |
 
 Screenshots are from a clean install in a VM at 1920×1200, except the battery graph,
 which needs a real battery and comes from a laptop.
@@ -294,11 +295,12 @@ Bug reports are welcome. Please include your hardware and the output of
 
 ## How this was made
 
-limDE grew out of one person's daily-driver laptop setup. It was designed, tested
-and directed by its author over many iterations, and much of the implementation, review
-and documentation was done with AI coding tools working from that guidance. Without that
-tooling, a project of this scope would not have been practical for one person. Every
-change was steered and accepted by a human, and tested on real hardware and in VMs.
+limDE grew out of one person's daily-driver laptop setup, and it was built with heavy use
+of AI. Claude Code, Anthropic's coding agent, wrote most of the code, the install scripts
+and the documentation, and ran the install tests in VMs. Its author decided what limDE
+should be and do, used it every day on the author's own laptop, tested it, reported what
+was wrong, and reviewed and committed the changes. The labwc touchpad patches were made
+the same way; the author couldn't have written them alone.
 
 ## Licence
 
