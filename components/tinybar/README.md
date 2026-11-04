@@ -96,7 +96,7 @@ lists windows through the wlr foreign-toplevel protocol.
   charging, the time left or to full, and the charge limit; under it a graph of the
   draw over the last 3 hours, 24 hours or 7 days (arrows or Left/Right cycle through
   them). Gaps are time on mains power. The data is the history Tinybar keeps in the
-  SQLite database `~/.local/state/tinybar/history.sqlite` for 30 days: table `buckets`
+  SQLite database `~/.local/state/tinybar/history.sqlite` for 90 days: table `buckets`
   has 5-minute summaries (count, average, minimum, maximum) per metric, table `samples`
   the raw readings behind them for metrics read every 5 seconds or slower (battery draw
   and temperature). It is written once per 5 minutes; a `history.jsonl` from older

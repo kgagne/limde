@@ -152,8 +152,8 @@ TAILSCALE_UP_SECONDS = 15
 BLUETOOTH = load_settings().get("bluetooth", "auto")
 
 HISTORY_BUCKET_SECONDS = 300
-# The database keeps 30 days; the panel keeps the 7 its graph can show in memory.
-HISTORY_RETENTION_SECONDS = 30 * 24 * 60 * 60
+# The database keeps 90 days; the panel keeps the 7 its graph can show in memory.
+HISTORY_RETENTION_SECONDS = 90 * 24 * 60 * 60
 HISTORY_MEMORY_SECONDS = 7 * 24 * 60 * 60
 HISTORY_PRUNE_SECONDS = 24 * 60 * 60
 # Raw samples are kept for metrics read every 5 s or slower; the 2-second panel readings
