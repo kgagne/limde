@@ -29,6 +29,18 @@ while IFS= read -r f; do
   bash -n "$f" || { echo "syntax: $f" >&2; fail=1; }
 done < <(git ls-files -co --exclude-standard)
 
+# 2b. XML configs must parse: labwc shows "Config errors detected" and drops what follows a
+# bad spot (a "--" inside a comment is enough).
+git ls-files -co --exclude-standard -- '*.xml' '*.xml.in' | python3 -c '
+import sys, xml.etree.ElementTree as ET
+bad = 0
+for f in sys.stdin.read().split():
+    try:
+        ET.parse(f)
+    except ET.ParseError as e:
+        print(f"xml: {f}: {e}", file=sys.stderr); bad = 1
+sys.exit(bad)' || fail=1
+
 # 3. Icons: outlined/ must match its sources, and the icon theme must build.
 if ! python3 - "$root/components/icons" <<'PY'
 import hashlib, json, sys

@@ -40,12 +40,19 @@
 
   <keyboard>
     <default />
-    <keybind key="W-Return"><action name="Execute" command="foot" /></keybind>
+    <keybind key="W-Return"><action name="Execute" command="walker --close" /><action name="Execute" command="foot" /></keybind>
     <keybind key="W-F4"><action name="None" /></keybind>
     <keybind key="W-space"><action name="Execute" command="walker" /></keybind>
     <keybind key="W-l"><action name="Execute" command="loginctl lock-session" /></keybind>
     <!-- Pass every key (Alt-Tab and so on) to the focused window, for remote desktops and VMs; press again to restore. -->
     <keybind key="W-Escape"><action name="ToggleKeybinds" /></keybind>
+    <!-- Keys that move focus to a window close the launcher first. Walker gives up the keyboard
+         but stays on top otherwise, and Esc then goes to the window under it. Closing Walker
+         when it is already closed does nothing. -->
+    <keybind key="A-Tab"><action name="Execute" command="walker --close" /><action name="NextWindow" /></keybind>
+    <keybind key="A-S-Tab"><action name="Execute" command="walker --close" /><action name="PreviousWindow" /></keybind>
+    <keybind key="W-d"><action name="Execute" command="walker --close" /><action name="ToggleShowDesktop" /></keybind>
+    <keybind key="A-Space"><action name="Execute" command="walker --close" /><action name="ShowMenu" menu="client-menu" atCursor="no" /></keybind>
 
     <keybind key="XF86AudioRaiseVolume"><action name="Execute" command="tinybar-volume up" /></keybind>
     <keybind key="XF86AudioLowerVolume"><action name="Execute" command="tinybar-volume down" /></keybind>
