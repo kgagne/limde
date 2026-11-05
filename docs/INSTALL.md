@@ -116,9 +116,11 @@ already in place or `changed` for what it did.
    build must start and stop cleanly in a headless test session before it is installed
    to `/usr/local`, so a broken build never replaces a working one. This is the longest
    step.
-6. **PCManFM:** downloads the pinned PCManFM release, applies limDE's two patches (Space
-   preview, and Cut, Copy and Paste keys after you pick a place in the side pane), builds
-   it and installs it to `/usr/local`.
+6. **PCManFM:** downloads the pinned PCManFM release, applies limDE's four patches (Space
+   preview; Cut, Copy and Paste keys after you pick a place in the side pane; even space
+   around list icons; a GTK theme of its own), builds it and installs it to `/usr/local`,
+   with the program in `/usr/local/libexec/limde/` and a `pcmanfm` command that starts it
+   in the panel's look.
 7. **Launcher:** downloads the pinned Walker and Elephant release files, checks each
    against its pinned sha256, and installs them to `/usr/local`.
 8. **Firefox:** downloads Mozilla's current Firefox, checks it against Mozilla's signed
