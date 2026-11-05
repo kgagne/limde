@@ -31,6 +31,8 @@ Your own files, which limDE reads and never overwrites. None of them exist until
 them:
 
 - `~/.config/labwc/rc.xml`: your labwc settings.
+- `~/.config/labwc/environment`: environment variables for the session, one
+  `NAME=value` per line, read at login after limDE's, so yours win.
 - `~/.config/limde/autostart.d/`: your session pieces.
 - `~/.config/limde/appearance.toml`: your colours, fonts, shapes and icon settings.
 - `~/.config/tinybar/settings.toml`: the panel's settings.
@@ -327,6 +329,32 @@ PCManFM, and PDF, DjVu and TIFF files in Papers (from the optional `papers` grou
 yours to edit: change the `.desktop` name after a type to change its app. The desktop
 entries for installed apps are in `/usr/share/applications`,
 `/usr/local/share/applications` and `~/.local/share/applications`.
+
+## SSH agent
+
+The desktop's terminals start with no `SSH_AUTH_SOCK`, so `ssh` reads your keys from
+`~/.ssh` and asks for a key's passphrase each time. To keep unlocked keys in OpenSSH's
+agent, which systemd starts the first time something connects to it, add this line to
+`~/.config/labwc/environment`, log in again, and add a key with `ssh-add`:
+
+```
+SSH_AUTH_SOCK=$XDG_RUNTIME_DIR/openssh_agent
+```
+
+GNOME's SSH agent, which can keep key passphrases in the login keyring and unlock keys
+when you log in, is masked by the installer. To use it instead, unmask it, start it, and
+use `$XDG_RUNTIME_DIR/gcr/ssh` in that line:
+
+```
+systemctl --user unmask gcr-ssh-agent.socket gcr-ssh-agent.service
+```
+
+```
+systemctl --user start gcr-ssh-agent.socket
+```
+
+The installer masks them only once (it notes that in
+`~/.local/state/limde/gcr-ssh-agent-masked`), so later installs and updates leave them on.
 
 ## The agent window
 

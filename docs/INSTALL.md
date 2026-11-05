@@ -146,7 +146,9 @@ already in place or `changed` for what it did.
     `common-auth` and `common-session` lines, so your tty1 login password unlocks the
     keyring and the keyring starts with your session. Ubuntu's keyring package adds only
     the line for password changes; a display manager would carry these two. Before it
-    changes the file it saves a copy in `~/.local/state/limde/backups/`.
+    changes the file it saves a copy in `~/.local/state/limde/backups/`. It also masks
+    GNOME's SSH agent for you, once, so OpenSSH's agent stays the SSH agent (see
+    [DEPENDENCIES.md](DEPENDENCIES.md#login-keyring-and-fonts)).
 16. **Session:** adds the block to `~/.profile` that clears the console and starts labwc
     on tty1.
 17. **Install record:** writes the commit, the clone's path and your optional groups to

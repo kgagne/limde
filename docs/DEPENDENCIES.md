@@ -100,7 +100,14 @@ From `packages/runtime.list`: what the desktop needs to run.
 
 ### Login keyring and fonts
 
-- `gnome-keyring`: stores passwords and keys for apps.
+- `gnome-keyring`: stores passwords and keys for apps. It brings `gcr4`, whose SSH agent
+  (`gcr-ssh-agent`) Ubuntu turns on for every user. Once started, that agent points
+  `SSH_AUTH_SOCK` in your systemd user environment at itself instead of at OpenSSH's
+  agent (`ssh-agent.socket`, from Ubuntu Server's `openssh-client`), and never points it
+  back. limDE keeps one SSH agent, OpenSSH's own, as on Ubuntu Server: the installer's
+  Login keyring step masks `gcr-ssh-agent.socket` and `gcr-ssh-agent.service` for you,
+  once. limDE itself uses no SSH agent; [CUSTOMIZE.md](CUSTOMIZE.md#ssh-agent) says how to
+  use either one.
 - `libpam-gnome-keyring`: the login module that unlocks the keyring with your password
   when you log in on tty1, and starts it for the session. The package itself adds only
   the line that changes the keyring's password when you change yours with `passwd`; the

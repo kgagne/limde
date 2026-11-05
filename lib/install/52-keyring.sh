@@ -8,6 +8,15 @@
 
 PAM_LOGIN=/etc/pam.d/login
 
+# gcr4, which gnome-keyring brings, turns on GNOME's SSH agent for every user. Its socket
+# sets SSH_AUTH_SOCK in the user manager's environment to itself, over OpenSSH's agent
+# (ssh-agent.socket, from openssh-client), and never sets it back. limDE keeps OpenSSH's
+# agent as the one SSH agent: it masks both units for you, as `systemctl --user mask`
+# would (links to /dev/null in ~/.config/systemd/user), whether or not the user manager
+# runs. It does this once, so units you unmask later stay on.
+GCR_SSH_UNITS=(gcr-ssh-agent.socket gcr-ssh-agent.service)
+GCR_SSH_DONE=$STATE_DIR/gcr-ssh-agent-masked
+
 # Has the PAM file a line of this type (auth, session) for pam_gnome_keyring, in any form?
 # $1: type, $2: file.
 pam_keyring_line() {
@@ -22,6 +31,50 @@ pam_insert_after() {
     { print }
     !done && $1 == "@include" && $2 == inc { print add; done = 1 }
     END { exit !done }' "$1"
+}
+
+# Is this unit masked for the user? $1: unit file path.
+unit_masked() { [[ -L $1 && $(readlink "$1") == /dev/null ]]; }
+
+mask_gcr_ssh_agent() {
+  local dir=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user unit made=0 kept=()
+  if [[ -e $GCR_SSH_DONE ]]; then
+    for unit in "${GCR_SSH_UNITS[@]}"; do
+      unit_masked "$dir/$unit" || { ok "gcr-ssh-agent left on, as you set it"; return; }
+    done
+    ok "OpenSSH's agent is the SSH agent (gcr-ssh-agent masked)"
+    return
+  fi
+  for unit in "${GCR_SSH_UNITS[@]}"; do
+    unit_masked "$dir/$unit" && continue
+    # A file of yours with that name replaces gcr's unit; leave it.
+    if [[ -e $dir/$unit || -L $dir/$unit ]]; then kept+=("$unit"); continue; fi
+    mkdir -p "$dir"
+    ln -s /dev/null "$dir/$unit"
+    made=1
+  done
+  mkdir -p "$STATE_DIR"; : > "$GCR_SSH_DONE"
+  ((${#kept[@]})) && note "kept your own ${kept[*]} in $dir"
+  if ((!made)); then
+    ok "OpenSSH's agent is the SSH agent (gcr-ssh-agent masked)"
+    return
+  fi
+  # A running user manager (a login or an SSH session) reads the links after a reload.
+  # Stop gcr's agent and hand SSH_AUTH_SOCK back to OpenSSH's, which gcr's socket took.
+  if systemctl --user show-environment >/dev/null 2>&1; then
+    local run=${XDG_RUNTIME_DIR:-/run/user/$(id -u)} sock
+    systemctl --user daemon-reload || true
+    systemctl --user stop "${GCR_SSH_UNITS[@]}" 2>/dev/null || true
+    sock=$(systemctl --user show-environment | sed -n 's/^SSH_AUTH_SOCK=//p')
+    if [[ $sock == "$run/gcr/ssh" ]]; then
+      if systemctl --user -q is-active ssh-agent.socket; then
+        systemctl --user set-environment "SSH_AUTH_SOCK=$run/openssh_agent" || true
+      else
+        systemctl --user unset-environment SSH_AUTH_SOCK || true
+      fi
+    fi
+  fi
+  changed "masked gcr-ssh-agent, so OpenSSH's agent stays the SSH agent ($dir)"
 }
 
 step_keyring() {
@@ -59,4 +112,5 @@ step_keyring() {
     ok "the tty1 login unlocks the keyring ($PAM_LOGIN)"
   fi
   rm -rf "$work"
+  mask_gcr_ssh_agent
 }
