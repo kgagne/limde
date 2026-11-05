@@ -48,18 +48,22 @@ dpkg -s hostapd dnsmasq-base >/dev/null 2>&1 || {
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq hostapd dnsmasq-base >/dev/null
 }
 sudo pkill -x hostapd || true
-for f in /tmp/dnsmasq-wlan1.pid /tmp/dnsmasq-wlan2.pid; do [ -f \$f ] && sudo pkill -F \$f; done; true
+for f in /tmp/dnsmasq-wlan1.pid /tmp/dnsmasq-wlan2.pid; do [ -f \$f ] && sudo pkill -F \$f || true; done
 sudo modprobe -r mac80211_hwsim 2>/dev/null || true
 sudo modprobe mac80211_hwsim radios=3
 for _ in 1 2 3 4 5 6 7 8 9 10; do [ -e /sys/class/net/wlan2 ] && break; sleep 0.5; done
-sleep 2
+# NetworkManager needs a moment to pick up new radios, longer on a busy host.
+for _ in \$(seq 30); do nmcli -t -f DEVICE device | grep -qx wlan2 && break; sleep 0.5; done
 # wlan0 stays with NetworkManager as the client; wlan1 and wlan2 are the access points.
 for i in 1 2; do sudo nmcli device set wlan\$i managed no; done
 printf '%s\n' interface=wlan1 driver=nl80211 ssid=limde-psk hw_mode=g channel=1 \
   wpa=2 wpa_key_mgmt=WPA-PSK rsn_pairwise=CCMP wpa_passphrase=$password > /tmp/ap-psk.conf
 printf '%s\n' interface=wlan2 driver=nl80211 ssid=limde-open hw_mode=g channel=6 > /tmp/ap-open.conf
-sudo hostapd -B /tmp/ap-psk.conf >/dev/null
-sudo hostapd -B /tmp/ap-open.conf >/dev/null
+# hostapd 2.11 sometimes segfaults when started right after the radios appear; try again.
+for c in /tmp/ap-psk.conf /tmp/ap-open.conf; do
+  for _ in 1 2 3; do sudo hostapd -B \$c >/dev/null && break; sleep 1; done
+done
+pgrep -c -x hostapd | grep -qx 2
 # Each access point hands out addresses, as a router would.
 for i in 1 2; do
   sudo ip addr add 10.99.\$i.1/24 dev wlan\$i
