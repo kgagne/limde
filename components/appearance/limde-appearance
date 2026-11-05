@@ -39,6 +39,7 @@ MODE_FILE = STATE / 'mode'
 COLOR = re.compile(r'#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?')
 NAME = re.compile(r'[A-Za-z0-9 _-]+')
 FONT = re.compile(r'[A-Za-z][A-Za-z0-9 ]* [0-9]{1,2}')
+INTERFACE = 'org.gnome.desktop.interface'
 
 
 def merged_config(defaults_dir, user_file):
@@ -138,13 +139,26 @@ def desktop_preferences(config):
               'document-font-name': config['fonts']['document']}
     changes = {}
     for key, value in wanted.items():
-        got = subprocess.run(['gsettings', 'get', 'org.gnome.desktop.interface', key],
-                             text=True, capture_output=True)
+        got = subprocess.run(['gsettings', 'get', INTERFACE, key], text=True, capture_output=True)
         if got.returncode != 0:
             return {}  # schemas not installed; the settings.ini files still apply
         if got.stdout.strip() != repr(value):
             changes[key] = {'before': got.stdout.strip(), 'after': value}
     return changes
+
+
+def set_desktop_preference(key, value):
+    """Set one GNOME interface setting and read it back: gsettings set exits 0 even when
+    the value is lost (without dconf it keeps it in memory, gone when it exits)."""
+    done = subprocess.run(['gsettings', 'set', INTERFACE, key, value], text=True, capture_output=True)
+    if done.returncode != 0:
+        said = done.stderr.strip().splitlines()
+        raise ValueError(f'could not set desktop preference {key}: '
+                         f'{said[-1] if said else "gsettings failed"}')
+    got = subprocess.run(['gsettings', 'get', INTERFACE, key], text=True, capture_output=True)
+    if got.returncode != 0 or got.stdout.strip() != repr(value):
+        raise ValueError(f'desktop preference {key} did not persist: gsettings reads '
+                         f'{got.stdout.strip() or "nothing"}, not {value!r}')
 
 
 def main():
@@ -215,15 +229,17 @@ def main():
         os.chmod(staged.name, mode)
         os.replace(staged.name, target)
         print(f'Updated: {target}')
+    # Saved before the desktop preferences: should one of them fail, the mode file still
+    # matches the files just written, and --check reports only that preference.
+    if args.mode:
+        MODE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        MODE_FILE.write_text(args.mode + '\n')
     if prefs:
         backup.mkdir(parents=True, exist_ok=True)
         (backup / 'desktop-preferences.before.json').write_text(json.dumps(prefs, indent=2) + '\n')
         for key, change in prefs.items():
-            subprocess.run(['gsettings', 'set', 'org.gnome.desktop.interface', key, change['after']], check=True)
+            set_desktop_preference(key, change['after'])
             print(f"Updated desktop preference: {key} = {change['after']}")
-    if args.mode:
-        MODE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        MODE_FILE.write_text(args.mode + '\n')
     if pending or prefs:
         print(f'Previous versions saved in {backup}')
         print('Reopen affected apps; run "makoctl reload" and "labwc --reconfigure" to refresh those.')

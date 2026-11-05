@@ -66,6 +66,14 @@ rm -rf "$tmp_theme"
 # 4. Colour contrast (WCAG 2.2) for both palettes.
 python3 "$root/components/appearance/check-contrast" || fail=1
 
+# 4b. The appearance renderer, in a temporary home with a stand-in gsettings; quiet
+# unless it fails.
+if ! out=$(python3 -B "$root/components/appearance/tests/test_limde_appearance.py" 2>&1); then
+  printf '%s\n' "$out" >&2
+  echo "appearance: the renderer tests fail" >&2
+  fail=1
+fi
+
 # 5. The code map still points at files and names that exist.
 scripts/check-codemap || fail=1
 
