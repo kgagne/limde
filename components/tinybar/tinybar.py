@@ -124,7 +124,7 @@ def load_settings():
 
 # This app's button always sits leftmost, ahead of every other app, however
 # often its window closes and reopens, and shows only its icon. Defaults to
-# limde's agent-web window; set first_app_id in settings.toml to change it.
+# limDE's agent-web window; set first_app_id in settings.toml to change it.
 FIRST_APP_ID = load_settings().get("first_app_id", "limde.AgentWeb")
 
 # Widest an app's name gets on its task button, in characters, before it ends in "…".

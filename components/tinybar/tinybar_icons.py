@@ -1,4 +1,4 @@
-"""Panel icons: SVG icons from the icon theme (limde's by default), never font glyphs.
+"""Panel icons: SVG icons from the icon theme (limDE's by default), never font glyphs.
 
 Every icon is drawn by a Gtk.Image from the theme's "-symbolic" variant, so GTK colours it
 like the surrounding text. Sizes come from CSS (-gtk-icon-size), one per place: the panel,
@@ -52,7 +52,6 @@ STATUS_ICONS = {
 APP_ICON_FALLBACKS = {
     'soffice': 'libreoffice-startcenter',
     'soffice.bin': 'libreoffice-startcenter',
-    'limde.preview': 'eye',
 }
 
 
@@ -125,7 +124,7 @@ class IconLibrary:
         return True
 
     def is_brand(self, name):
-        """True when the theme answers name with one of limde's brand icons."""
+        """True when the theme answers name with one of limDE's brand icons."""
         if not name or not self.theme.has_icon(name):
             return False
         icon = self.theme.lookup_icon(name, None, 16, 1, Gtk.TextDirection.NONE, 0)
@@ -134,7 +133,7 @@ class IconLibrary:
         return bool(path) and Path(path).resolve().name.startswith('brand-')
 
     def application_widget(self, app_id):
-        """The window's app icon: the theme's symbolic version when there is one (limde
+        """The window's app icon: the theme's symbolic version when there is one (limDE
         ships many), else the app's own icon drawn at the same visual size."""
         names = []
         fallback = APP_ICON_FALLBACKS.get(app_id.casefold())
@@ -153,7 +152,7 @@ class IconLibrary:
 
         for name in dict.fromkeys(names):
             if self.is_brand(name.removesuffix('-symbolic')):
-                # limde's app icons carry the app's own colour in their plain copy.
+                # limDE's app icons carry the app's own colour in their plain copy.
                 image = glyph_widget('task-icon')
                 image.set_from_icon_name(name.removesuffix('-symbolic'))
                 image.set_visible(True)
@@ -174,7 +173,7 @@ class IconLibrary:
 
         if native_icon is not None:
             # Another theme's full-colour icon, usually drawn edge to edge: the
-            # task-icon-foreign class shrinks it to the same margin as limde's.
+            # task-icon-foreign class shrinks it to the same margin as limDE's.
             image = Gtk.Image.new_from_gicon(native_icon)
             image.add_css_class('task-icon')
             image.add_css_class('task-icon-foreign')

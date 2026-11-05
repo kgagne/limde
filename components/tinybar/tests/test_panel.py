@@ -70,8 +70,10 @@ class SystemMenuTests(unittest.TestCase):
         self.assertEqual(command[:2], ["sh", "-c"])
         self.assertEqual(command[4], "light")
         self.assertIn('limde-appearance --apply --mode "$1"', command[2])
-        # pkill -f would match the script's own command line and stop it halfway.
+        # -f would match the script's own command line: pkill -f stops it halfway, and
+        # pgrep -f always finds it, so the wait for Walker to exit never ends early.
         self.assertNotIn("pkill -f", command[2])
+        self.assertNotIn("pgrep -f", command[2])
 
     def test_lock_and_restart_are_shown_first(self):
         keys = [key for key, *_rest in tinybar.SystemMenu.ACTIONS]
@@ -374,9 +376,9 @@ class IdleHideTests(unittest.TestCase):
 
     def test_leaves_the_panel_whatever_the_case_of_its_app_id(self):
         windows = [self.window(1, "limde.Tinybar"), self.window(2, "LIMDE.TINYBAR"),
-                   self.window(3, "foot")]
+                   self.window(3, "TINYBAR"), self.window(4, "foot")]
         order = tinybar.idle_hide_order(windows, [], keep=set())
-        self.assertEqual([w["id"] for w in order], [3])
+        self.assertEqual([w["id"] for w in order], [4])
 
 
 class TaskListTests(unittest.TestCase):
