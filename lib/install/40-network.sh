@@ -68,6 +68,26 @@ step_network_arch() {
   nm_connected || die "network lost after turning networkd off"
 }
 
+# Stopping networkd normally releases its DHCP leases and removes their addresses, which
+# leaves the machine without one until NetworkManager connects; an SSH session (and an
+# install running in it) can die in that gap. Tell each .network file networkd runs a link
+# with to keep its DHCP configuration when networkd stops and to send no release, through a
+# drop-in under /run (gone at the next boot, by which time networkd is off), so the address
+# stays up while NetworkManager takes the link over.
+networkd_keep_address() {
+  systemctl -q is-active systemd-networkd.service 2>/dev/null || return 0
+  local file dir
+  for file in /run/systemd/network/*.network /etc/systemd/network/*.network; do
+    [[ -f $file ]] || continue
+    dir=/run/systemd/network/$(basename "$file").d
+    [[ -f $dir/90-limde-keep.conf ]] && continue
+    sudo install -d -m 755 "$dir"
+    printf '%s\n' '# Written by limde: keep the address while NetworkManager takes over.' \
+      '[Network]' 'KeepConfiguration=dhcp-on-stop' '[DHCPv4]' 'SendRelease=no' \
+      | sudo install -m 644 /dev/stdin "$dir/90-limde-keep.conf"
+  done
+}
+
 step_network() {
   heading "Network"
   [[ $DISTRO == arch ]] && { step_network_arch; return; }
@@ -77,6 +97,8 @@ step_network() {
     return
   fi
 
+  # Before netplan apply, which makes networkd reload: it then runs the link with these.
+  networkd_keep_address
   if [[ ! -f $NETPLAN_FILE ]]; then
     printf '%s\n' '# Written by limde: NetworkManager manages all interfaces.' \
       'network:' '  version: 2' '  renderer: NetworkManager' \
@@ -114,7 +136,8 @@ step_network() {
     # lose its session there, and this script with it: the stop and the reconnect run as
     # one system job, which finishes whatever happens to this shell.
     local devices
-    devices=$(nmcli -t -f DEVICE,STATE device 2>/dev/null | sed -n 's/:connected$//p' | tr '\n' ' ')
+    # "connected (externally)": NetworkManager only took over what networkd had set up.
+    devices=$(nmcli -t -f DEVICE,STATE device 2>/dev/null | sed -n 's/:connected.*$//p' | tr '\n' ' ')
     sudo systemd-run --quiet --wait --collect --unit="limde-network-switch-$$" \
       --setenv=LIMDE_DEVICES="$devices" \
       /bin/sh -c 'systemctl stop "$@" systemd-networkd.service
