@@ -99,8 +99,10 @@
     </context>
   </mouse>
 
+  <!-- Alt+Tab shows a grid of window thumbnails; click one, or let go of Alt. The fields
+       below apply only to style="classic", the text list. -->
   <windowSwitcher preview="yes" outlines="no" order="focus">
-    <osd show="yes" style="classic" output="focused" />
+    <osd show="yes" style="thumbnail" output="focused" />
     <fields>
       <field content="icon" width="3%" />
       <field content="custom" width="90%" format="%n %t" />
