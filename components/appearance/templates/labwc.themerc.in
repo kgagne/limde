@@ -16,8 +16,8 @@ window.active.label.text.color: ${colors_text}
 window.inactive.label.text.color: ${colors_muted}
 window.label.text.justify: center
 
-window.button.width: 22
-window.button.height: 22
+window.button.width: 20
+window.button.height: 20
 window.button.spacing: 0
 
 # The buttons are masks (/usr/local/share/themes/limde/labwc/*.xbm) filled with the

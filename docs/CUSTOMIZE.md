@@ -239,14 +239,14 @@ Reopen other apps, and log out and back in for the panel and the launcher.
 The icon themes are built by `./install`, not by `limde-appearance`. If you change icon
 settings, run `./install` from your clone afterwards.
 
-The window title-bar buttons (close, minimise, maximise) are 16-pixel rounded squares;
+The window title-bar buttons (close, minimise, maximise) are 14-pixel rounded squares;
 pointing at one shows a cut-out ×, − or + in it, so the button reads without its colour.
 Each is a one-bit mask that labwc fills with the mode's `button_close`,
 `button_iconify`, `button_maximize` or, on inactive windows, `button_inactive` colour.
 To draw your own shapes, put XBM files with the same names (`close.xbm`, `iconify.xbm`,
 `max.xbm`, `max_toggled.xbm` for a maximised window, and `_hover` versions such as
 `close_hover.xbm` for the pointed-at look) in
-`~/.local/share/themes/limde/labwc/`. labwc looks there first. Keep them within 22 by 22
+`~/.local/share/themes/limde/labwc/`. labwc looks there first. Keep them within 20 by 20
 pixels, the size of a button: larger ones are scaled down and look blurred.
 
 `scripts/check` holds limDE's own palettes to WCAG 2.2's contrast minimums. It does not
