@@ -78,7 +78,8 @@ From `packages/runtime.list`: what the desktop needs to run.
 - `libglib2.0-bin`: `gdbus`, which sends notifications for screenshots and cut or copied
   files.
 - `wtype`: sends keystrokes for some keyboard shortcuts (`app-shortcut`, behind Super+W
-  and Super+Q).
+  and Super+Q), and presses Alt+Super+H at login to put the pointer in the middle of the
+  screen (`80-pointer.sh`).
 
 ### Sound
 

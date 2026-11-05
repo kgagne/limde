@@ -42,11 +42,13 @@ case "${1:-}" in
 "")
     # One loop at a time. A loop whose labwc has gone is stopped, not counted: autologin can
     # start the next session before that loop notices, and this session would get no loop.
+    # Nor does one that ended after pgrep listed it (it ends by itself within 2 s of its
+    # labwc), or another user's, which kill -0 cannot reach either.
     for loop in $(pgrep -f -- "$LOOP"); do
         session=$(loop_session "$loop")
         if [ -n "$session" ] && ! kill -0 "$session" 2>/dev/null; then
             kill "$loop" 2>/dev/null || true
-        else
+        elif kill -0 "$loop" 2>/dev/null; then
             exit 0
         fi
     done
