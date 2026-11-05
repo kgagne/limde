@@ -1,0 +1,7 @@
+# limde session environment, installed to /etc/xdg/labwc/environment. Your own
+# ~/.config/labwc/environment is read after it, so a line there wins.
+#
+# libadwaita apps (Papers, zenity) ask a settings portal for the light or dark choice.
+# limDE runs no portal, so without this they stay light in dark mode. With it they read
+# GSettings' color-scheme, which limde-appearance sets, and follow each switch.
+ADW_DISABLE_PORTAL=1

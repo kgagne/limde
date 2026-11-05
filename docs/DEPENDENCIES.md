@@ -207,7 +207,9 @@ Laptop extras: screen brightness keys, power use and disk health tools.
 A PDF and document viewer (GNOME Papers).
 
 - `papers`: the document viewer. The starting `~/.config/mimeapps.list` names it for PDF,
-  DjVu and TIFF files.
+  DjVu and TIFF files. It is a libadwaita app, which follows light and dark mode only
+  through `ADW_DISABLE_PORTAL=1` in limDE's labwc environment (see
+  [CUSTOMIZE.md](CUSTOMIZE.md#light-and-dark)).
 
 ### printing
 

@@ -107,8 +107,10 @@ columnview > header button, treeview.view header button {
   box-shadow: none;
 }
 
-/* libadwaita runs in its light scheme (it ignores gtk-application-prefer-dark-theme), so
-   every named colour not set above, such as the file chooser footer, stays white. */
+/* libadwaita's own named colours, such as the file chooser footer's, come from its light
+   or dark scheme, never from limDE's palette. It ignores gtk-application-prefer-dark-theme
+   and goes dark only when it reads color-scheme (ADW_DISABLE_PORTAL=1 in labwc's
+   environment); without that it stays light. These set the ones the rules above miss. */
 @define-color headerbar_bg_color ${colors_background};
 @define-color headerbar_fg_color ${colors_text};
 @define-color headerbar_border_color ${colors_border};

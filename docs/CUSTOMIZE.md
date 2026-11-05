@@ -263,8 +263,14 @@ limde-appearance --apply --mode light
 ```
 
 (or `--mode dark`), then reloads labwc and Mako and restarts Walker's service. GTK 4 apps
-that are already open may keep their old icons until you reopen them, and foot's
-terminal colours stay dark in both modes.
+that are already open may keep their old colours and icons until you reopen them, and
+foot's terminal colours stay dark in both modes.
+
+libadwaita apps, such as Papers and zenity's dialogs, ask a settings portal for the mode.
+limDE runs none, so its labwc environment sets `ADW_DISABLE_PORTAL=1`, which makes them
+read it from the same GNOME setting the switch writes; without it they stay light. If you
+install a settings portal and want them to ask it, put `ADW_DISABLE_PORTAL=0` in
+`~/.config/labwc/environment` and log in again.
 
 The choice made with `--mode` is kept in `~/.local/state/limde/appearance/mode`, and it
 wins over any `mode` in the `[desktop]` group of your `appearance.toml`. To let your file
