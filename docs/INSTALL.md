@@ -183,8 +183,12 @@ menu needs NetworkManager, so the Network step switches over:
    every interface to NetworkManager, and runs `netplan apply`.
 2. It waits up to 30 seconds for NetworkManager to report a connection and for
    `archive.ubuntu.com` to resolve.
-3. Only then does it turn off `systemd-networkd` and its socket, wait-online service and
-   `networkd-dispatcher`.
+3. Only then does it turn off `systemd-networkd`, its sockets, wait-online service and
+   `networkd-dispatcher`. It stops the sockets as well as the service: one left listening
+   would start networkd again at the next name lookup, until the next boot. Stopping
+   networkd takes away the address and DNS servers it shared with NetworkManager, so the
+   step then connects NetworkManager's devices again and waits up to 30 seconds for the
+   connection and name lookups.
 
 If `netplan apply` fails, or no working connection comes up within 30 seconds, it removes
 its netplan file, runs `netplan apply` again to put the previous setup back, and stops

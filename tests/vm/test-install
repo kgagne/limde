@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Acceptance test for the installer, in a fresh throwaway VM.
 #   tests/vm/test-install [VM_NAME] [--keep] [--save] [-- INSTALL_ARGS...]
-# 1. copy this working tree into the VM and run ./install --yes (plus INSTALL_ARGS)
+# 1. copy this working tree into the VM and run ./install --yes (plus INSTALL_ARGS);
+#    networkd must be off right after it, before any reboot
 # 2. run it again: it must report "No changes"
 # 3. reboot: labwc must start on tty1 by itself, NetworkManager must be connected,
 #    and networkd must stay off
@@ -45,6 +46,12 @@ if ((rc == 0)); then
 else
   fail "first install run exits 0 (see install-1.log)"
 fi
+# Before any reboot: turning networkd off must also stop its sockets, or the next
+# connection to one (systemd-resolved's hook, at a name lookup) starts it again.
+networkd_off='getent hosts archive.ubuntu.com >/dev/null; sleep 2
+  ! systemctl -q is-active systemd-networkd.service &&
+  [ -z "$(systemctl list-units --plain --no-legend --state=active "systemd-networkd*.socket")" ]'
+check "networkd is off right after the install" on_vm "$networkd_off"
 echo "== second run"
 on_vm "cd limde && ./install --yes ${install_args[*]}" >"$out/install-2.log" 2>&1; rc=$?
 echo "exit code $rc" >>"$out/install-2.log"
@@ -66,7 +73,7 @@ check "running labwc is the limde build" on_vm 'pid=$(pgrep -x labwc) && [ "$(re
 check "labwc runs on tty1" on_vm 'pid=$(pgrep -x labwc) && tty=$(ps -o tty= -p $pid) && [ "$tty" = tty1 ]'
 check "tty1 login unlocks the keyring" on_vm 'grep -qx "auth  *optional  *pam_gnome_keyring.so" /etc/pam.d/login && grep -qx "session  *optional  *pam_gnome_keyring.so auto_start" /etc/pam.d/login'
 check "NetworkManager connected" on_vm 'nmcli -t -f STATE general | grep -q ^connected'
-check "networkd stays off" on_vm '! systemctl -q is-active systemd-networkd.service'
+check "networkd stays off" on_vm "$networkd_off"
 check "built binaries have all their libraries" on_vm 'test -x /usr/local/bin/labwc -a -x /usr/local/libexec/limde/pcmanfm && ! ldd /usr/local/bin/labwc /usr/local/bin/labnag /usr/local/libexec/limde/pcmanfm | grep -q "not found"'
 check "pcmanfm on PATH runs the patched build" on_vm '[ "$(bash -lc "command -v pcmanfm")" = /usr/local/bin/pcmanfm ] && grep -q /usr/local/libexec/limde/pcmanfm /usr/local/bin/pcmanfm && grep -q preview_cmd /usr/local/libexec/limde/pcmanfm && grep -q PCMANFM_GTK_THEME /usr/local/libexec/limde/pcmanfm'
 check "PCManFM appears once in the app menu" on_vm '[ "$(ls /usr/share/applications/pcmanfm.desktop /usr/local/share/applications/pcmanfm.desktop 2>/dev/null | wc -l)" = 1 ]'

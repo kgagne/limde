@@ -10,9 +10,18 @@ nm_connected() {
   [[ $(nmcli -t -f STATE general 2>/dev/null) == connected* ]] && getent hosts archive.ubuntu.com >/dev/null
 }
 
+# networkd's service and sockets that are running, one per line. Turning networkd off
+# stops only the units named, and its sockets keep listening: the next connection to one
+# (systemd-resolved's hook, for example) starts networkd again.
+networkd_active() {
+  systemctl list-units --plain --no-legend --state=active \
+    systemd-networkd.service 'systemd-networkd*.socket' 2>/dev/null | awk '{print $1}' || true
+}
+
 step_network() {
   heading "Network"
-  if [[ -f $NETPLAN_FILE ]] && nm_connected && ! systemctl -q is-enabled systemd-networkd.service 2>/dev/null; then
+  if [[ -f $NETPLAN_FILE ]] && nm_connected && ! systemctl -q is-enabled systemd-networkd.service 2>/dev/null \
+     && [[ -z $(networkd_active) ]]; then
     ok "NetworkManager manages the network"
     return
   fi
@@ -40,5 +49,27 @@ step_network() {
       changed "turned off $unit"
     fi
   done
+  # Disabling the service disabled its sockets too (its Also= line), but left them
+  # listening. Stop them first, so nothing can start networkd again, then networkd.
+  local active sockets
+  active=$(networkd_active)
+  if [[ -n $active ]]; then
+    mapfile -t sockets < <(grep '\.socket$' <<< "$active" || true)
+    ((${#sockets[@]} == 0)) || sudo systemctl stop "${sockets[@]}"
+    sudo systemctl stop systemd-networkd.service
+    active=$(networkd_active)
+    [[ -z $active ]] || die "networkd is still running: ${active//$'\n'/ }"
+    # Until now networkd also ran the links NetworkManager took over. Stopping it removed
+    # the address they shared, and systemd-resolved dropped the DNS servers it had from
+    # networkd (it refused NetworkManager's while networkd ran). Connect NetworkManager's
+    # devices again, so it sets both.
+    local device
+    while read -r device; do
+      sudo nmcli device connect "$device" >/dev/null 2>&1 || true
+    done < <(nmcli -t -f DEVICE,STATE device 2>/dev/null | sed -n 's/:connected$//p')
+    changed "stopped networkd and its sockets"
+  fi
+  local i
+  for i in $(seq 30); do nm_connected && break; sleep 1; done
   nm_connected || die "network lost after turning networkd off"
 }

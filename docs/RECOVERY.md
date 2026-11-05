@@ -199,9 +199,14 @@ again.
 
 Only once NetworkManager is connected does the installer turn off `systemd-networkd`,
 `systemd-networkd.socket`, `systemd-networkd-wait-online.service` and
-`networkd-dispatcher.service`. If the connection is lost right after that, the installer
-stops with "network lost after turning networkd off" and does not undo the switch by
-itself.
+`networkd-dispatcher.service`. Turning off the service also turns off networkd's other
+sockets (`systemd-networkd-varlink.socket` and `systemd-networkd-resolve-hook.socket`),
+and the installer stops all of its sockets, then networkd itself. If any of them is still
+running after that, the installer ends with "networkd is still running" and their names.
+It then connects NetworkManager's devices again, since stopping networkd took away the
+address and DNS servers they shared. If the connection or name lookups do not work
+within 30 seconds after that, it ends with
+"network lost after turning networkd off" and does not undo the switch by itself.
 
 To return to Ubuntu Server's own network setup by hand, undo those two changes. This is
 the reverse of what the installer does, but it is not something limDE tests:
@@ -211,7 +216,7 @@ sudo rm /etc/netplan/90-limde-networkmanager.yaml
 ```
 
 ```
-sudo systemctl enable --now systemd-networkd.socket systemd-networkd.service
+sudo systemctl enable --now systemd-networkd.socket systemd-networkd-varlink.socket systemd-networkd-resolve-hook.socket systemd-networkd.service
 ```
 
 ```
