@@ -4,7 +4,10 @@
 # manager's PAM file, and limde has no display manager, so they go in /etc/pam.d/login,
 # in the places GDM's file has them: auth after common-auth, which reads the password,
 # and session after common-session. Both are optional: a keyring problem never blocks a
-# login.
+# login. Arch has no pam-auth-update, so step_keyring_arch adds all three itself: auth and
+# session in /etc/pam.d/login after its system-local-login includes, and the password line
+# in /etc/pam.d/passwd after system-auth (pacman keeps edited PAM files on updates and
+# leaves a .pacnew beside them).
 
 PAM_LOGIN=/etc/pam.d/login
 
@@ -77,8 +80,56 @@ mask_gcr_ssh_agent() {
   changed "masked gcr-ssh-agent, so OpenSSH's agent stays the SSH agent ($dir)"
 }
 
+# Print the file with a line added right after its first "TYPE include NAME" (Arch's PAM
+# style); fail if it has none. $1: file, $2: type, $3: include name, $4: line.
+pam_insert_after_include() {
+  awk -v t="$2" -v inc="$3" -v add="$4" '
+    { print }
+    !done && $1 == t && $2 == "include" && $3 == inc { print add; done = 1 }
+    END { exit !done }' "$1"
+}
+
+# Add pam_gnome_keyring lines to one PAM file, Arch style. $1: file, then one
+# "TYPE|INCLUDE|LINE" per line wanted. A backup of the file goes to STATE_DIR/backups.
+pam_add_arch() {
+  local file=$1 work spec type include line added=() missing=0
+  shift
+  work=$(mktemp -d)
+  cp "$file" "$work/new" || die "could not read $file"
+  for spec in "$@"; do
+    IFS='|' read -r type include line <<< "$spec"
+    pam_keyring_line "$type" "$work/new" && continue
+    if pam_insert_after_include "$work/new" "$type" "$include" "$line" > "$work/next"; then
+      mv "$work/next" "$work/new"; added+=("$type")
+    else
+      note "$file has no '$type include $include' line; add '$line' to it yourself"
+      missing=1
+    fi
+  done
+  if ((${#added[@]})); then
+    mkdir -p "$STATE_DIR/backups"
+    cp "$file" "$STATE_DIR/backups/pam.d-${file##*/}.$(date +%Y%m%dT%H%M%S)"
+    sudo install -m 644 "$work/new" "$file.limde-new" && sudo mv "$file.limde-new" "$file" \
+      || die "could not update $file"
+    changed "added the keyring's ${added[*]} line(s) to $file (previous copy in $STATE_DIR/backups)"
+  elif ((!missing)); then
+    ok "$file has the keyring's lines"
+  fi
+  rm -f "$work/new" "$work/next"; rmdir "$work" 2>/dev/null || true
+}
+
+step_keyring_arch() {
+  pam_add_arch "$PAM_LOGIN" \
+    'auth|system-local-login|auth       optional     pam_gnome_keyring.so' \
+    'session|system-local-login|session    optional     pam_gnome_keyring.so auto_start'
+  pam_add_arch /etc/pam.d/passwd \
+    'password|system-auth|password	optional	pam_gnome_keyring.so'
+  mask_gcr_ssh_agent
+}
+
 step_keyring() {
   heading "Login keyring"
+  [[ $DISTRO == arch ]] && { step_keyring_arch; return; }
   local work type include line added=() missing=0
   work=$(mktemp -d)
   cp "$PAM_LOGIN" "$work/new" || die "could not read $PAM_LOGIN"

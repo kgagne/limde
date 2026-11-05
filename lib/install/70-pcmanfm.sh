@@ -1,7 +1,7 @@
 # Build PCManFM from its pinned tag with limde's patches (Space preview; Cut, Copy and
 # Paste keys that work after picking a place in the side pane; even space around list
 # icons; a GTK theme of its own) and install it to /usr/local, where it takes precedence
-# over Ubuntu's copy. Ubuntu's package stays installed for its supporting files and
+# over Ubuntu's copy (on Arch, as a local package; pcmanfm_build_arch). Ubuntu's package stays installed for its supporting files and
 # dependencies; the patched build's own menu entries are removed so the launcher doesn't
 # list PCManFM twice. The program goes to libexec, and /usr/local/bin/pcmanfm is a small
 # wrapper that gives it the panel's GTK theme (components/pcmanfm/pcmanfm), so desktop
@@ -21,6 +21,33 @@ step_pcmanfm() {
   fi
 }
 
+# Arch: the same build as a local package (components/pcmanfm/arch/PKGBUILD), so pacman
+# owns its files. $1: the stamp text, then the patch files in order.
+pcmanfm_build_arch() {
+  local want=$1 patch names=() sum pkg
+  shift
+  local work=${XDG_CACHE_HOME:-$HOME/.cache}/limde/build/pcmanfm-arch
+  local log=$STATE_DIR/pcmanfm-build.log
+  mkdir -p "$STATE_DIR" "$work"; : > "$log"
+  cp "$LIMDE_ROOT/components/pcmanfm/arch/PKGBUILD" "$work/"
+  for patch in "$@"; do cp "$patch" "$work/"; names+=("${patch##*/}"); done
+  sum=$(cat "$@" | sha256sum | cut -c1-8)
+  note "building PCManFM $PCMANFM_TAG as a local package (log: $log)"
+  (
+    cd "$work"
+    export LIMDE_PCMANFM_URL=$PCMANFM_URL LIMDE_PCMANFM_COMMIT=$PCMANFM_COMMIT \
+      LIMDE_PCMANFM_TAG=$PCMANFM_TAG LIMDE_PCMANFM_PATCHSUM=$sum \
+      LIMDE_PCMANFM_PATCHES="${names[*]}" LIMDE_PCMANFM_STAMP_TEXT=$want
+    # --nodeps: the build packages are in packages/arch/build.list, installed already.
+    makepkg --force --cleanbuild --nodeps --noconfirm
+  ) >>"$log" 2>&1 || { tail -n 20 "$log" >&2; die "PCManFM did not build (log: $log)"; }
+  pkg=$(find "$work" -maxdepth 1 -name "limde-pcmanfm-$PCMANFM_TAG.p$sum-1-*.pkg.tar*" | head -1)
+  [[ -n $pkg ]] || die "makepkg made no package (log: $log)"
+  sudo pacman -U --noconfirm "$pkg" >>"$log" 2>&1 || die "PCManFM did not install (log: $log)"
+  [[ $(cat "$PCMANFM_STAMP" 2>/dev/null) == "$want" ]] || die "the installed PCManFM package has no build stamp"
+  changed "installed PCManFM $PCMANFM_TAG with Space preview (local package limde-pcmanfm)"
+}
+
 pcmanfm_build() {
   # shellcheck source=/dev/null
   . "$LIMDE_ROOT/pins/pcmanfm"
@@ -33,6 +60,8 @@ pcmanfm_build() {
     ok "PCManFM $PCMANFM_TAG with Space preview is installed"
     return
   fi
+
+  [[ $DISTRO == arch ]] && { pcmanfm_build_arch "$want" "${patches[@]}"; return; }
 
   local work=${XDG_CACHE_HOME:-$HOME/.cache}/limde/build/pcmanfm
   local log=$STATE_DIR/pcmanfm-build.log

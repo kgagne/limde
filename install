@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# limde installer. Run as your normal user on Ubuntu Server 26.04 (x86_64).
+# limde installer. Run as your normal user on Ubuntu Server 26.04 or Arch Linux (x86_64).
 #
 #   ./install                 show the plan, ask about optional parts, then install
 #   ./install --plan          show the plan and stop; changes nothing

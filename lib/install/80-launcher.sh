@@ -5,8 +5,8 @@ LAUNCHER_STAMP=/usr/local/share/limde/launcher.versions
 
 step_launcher() {
   heading "Launcher (Walker and Elephant)"
-  # Elephant's file search runs `fd`; Ubuntu's fd-find names it fdfind.
-  if [[ $(readlink /usr/local/bin/fd 2>/dev/null) != /usr/bin/fdfind ]]; then
+  # Elephant's file search runs `fd`; Ubuntu's fd-find names it fdfind (Arch's fd is fd).
+  if [[ $DISTRO == ubuntu && $(readlink /usr/local/bin/fd 2>/dev/null) != /usr/bin/fdfind ]]; then
     [[ -e /usr/local/bin/fd && ! -L /usr/local/bin/fd ]] \
       && die "/usr/local/bin/fd exists and is not limde's link to fdfind; move it aside"
     sudo ln -sfn /usr/bin/fdfind /usr/local/bin/fd

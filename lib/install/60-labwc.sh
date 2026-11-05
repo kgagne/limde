@@ -57,7 +57,31 @@ labwc_headless_test() {  # $1: labwc program, $2: rc.xml, $3: log
   return "$status"
 }
 
+# Arch: labwc is Arch's own package (packages/arch/runtime.list), current enough that limDE
+# builds nothing. It must be LABWC_MIN_VERSION or newer, and it must pass the same headless
+# test with limDE's rc.xml. The test runs again whenever pacman updates labwc; the version
+# it passed with is kept in the stamp.
+step_labwc_arch() {
+  local version log=$STATE_DIR/labwc-check.log
+  version=$(pacman -Q labwc 2>/dev/null | awk '{print $2}')
+  [[ -n $version ]] || die "Arch's labwc package is not installed"
+  local bare=${version#*:}; bare=${bare%-*}
+  if [[ $(printf '%s\n' "$LABWC_MIN_VERSION" "$bare" | sort -V | head -1) != "$LABWC_MIN_VERSION" ]]; then
+    die "Arch's labwc is $bare; limDE's touchpad settings need $LABWC_MIN_VERSION or newer. Run sudo pacman -Syu once Arch's repositories have it, then ./install again"
+  fi
+  if [[ -f $LABWC_STAMP && $(cat "$LABWC_STAMP") == "arch $version" ]]; then
+    ok "Arch's labwc $version works with limDE's rc.xml"
+    return
+  fi
+  mkdir -p "$STATE_DIR"; : > "$log"
+  labwc_headless_test /usr/bin/labwc "$LIMDE_ROOT/config/labwc/rc.xml" "$log" \
+    || die "Arch's labwc $version failed the headless test with limDE's rc.xml (log: $log)"
+  echo "arch $version" | sudo install -D -m 644 /dev/stdin "$LABWC_STAMP"
+  changed "Arch's labwc $version passed the headless test with limDE's rc.xml"
+}
+
 step_labwc() {
+  [[ $DISTRO == arch ]] && { heading "labwc (Arch's package)"; step_labwc_arch; return; }
   heading "labwc (built from source)"
   # shellcheck source=/dev/null
   . "$LIMDE_ROOT/pins/labwc"

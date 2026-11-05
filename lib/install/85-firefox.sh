@@ -73,7 +73,11 @@ step_firefox() {
     ok "Firefox policies are in place"
   fi
 
-  if ! sudo cmp -s "$LIMDE_ROOT/components/firefox/apparmor-profile" "$FIREFOX_PROFILE" 2>/dev/null; then
+  # Ubuntu blocks the unprivileged user namespaces Firefox's sandbox needs unless an
+  # AppArmor profile allows them; Arch blocks nothing and runs no AppArmor by default.
+  if [[ $DISTRO == arch ]]; then
+    :
+  elif ! sudo cmp -s "$LIMDE_ROOT/components/firefox/apparmor-profile" "$FIREFOX_PROFILE" 2>/dev/null; then
     sudo install -m 644 "$LIMDE_ROOT/components/firefox/apparmor-profile" "$FIREFOX_PROFILE"
     sudo apparmor_parser -r "$FIREFOX_PROFILE" || die "the Firefox AppArmor profile did not load"
     changed "Firefox may use its sandbox ($FIREFOX_PROFILE)"

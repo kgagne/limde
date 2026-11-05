@@ -1,0 +1,46 @@
+# limDE's patched PCManFM as a local Arch package, built by lib/install/70-pcmanfm.sh with
+# makepkg and installed with pacman -U, so pacman knows its files. Same pinned tag and the
+# same four patches as the Ubuntu build (pins/pcmanfm). Like there, it goes to /usr/local
+# (the program in /usr/local/libexec/limde; /usr/local/bin/pcmanfm is limDE's wrapper) and
+# Arch's pcmanfm package stays installed for its supporting files.
+# The installer copies this file and the patches into the build folder and sets:
+#   LIMDE_PCMANFM_URL, LIMDE_PCMANFM_COMMIT, LIMDE_PCMANFM_TAG, LIMDE_PCMANFM_STAMP_TEXT,
+#   LIMDE_PCMANFM_PATCHES (the patch file names, in order), LIMDE_PCMANFM_PATCHSUM.
+pkgname=limde-pcmanfm
+pkgver=${LIMDE_PCMANFM_TAG:-1.4.0}.p${LIMDE_PCMANFM_PATCHSUM:-0}
+pkgrel=1
+pkgdesc="PCManFM with limDE's patches (Space preview and others)"
+arch=(x86_64)
+url=https://github.com/lxde/pcmanfm
+license=(GPL-2.0-or-later)
+depends=(pcmanfm libfm-gtk3 gtk3)
+makedepends=(git autoconf automake libtool intltool)
+read -r -a _patches <<< "${LIMDE_PCMANFM_PATCHES:-}"
+source=("pcmanfm::git+${LIMDE_PCMANFM_URL:-https://github.com/lxde/pcmanfm.git}#commit=${LIMDE_PCMANFM_COMMIT:-}"
+        "${_patches[@]}")
+# The commit pins the source; the patches come from limDE's own repository.
+sha256sums=(SKIP)
+for _p in "${_patches[@]}"; do sha256sums+=(SKIP); done
+options=(!debug)
+
+prepare() {
+  cd pcmanfm
+  local p
+  for p in "${_patches[@]}"; do git apply "$srcdir/$p"; done
+}
+
+build() {
+  cd pcmanfm
+  ./autogen.sh
+  ./configure --prefix=/usr/local --bindir=/usr/local/libexec/limde --with-gtk=3
+  make
+  grep -q preview_cmd src/pcmanfm
+}
+
+package() {
+  cd pcmanfm
+  make DESTDIR="$pkgdir" install
+  # The patched build's own menu entries would list PCManFM twice next to Arch's.
+  rm -f "$pkgdir"/usr/local/share/applications/pcmanfm*.desktop
+  install -D -m 644 /dev/stdin "$pkgdir/usr/local/share/limde/pcmanfm.build" <<< "$LIMDE_PCMANFM_STAMP_TEXT"
+}

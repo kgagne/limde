@@ -14,7 +14,8 @@ ran from, recorded with the commit and optional parts in /usr/local/share/limde/
 Releases are tags named vMAJOR.MINOR.PATCH, with -beta.N or -rc.N for test releases.
 Test releases are offered only while the installed version is one, or is not a release.
 The checkout is detached at the chosen commit; your branches are left as they are.
-Ubuntu's own packages are not updated here: use apt (or unattended-upgrades).
+Your system's own packages are not updated here: on Ubuntu use apt (or unattended-upgrades),
+on Arch sudo pacman -Syu.
 """
 
 import argparse
@@ -128,7 +129,7 @@ def describe_change(root, installed, target, name):
         say()
         say("  Built or downloaded again: " + ", ".join(rebuilt))
     if any(p.startswith("packages/") for p in changed):
-        say("  The package lists changed; the install may add Ubuntu packages.")
+        say("  The package lists changed; the install may add packages.")
 
 
 def main(argv):
