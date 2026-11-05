@@ -159,6 +159,16 @@ class WalkthroughTests(unittest.TestCase):
         self.assertEqual(run(in_window=True), 0)
         self.assertIn("Set up already: bash (bash).", run.text)
 
+    def test_a_unit_of_your_own_is_replaced_and_left_running(self):
+        run = Run(self, ["4", "bash"], installed={"bash"})
+        conf = setup.conf_path(run.home)
+        conf.parent.mkdir(parents=True)
+        conf.write_text("name=Claude Code\nsocket=claude\nsession=claude\nunit=claude-remote.service\n")
+        self.assertEqual(run(in_window=True), 0)
+        self.assertIn("claude-remote.service itself is left running", run.text)
+        self.assertEqual(run.conf(), {"name": "bash", "command": "bash"})
+        self.assertFalse(any("claude-remote.service" in argv for argv in run.system.ran))
+
     def test_failed_start_is_reported(self):
         run = Run(self, ["4", "bash"], installed={"bash"}, starts=False)
         self.assertEqual(run(in_window=True), 1)

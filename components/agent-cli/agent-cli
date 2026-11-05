@@ -15,15 +15,27 @@
 #   agent-cli --run         inside tmux: run the agent, and again whenever it stops
 #
 # Settings: ~/.config/limde/agent-cli.conf, lines "command=..." (run by your login shell)
-# and "name=..."; written by agent-cli setup.
+# and "name=..."; written by agent-cli setup. To show a tmux session that a service of your
+# own already keeps, set "socket=", "session=" and "unit=" (its user service) instead of
+# "command=": the window then attaches to that session and starts that unit when it is down.
 set -eu
 
 SHARE=$(dirname "$(readlink -f "$0")")/../share/limde/agent-cli
 CONF="$HOME/.config/limde/agent-cli.conf"
-UNIT=limde-agent-cli.service
+
+setting() {  # $1: key; prints its value from the conf file
+    [ -r "$CONF" ] || return 0
+    sed -n "s/^$1=//p" "$CONF" | tail -n 1
+}
+
+UNIT=$(setting unit)
+OWN_UNIT=${UNIT:+yes}
+UNIT=${UNIT:-limde-agent-cli.service}
 UNIT_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$UNIT"
-SOCKET=agent
-SESSION=agent
+SOCKET=$(setting socket)
+SOCKET=${SOCKET:-agent}
+SESSION=$(setting session)
+SESSION=${SESSION:-agent}
 # The reopening loop's command line: the shell running this script with --keep-open, and
 # not another command line that only mentions it.
 LOOP='^[^ ]*sh [^ ]*agent-cli --keep-open$'
@@ -39,17 +51,12 @@ loop_session() {  # $1: a loop's pid; prints the pid of the labwc it was started
     tr '\0' '\n' 2>/dev/null <"/proc/$1/environ" | sed -n 's/^LABWC_PID=//p'
 }
 
-setting() {  # $1: key; prints its value from the conf file
-    [ -r "$CONF" ] || return 0
-    sed -n "s/^$1=//p" "$CONF" | tail -n 1
-}
-
 has_session() {
     tmux -L "$SOCKET" has-session -t "=$SESSION" 2>/dev/null
 }
 
-configured() {
-    [ -e "$UNIT_FILE" ] && [ -n "$(setting command)" ]
+configured() {  # a unit of your own needs no command here: it runs its own
+    [ -e "$UNIT_FILE" ] && { [ -n "$OWN_UNIT" ] || [ -n "$(setting command)" ]; }
 }
 
 setup() {

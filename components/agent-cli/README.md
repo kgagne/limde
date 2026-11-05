@@ -34,6 +34,10 @@ Files:
   it finds what your terminals find). Edit it, then run
   `systemctl --user restart limde-agent-cli` (this ends the agent's current session).
 - `~/.config/systemd/user/limde-agent-cli.service`: written by the setup.
+- An agent you already keep in tmux with a user service of your own: put `socket=`,
+  `session=` and `unit=` (that service's name) in `agent-cli.conf` instead of
+  `command=`. The window attaches to that session and starts that unit when the session
+  is down; it never restarts it. Running the setup again replaces these lines.
 - `~/.config/limde/agent-cli/tmux.conf`: your tmux additions, read after limDE's
   (`/usr/local/share/limde/agent-cli/tmux.conf`: mouse on, extended keys, 50 000 lines
   of history, clipboard, focus events, a 10 ms Esc, one quiet status line).

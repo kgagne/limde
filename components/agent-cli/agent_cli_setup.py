@@ -298,6 +298,10 @@ class Walkthrough:
         self.say(INTRO)
         conf, unit = conf_path(self.home), unit_path(self.home)
         old = read_conf(conf)
+        if old.get("unit"):
+            self.say(f"The window shows tmux session '{old.get('session', 'agent')}' of "
+                     f"{old['unit']} now. Setup replaces that with limDE's own service; "
+                     f"{old['unit']} itself is left running.\n")
         if old.get("command"):
             self.say(f"Set up already: {old.get('name') or 'Agent'} ({old['command']}).\n")
         name, command = self.pick()

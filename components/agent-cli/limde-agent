@@ -109,11 +109,15 @@ mode)
         if start "$2"; then
             if [ "$2" = cli ]; then
                 echo "The agent window now runs your command-line agent, and will at every login."
-                [ -e "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/limde-agent-cli.service" ] ||
+                if ! grep -qE '^(command|unit)=.' "$HOME/.config/limde/agent-cli.conf" 2>/dev/null; then
                     echo "None is set up yet: the window walks you through it."
+                fi
             else
                 echo "The agent window now shows your web agent, and will at every login."
-                echo "A command-line agent set up before keeps running in tmux (tmux -L agent attach)."
+                socket=$(sed -n 's/^socket=//p' "$HOME/.config/limde/agent-cli.conf" 2>/dev/null | tail -n 1)
+                if grep -qE '^(command|unit)=.' "$HOME/.config/limde/agent-cli.conf" 2>/dev/null; then
+                    echo "Your command-line agent keeps running in tmux (tmux -L ${socket:-agent} attach)."
+                fi
             fi
         else
             echo "Saved: the agent window is in $2 mode."
@@ -130,11 +134,15 @@ status)
     m=$(mode)
     echo "mode: $m ($(command_for "$m"))"
     if window_open "$m"; then echo "window: open"; else echo "window: closed"; fi
-    unit=limde-agent-cli.service
+    cli_conf="$HOME/.config/limde/agent-cli.conf"
+    cli() { sed -n "s/^$1=//p" "$cli_conf" 2>/dev/null | tail -n 1; }
+    unit=$(cli unit)
+    unit=${unit:-limde-agent-cli.service}
+    socket=$(cli socket)
     if [ -e "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$unit" ]; then
-        command=$(sed -n 's/^command=//p' "$HOME/.config/limde/agent-cli.conf" 2>/dev/null | tail -n 1)
+        command=$(cli command)
         state=$(systemctl --user is-active "$unit" 2>/dev/null || true)
-        echo "cli agent: ${command:-none} (${state:-unknown}; attach with tmux -L agent attach)"
+        echo "cli agent: ${command:-$unit} (${state:-unknown}; attach with tmux -L ${socket:-agent} attach)"
     else
         echo "cli agent: not set up (limde-agent setup)"
     fi
