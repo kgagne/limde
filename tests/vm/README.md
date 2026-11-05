@@ -63,6 +63,30 @@ is shared. limDE's installer does not support Arch yet, so only `base`, `up`, `s
   `limde-arch-install: done`.
 - `vm clean --all` without `--distro` deletes all of `local/vm`, Arch included.
 
+### Tests on Arch
+
+- `test-install NAME --distro arch [-- --with=GROUPS]` runs the same install test on an Arch
+  VM. Every Ubuntu check stays as it is; where Arch differs it checks Arch's way instead:
+  Arch's `/usr/bin/labwc` (owned by pacman's labwc) with either the touchpad curves (0.20.3
+  or newer) or the "standard touchpad feel" message and the standard rc.xml (older), the
+  recorded labwc version and rc.xml form, PCManFM from the local package `limde-pcmanfm`,
+  the keyring line in `/etc/pam.d/passwd`, PipeWire's user units on for every user, and with
+  `--with=printing` the nss-mdns line in `/etc/nsswitch.conf`. No AppArmor or
+  unattended-upgrades checks.
+- Not yet for Arch (Ubuntu assumptions, noted 2026-11-05):
+  - `test-acceptance`: the power cut waits for apt's `Unpacking` lines and checks dpkg's
+    half-done state (`/var/lib/dpkg/updates`, `dpkg --audit`); on Arch that is pacman's
+    `(n/m) installing` lines in the same log and its stale `db.lck`. The Ctrl+C step
+    interrupts the labwc build, which Arch does not have (interrupt makepkg's PCManFM build
+    instead), and checks `/usr/local/bin/labwc`; the baseline counts packages with
+    dpkg-query (`pacman -Q | wc -l`).
+  - `test-logout`: no Ubuntu-only commands; expected to work as is.
+  - `test-wifi`: installs `hostapd` and `dnsmasq-base` with apt; Arch has `hostapd` and
+    `dnsmasq` (pacman).
+  - `test-bluetooth`: reads `packages/ubuntu/optional/bluetooth.list` and installs with apt;
+    it needs BlueZ's `btvirt` emulator, which Arch's official packages do not ship (build it
+    from BlueZ's source; never the AUR).
+
 ## Fast iteration: the installed image
 
 A full install takes about 20 minutes, almost all of it apt and the labwc build, so
