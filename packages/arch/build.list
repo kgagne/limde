@@ -1,0 +1,16 @@
+# Build packages: compilers and tools for the parts limde builds from source. Arch ships
+# headers with the libraries, so this list is short; labwc is Arch's own package.
+# They stay installed so updates and rebuilds work without asking again.
+
+## Build tools
+base-devel          # the C compiler, make and makepkg (PCManFM is built as a local package)
+git                 # downloads the pinned source code
+pkgconf             # finds the libraries a build needs
+wayland             # wayland-scanner, for Tinybar's and the shortcut helper's protocol code
+
+## PCManFM (patched build)
+autoconf            # prepares PCManFM's build scripts
+automake            # prepares PCManFM's build scripts
+libtool             # prepares PCManFM's build scripts
+intltool            # PCManFM's translations
+libfm-gtk3          # the file-manager library PCManFM is built on, with its GTK 3 widgets

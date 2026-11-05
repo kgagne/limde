@@ -1,0 +1,72 @@
+# Runtime packages for the base desktop on Arch Linux. One per line: name, then "# why".
+# Shown to the user before anything is installed. Names checked against the official
+# core and extra repositories (2026-11-01); limDE never uses the AUR.
+# Arch installs no optional dependencies by itself, and enables no services: the
+# installer turns on the ones listed here (lib/install/distro/arch.sh::distro_services).
+
+## Session
+labwc               # the window manager (Arch's own package; limDE needs 0.20.3 or newer)
+xorg-xwayland       # runs older X11 apps inside the Wayland desktop; labwc only suggests it
+foot                # the default terminal
+tmux                # keeps terminal programs, such as a CLI agent, running with no terminal open
+ttf-jetbrains-mono  # the CLI agent window's font: a clear monospace with distinct 0/O and 1/l/I
+swayidle            # runs the screen locker after inactivity
+swaylock            # the screen locker
+wlopm               # turns the screen off when idle on mains power
+mako                # desktop notifications
+mesa                # OpenGL drivers, which labwc draws with
+vulkan-intel        # Vulkan for Intel GPUs, which GTK 4 apps draw with (without it they fall back to OpenGL)
+vulkan-radeon       # Vulkan for AMD GPUs
+vulkan-nouveau      # Vulkan for NVIDIA GPUs (open driver)
+networkmanager      # network connections (Wi-Fi, Ethernet); Arch's package also notices Wi-Fi sign-in pages
+wpa_supplicant      # joins Wi-Fi networks
+polkit              # lets you change the network and power off from the panel without sudo
+linux-firmware      # firmware for Wi-Fi, graphics and other devices
+
+## Panel and launcher
+python-gobject      # Tinybar is written in Python with GTK
+gtk4                # GTK 4 for Tinybar and the Walker launcher
+gtk4-layer-shell    # lets Tinybar sit at the screen edge and Walker open above other windows
+libqalculate        # the calculator in the launcher (qalc)
+poppler-glib        # PDF previews in Walker
+xdg-utils           # opens the files you pick in the launcher (xdg-open)
+gsettings-desktop-schemas  # the desktop settings limde-appearance sets (light or dark, fonts)
+
+## Files and preview
+pcmanfm             # the file manager (limde later builds it with Space preview)
+gvfs                # trash, mounting and other file-manager features
+gvfs-smb            # Windows and Samba network shares in the file manager
+gvfs-mtp            # Android phones in the file manager
+gvfs-afc            # iPhones in the file manager
+desktop-file-utils  # keeps the application menu up to date
+fd                  # fast file search in the launcher
+zenity              # simple file-open and question dialogs
+poppler             # PDF pages in the Space preview (pdftoppm)
+gtk-update-icon-cache  # keeps icon themes' caches up to date
+
+## Firefox (Mozilla's build; needed by agent-web)
+gtk3                # GTK 3, which Firefox uses
+alsa-lib            # sound in Firefox
+libx11              # Firefox's X11 compatibility (includes libX11-xcb)
+libnotify           # Firefox's and agent-web's notifications go to Mako, not Firefox's own popups
+
+## Screenshots and clipboard
+grim                # screenshots
+slurp               # choosing a region for a screenshot
+wl-clipboard        # copy and paste from the command line
+glib2               # gdbus, which sends notifications for screenshots and cut or copied files
+wtype               # sends keystrokes for some keyboard shortcuts
+
+## Sound
+pipewire            # the sound server
+pipewire-pulse      # sound for apps that expect PulseAudio
+pipewire-alsa       # sound for apps that use ALSA directly
+wireplumber         # chooses and connects sound devices
+rtkit               # glitch-free sound scheduling
+alsa-ucm-conf       # sound device profiles many laptops need (Intel SOF and others)
+alsa-topology-conf  # the audio DSP setup some Intel laptops need
+sof-firmware        # the audio DSP firmware most Intel laptops need; not in linux-firmware
+
+## Login keyring and fonts
+gnome-keyring       # stores passwords and keys for apps; includes the PAM module that unlocks it at login
+ttf-opensans        # the interface font

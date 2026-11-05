@@ -1,0 +1,4 @@
+# Laptop extras: screen brightness keys, power use and disk health tools.
+brightnessctl       # changes screen brightness, for the brightness keys and Tinybar's slider (through logind; no group needed)
+powertop            # shows what uses power on battery (sudo powertop)
+smartmontools       # reads the disks' health (sudo smartctl -a DISK); Arch leaves its smartd service off

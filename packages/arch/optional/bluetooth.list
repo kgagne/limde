@@ -1,0 +1,4 @@
+# Bluetooth: headphones, speakers, keyboards and mice, from the panel.
+bluez               # the Bluetooth service (limde turns on bluetooth.service)
+bluez-utils         # bluetoothctl, for "Other device…"
+pipewire-audio      # sound through Bluetooth headphones and speakers (PipeWire's Bluetooth plugin)
