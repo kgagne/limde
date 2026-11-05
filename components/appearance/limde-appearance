@@ -147,18 +147,26 @@ def desktop_preferences(config):
     return changes
 
 
+def gsettings_said(stderr):
+    """The last line gsettings printed, less GLib's log prefix
+    ("(process:N): dconf-WARNING **: 19:29:37.999: ")."""
+    lines = stderr.strip().splitlines()
+    return re.sub(r'^.*?\d\d:\d\d:\d\d\.\d+: ', '', lines[-1]) if lines else ''
+
+
 def set_desktop_preference(key, value):
     """Set one GNOME interface setting and read it back: gsettings set exits 0 even when
-    the value is lost (without dconf it keeps it in memory, gone when it exits)."""
+    the value is lost (without dconf it keeps it in memory, gone when it exits; dconf
+    with no session bus only warns), so the error carries that warning."""
     done = subprocess.run(['gsettings', 'set', INTERFACE, key, value], text=True, capture_output=True)
+    said = gsettings_said(done.stderr)
     if done.returncode != 0:
-        said = done.stderr.strip().splitlines()
-        raise ValueError(f'could not set desktop preference {key}: '
-                         f'{said[-1] if said else "gsettings failed"}')
+        raise ValueError(f'could not set desktop preference {key}: {said or "gsettings failed"}')
     got = subprocess.run(['gsettings', 'get', INTERFACE, key], text=True, capture_output=True)
     if got.returncode != 0 or got.stdout.strip() != repr(value):
         raise ValueError(f'desktop preference {key} did not persist: gsettings reads '
-                         f'{got.stdout.strip() or "nothing"}, not {value!r}')
+                         f'{got.stdout.strip() or "nothing"}, not {value!r}'
+                         + (f' ({said})' if said else ''))
 
 
 def main():

@@ -29,14 +29,14 @@ def panel_background(css):
 
 # get/set SCHEMA KEY [VALUE]; values are kept as files, quoted the way gsettings prints
 # them. FAKE_GSETTINGS picks a failure: noschema (get fails, as without the schemas),
-# lose (set succeeds but keeps nothing) or refuse (set fails).
+# lose (set succeeds but keeps nothing, printing FAKE_GSETTINGS_SAID) or refuse (set fails).
 STAND_IN_GSETTINGS = """#!/bin/sh
 [ "$2" = org.gnome.desktop.interface ] || exit 1
 file="$FAKE_GSETTINGS_DIR/$3"
 case "$1:$FAKE_GSETTINGS" in
   get:noschema) echo 'No such schema' >&2; exit 1 ;;
   get:*) if [ -f "$file" ]; then cat "$file"; else echo "''"; fi ;;
-  set:lose) ;;
+  set:lose) printf '%s' "$FAKE_GSETTINGS_SAID" >&2 ;;
   set:refuse) echo 'gsettings: writing is not allowed' >&2; exit 1 ;;
   set:*) printf "'%s'\\n" "$4" > "$file" ;;
   *) exit 1 ;;
@@ -58,7 +58,7 @@ class AppearanceTests(unittest.TestCase):
         fake.chmod(0o755)
         # The memory backend keeps even a real gsettings away from dconf.
         self.env = dict(os.environ, HOME=str(self.home), PATH=f"{self.bin}:{os.environ['PATH']}",
-                        GSETTINGS_BACKEND="memory", FAKE_GSETTINGS="",
+                        GSETTINGS_BACKEND="memory", FAKE_GSETTINGS="", FAKE_GSETTINGS_SAID="",
                         FAKE_GSETTINGS_DIR=str(self.settings))
         self.assertEqual(shutil.which("gsettings", path=self.env["PATH"]), str(fake))
         self.user_file = self.home / ".config/limde/appearance.toml"
@@ -271,6 +271,17 @@ class AppearanceTests(unittest.TestCase):
         self.assertIn("Desktop preference needs refresh: icon-theme '' -> limde-light", check.stdout)
         self.apply()
         self.assertEqual(self.setting("icon-theme"), "'limde-light'")
+
+    def test_a_lost_preference_names_the_warning(self):
+        # What dconf prints, exit 0, when it cannot reach its service on the session bus.
+        said = ("\n(process:4242): dconf-WARNING **: 19:29:37.999: failed to commit changes "
+                "to dconf: Cannot autolaunch D-Bus without X11 $DISPLAY\n")
+        result = self.run_tool("--apply", FAKE_GSETTINGS="lose", FAKE_GSETTINGS_SAID=said)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stderr, "limde-appearance: desktop preference icon-theme did not "
+                                        "persist: gsettings reads '', not 'limde' (failed to commit "
+                                        "changes to dconf: Cannot autolaunch D-Bus without X11 "
+                                        "$DISPLAY)\n")
 
     def test_a_refused_preference_names_the_reason(self):
         result = self.run_tool("--apply", FAKE_GSETTINGS="refuse")
