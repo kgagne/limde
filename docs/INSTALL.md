@@ -126,7 +126,9 @@ already in place or `changed` for what it did.
 8. **Firefox:** downloads Mozilla's current Firefox, checks it against Mozilla's signed
    checksums, and unpacks it to `~/.local/opt/firefox`, a folder you own, so Firefox's own
    updater can keep it current. It also installs an AppArmor profile so Firefox may use
-   its sandbox. Firefox is installed once; limDE never changes its version after that.
+   its sandbox, and limDE's Firefox policies (`distribution/policies.json` in that folder;
+   Firefox doesn't ask to be the default browser), which every run puts back if they
+   differ. Firefox is installed once; limDE never changes its version after that.
 9. **Icons:** builds the `limde` (dark) and `limde-light` icon themes and installs them to
    `/usr/local/share/icons`.
 10. **Tinybar:** builds the panel's small window-list helper and installs the panel.

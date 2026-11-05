@@ -24,6 +24,8 @@ these; your changes would be lost at the next install or update:
 - `/usr/local/share/themes/limde/labwc/`: the shapes of the window title-bar buttons.
 - `/usr/local/bin/`: limDE's commands, and labwc, PCManFM, Walker and Elephant (PCManFM's
   program is in `/usr/local/libexec/limde/`; the `pcmanfm` command starts it).
+- `~/.local/opt/firefox/distribution/policies.json`: Firefox's policies (it doesn't ask
+  to be the default browser). Firefox itself updates itself and is never replaced.
 
 Your own files, which limDE reads and never overwrites. None of them exist until you make
 them:

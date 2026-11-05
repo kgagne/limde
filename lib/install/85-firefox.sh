@@ -58,11 +58,19 @@ step_firefox() {
     mkdir -p "$(dirname "$FIREFOX_DIR")"
     tar -xf "$work/firefox.tar" -C "$work" || die "could not unpack Firefox"
     [[ -x $work/firefox/firefox ]] || die "the Firefox archive has an unexpected layout"
-    mkdir -p "$work/firefox/distribution"
-    cp "$LIMDE_ROOT/config/firefox/policies.json" "$work/firefox/distribution/policies.json"
     mv "$work/firefox" "$FIREFOX_DIR"
     rm -rf "$work"
     changed "installed Firefox $FIREFOX_VERSION to $FIREFOX_DIR"
+  fi
+
+  # Checked on every run, so a changed policy reaches Firefox installed by an earlier
+  # version. Firefox's updater leaves distribution/ alone.
+  local policies=$FIREFOX_DIR/distribution/policies.json
+  if ! cmp -s "$LIMDE_ROOT/config/firefox/policies.json" "$policies" 2>/dev/null; then
+    install -D -m 644 "$LIMDE_ROOT/config/firefox/policies.json" "$policies"
+    changed "Firefox policies ($policies)"
+  else
+    ok "Firefox policies are in place"
   fi
 
   if ! sudo cmp -s "$LIMDE_ROOT/components/firefox/apparmor-profile" "$FIREFOX_PROFILE" 2>/dev/null; then
