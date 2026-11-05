@@ -128,8 +128,8 @@ already in place or `changed` for what it did.
 9. **Icons:** builds the `limde` (dark) and `limde-light` icon themes and installs them to
    `/usr/local/share/icons`.
 10. **Tinybar:** builds the panel's small window-list helper and installs the panel.
-11. **Appearance:** installs the appearance defaults and `limde-appearance`, then renders
-    your own copies of the program styles into your home.
+11. **Appearance:** installs the appearance defaults, `limde-appearance` and the window
+    title-bar buttons, then renders your own copies of the program styles into your home.
 12. **Helpers:** installs `limde-preview`, `limde-screenshot`, `limde-clipboard-notify`,
     `limde-update` and `app-shortcut` to `/usr/local/bin`.
 13. **Session configuration:** installs labwc's defaults to `/etc/xdg/labwc` and the

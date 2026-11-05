@@ -58,7 +58,7 @@ Before it replaces one, `limde-appearance` saves the old copy in
 - `~/.config/labwc/themerc-override`
 - `~/.config/gtk-3.0/settings.ini`, `~/.config/gtk-4.0/settings.ini` and
   `~/.config/gtk-4.0/gtk.css`
-- `~/.local/share/themes/limde/` (labwc), `~/.local/share/themes/LimDE/` (GTK) and
+- `~/.local/share/themes/limde/labwc/themerc`, `~/.local/share/themes/LimDE/` (GTK) and
   `~/.local/share/themes/LimDE-Panel/`
 
 ## labwc settings
