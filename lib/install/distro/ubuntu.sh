@@ -2,6 +2,7 @@
 # Sourced by `install` (lib/install/common.sh::load_distro) when /etc/os-release says
 # ID=ubuntu. Every distro file sets the same names; the steps use only these.
 
+DISTRO=ubuntu
 DISTRO_LABEL="Ubuntu 26.04"
 # The group whose members may use sudo.
 ADMIN_GROUP=sudo
@@ -48,6 +49,10 @@ pkg_count_set_up() { grep -c '^Setting up' "$1"; }
 pkg_count_new() {
   apt-get -s install --no-install-recommends "$@" 2>/dev/null | grep -c '^Inst ' || true
 }
+
+# Services the package lists need, checked on every run: Ubuntu's packages turn on their
+# own when installed.
+distro_services() { :; }
 
 # After a successful install of the named (until then missing) packages.
 pkg_after_install() {

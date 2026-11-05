@@ -26,7 +26,7 @@ list_packages() { sed -e 's/#.*//' -e '/^\s*$/d' "$1" | awk '{print $1}'; }
 # Package lines with their reasons, for the plan.
 show_list() {
   sed -n -e 's/^## \(.*\)/    \1:/p' \
-         -e 's/^\([a-z0-9][a-z0-9.+-]*\)\s*#\s*\(.*\)/      \1 — \2/p' "$1"
+         -e 's/^\([a-z0-9][a-z0-9._+-]*\)\s*#\s*\(.*\)/      \1 — \2/p' "$1"
 }
 
 # Source the file for this system's distro (lib/install/distro/ID.sh), which sets how
@@ -36,7 +36,7 @@ load_distro() {
   # shellcheck source=/dev/null
   . "${LIMDE_OS_RELEASE:-/etc/os-release}"
   local file=$LIMDE_ROOT/lib/install/distro/${ID:-unknown}.sh
-  [[ -f $file ]] || die "limde supports Ubuntu 26.04 only (this is ${PRETTY_NAME:-unknown})"
+  [[ -f $file ]] || die "limde supports Ubuntu 26.04 or Arch Linux only (this is ${PRETTY_NAME:-unknown})"
   # shellcheck source=lib/install/distro/ubuntu.sh
   . "$file"
   distro_supported || die "limde supports $DISTRO_LABEL only (this is ${PRETTY_NAME:-unknown})"

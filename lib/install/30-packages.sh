@@ -23,6 +23,7 @@ step_packages() {
   if ((${#missing[@]} == 0)); then
     ok "all ${#PACKAGES[@]} packages installed"
     brightness_group
+    distro_services
     return
   fi
   note "installing: ${missing[*]}"
@@ -35,4 +36,5 @@ step_packages() {
   changed "installed ${#missing[@]} package(s)"
   pkg_after_install "${missing[@]}"
   brightness_group
+  distro_services
 }
