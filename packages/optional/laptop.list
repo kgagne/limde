@@ -2,4 +2,4 @@
 brightnessctl       # changes screen brightness, for the brightness keys and Tinybar's slider
 brightness-udev     # lets the video group change the backlight; without it brightnessctl needs root
 powertop            # shows what uses power on battery (sudo powertop)
-smartmontools       # reads the disks' health (sudo smartctl -a DISK); also starts smartd, which checks them every 30 min
+smartmontools       # reads the disks' health (sudo smartctl -a DISK); its smartd service is switched off

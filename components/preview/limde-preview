@@ -32,8 +32,13 @@ import tempfile
 import time
 from pathlib import Path
 
-# GTK's Vulkan renderer would otherwise wake the NVIDIA GPU (docs/PREVIEW.md).
-os.environ.setdefault("VK_DRIVER_FILES", "/usr/share/vulkan/icd.d/intel_icd.json")
+# On Intel + NVIDIA laptops, GTK's Vulkan renderer would otherwise wake the NVIDIA GPU
+# (docs/PREVIEW.md); everywhere else Vulkan picks the only GPU there is.
+INTEL_ICD = "/usr/share/vulkan/icd.d/intel_icd.json"
+if os.path.exists(INTEL_ICD) and any(
+        (dev / "vendor").read_text().strip() == "0x10de"
+        for dev in Path("/sys/bus/pci/devices").glob("*") if (dev / "vendor").exists()):
+    os.environ.setdefault("VK_DRIVER_FILES", INTEL_ICD)
 # This desktop runs no accessibility bus; skip GTK's lookup and its warning.
 os.environ.setdefault("GTK_A11Y", "none")
 

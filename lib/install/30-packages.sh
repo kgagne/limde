@@ -33,4 +33,9 @@ step_packages() {
   note "$(grep -c '^Setting up' "$log") packages set up, including dependencies (log: $log)"
   for p in "${missing[@]}"; do installed "$p" || die "$p did not install"; done
   changed "installed ${#missing[@]} package(s)"
+  # Ubuntu's smartmontools turns on smartd, a disk-check service; limDE adds no services, so
+  # switch it off once, when the laptop group first installs it (smartctl still works).
+  if [[ " ${missing[*]} " == *" smartmontools "* ]] && systemctl -q is-enabled smartmontools.service 2>/dev/null; then
+    sudo systemctl disable --now smartmontools.service >/dev/null 2>&1 && changed "switched smartd off (sudo systemctl enable --now smartmontools to turn it on)"
+  fi
 }

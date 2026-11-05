@@ -8,6 +8,7 @@ swayidle            # runs the screen locker after inactivity
 swaylock            # the screen locker
 wlopm               # turns the screen off when idle on mains power
 mako-notifier       # desktop notifications
+mesa-vulkan-drivers # GPU drivers for Vulkan, which GTK 4 apps draw with (without it they fall back to OpenGL)
 network-manager     # network connections (Wi-Fi, Ethernet); replaces Server's networkd
 wpasupplicant       # joins Wi-Fi networks; NetworkManager only recommends it
 network-manager-config-connectivity-ubuntu  # lets NetworkManager notice Wi-Fi sign-in pages (hotels, airports); asks connectivity-check.ubuntu.com

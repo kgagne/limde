@@ -20,6 +20,10 @@ From `packages/runtime.list`: what the desktop needs to run.
 - `swaylock`: the screen locker.
 - `wlopm`: turns the screen off when idle on mains power.
 - `mako-notifier`: desktop notifications.
+- `mesa-vulkan-drivers`: Vulkan drivers for Intel, AMD and other open-source GPUs. GTK 4
+  apps draw with Vulkan when it is there and fall back to OpenGL without it. On a laptop
+  with Intel and NVIDIA graphics, the Space preview keeps to Intel's driver so the NVIDIA
+  GPU can stay asleep.
 - `network-manager`: network connections (Wi-Fi, Ethernet); replaces Server's networkd.
   See the network switch in [INSTALL.md](INSTALL.md#the-network-switch).
 - `wpasupplicant`: joins Wi-Fi networks; NetworkManager only recommends it, so it is
@@ -184,9 +188,10 @@ Laptop extras: screen brightness keys, power use and disk health tools.
 - `powertop`: shows what uses power on battery, process by process and device by device
   (`sudo powertop`). Its service that changes power settings at boot stays off.
 - `smartmontools`: reads the disks' health (`sudo smartctl -a` and a disk, such as
-  `/dev/nvme0`; `sudo smartctl --scan` lists them). The package also starts `smartd`,
-  which checks the disks every 30 minutes and logs problems to the journal; turn it off
-  with `sudo systemctl disable --now smartmontools`.
+  `/dev/nvme0`; `sudo smartctl --scan` lists them). The package starts `smartd`, a
+  service that checks the disks every 30 minutes; limDE switches it off when it installs
+  the group, since it adds no services. Turn it on with
+  `sudo systemctl enable --now smartmontools`.
 
 ### papers
 
