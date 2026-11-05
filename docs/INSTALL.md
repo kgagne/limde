@@ -112,10 +112,11 @@ already in place or `changed` for what it did.
    install was cut short, it finishes that first (`dpkg --configure -a`).
 4. **Network:** hands the network to NetworkManager (see [The network
    switch](#the-network-switch) below).
-5. **labwc:** downloads the pinned labwc and wlroots commits and builds them. The new
-   build must start and stop cleanly in a headless test session before it is installed
-   to `/usr/local`, so a broken build never replaces a working one. This is the longest
-   step.
+5. **labwc:** downloads the pinned labwc and wlroots commits and builds them. Before it
+   is installed to `/usr/local`, the new build must start and stop cleanly in a headless
+   test session and read limDE's `rc.xml` without a configuration error, so a broken
+   build never replaces a working one. The test session has its own empty autostart and
+   no connection to a desktop you are running. This is the longest step.
 6. **PCManFM:** downloads the pinned PCManFM release, applies limDE's four patches (Space
    preview; Cut, Copy and Paste keys after you pick a place in the side pane; even space
    around list icons; a GTK theme of its own), builds it and installs it to `/usr/local`,

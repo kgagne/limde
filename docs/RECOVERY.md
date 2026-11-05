@@ -100,7 +100,11 @@ If the install itself fails, the installer's logs are in `~/.local/state/limde/`
 - A package install cut short by a power cut or Ctrl+C is finished at the start of the
   next run.
 - A new labwc build is installed only after it starts and stops cleanly in a headless
-  test session. If the build or the test fails, the labwc you had stays installed.
+  test session and reads limDE's `rc.xml` without a configuration error (an `[ERROR]`
+  line from labwc's configuration reader; other errors do not count). If the build or
+  the test fails, the labwc you had stays installed. The installer prints the error
+  lines, and `labwc-build.log` ends with the test's full output. The test reads only
+  limDE's `rc.xml`, not your `~/.config/labwc/rc.xml`, and runs no autostart.
 - If `./install` stops at the Appearance or Icons step, check
   `~/.local/state/limde/appearance.log` and your `~/.config/limde/appearance.toml`: an
   unknown key or a bad value there stops both.

@@ -224,7 +224,8 @@ PCManFM, also when one of limDE's patches changes).
 
 Why from source: Ubuntu 26.04's labwc is older than the custom pointer acceleration and
 scroll curves limDE's touchpad settings need. The build is installed to `/usr/local`
-only after it starts and stops cleanly in a headless test session.
+only after it starts and stops cleanly in a headless test session and reads limDE's
+`rc.xml`, those curves included, without a configuration error.
 
 ### Walker and Elephant (`pins/launcher`)
 
