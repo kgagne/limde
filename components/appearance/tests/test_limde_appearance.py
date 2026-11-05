@@ -256,6 +256,40 @@ class AppearanceTests(unittest.TestCase):
                 check = self.run_tool("--check", **env)
                 self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
 
+    def test_the_backup_folder_is_named_only_when_something_was_saved(self):
+        # A fresh home without gsettings: every file is new and no preference is read, so
+        # there is nothing to save and no folder to point at.
+        applied = self.apply(PATH=str(self.root / "empty"))
+        self.assertEqual(applied.stdout.count("Updated: "), len(OUTPUTS))
+        self.assertNotIn("Previous versions saved", applied.stdout)
+        self.assertEqual(self.backups(), [])
+        edited = self.home / TINYBAR_CSS
+        edited.write_text(edited.read_text() + "/* local edit */\n")
+        fixed = self.apply(PATH=str(self.root / "empty"))
+        [backup] = self.backups()
+        self.assertIn(f"Previous versions saved in {backup}", fixed.stdout)
+        self.assertEqual(self.files(backup), {TINYBAR_CSS})
+
+    @unittest.skipIf(os.geteuid() == 0, "root reads and writes regardless of permissions")
+    def test_unreadable_or_unwritable_files_are_one_line_errors(self):
+        self.write_user_file('[desktop]\nmode = "light"\n')
+        self.user_file.chmod(0)
+        for args in (("--apply",), ("--check",)):
+            with self.subTest(args=args):
+                result = self.run_tool(*args)
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(result.stderr, "limde-appearance: [Errno 13] Permission denied: "
+                                                f"'{self.user_file}'\n")
+        shutil.rmtree(self.home)
+        self.home.mkdir(mode=0o555)
+        self.addCleanup(self.home.chmod, 0o755)
+        result = self.run_tool("--apply")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stderr, "limde-appearance: [Errno 13] Permission denied: "
+                                        f"'{self.home / '.config'}'\n")
+        self.assertEqual(list(self.home.iterdir()), [])
+        self.assertEqual(list(self.settings.iterdir()), [])
+
     def test_a_preference_that_does_not_persist_fails_the_apply(self):
         result = self.run_tool("--apply", "--mode", "light", FAKE_GSETTINGS="lose")
         self.assertEqual(result.returncode, 1)

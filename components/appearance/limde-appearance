@@ -248,8 +248,11 @@ def main():
         for key, change in prefs.items():
             set_desktop_preference(key, change['after'])
             print(f"Updated desktop preference: {key} = {change['after']}")
-    if pending or prefs:
+    # The folder exists only if something was there to replace: new files and a home
+    # without gsettings leave nothing to save.
+    if backup.is_dir():
         print(f'Previous versions saved in {backup}')
+    if pending or prefs:
         print('Reopen affected apps; run "makoctl reload" and "labwc --reconfigure" to refresh those.')
     else:
         print('Everything is already current.')
@@ -258,5 +261,6 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except ValueError as error:
+    except (OSError, ValueError) as error:
+        # OSError: an unreadable user file or a folder it cannot write to.
         raise SystemExit(f'limde-appearance: {error}')
