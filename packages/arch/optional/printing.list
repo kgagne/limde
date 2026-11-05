@@ -1,4 +1,4 @@
 # Printing, including finding network printers automatically.
 cups                # the print system (limde turns on cups.socket)
 avahi               # finds printers on the local network (limde turns on avahi-daemon)
-nss-mdns            # lets the system resolve those printers' names; needs mdns_minimal in /etc/nsswitch.conf (docs/ARCH-INSTALL.md)
+nss-mdns            # lets the system resolve those printers' names (limde adds mdns_minimal to /etc/nsswitch.conf)

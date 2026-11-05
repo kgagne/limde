@@ -15,9 +15,13 @@ have installed Arch before, or are happy to follow the
 
 - **Back up your files.** Installing Arch erases the disk you choose.
 - **Use an up-to-date ISO** from archlinux.org, written to a USB stick.
-- **labwc 0.20.3 or newer must be in Arch's repositories.** limDE's touchpad settings need
-  it. On 2026-11-05 it was still in `extra-testing` (stable `extra` had 0.20.2), and the
-  installer stops with a message until `sudo pacman -Syu` brings it.
+- **labwc:** limDE's MacBook-like touchpad curves need labwc 0.20.3 or newer. On 2026-11-05
+  Arch's stable `extra` had 0.20.2 (0.20.3 was in `extra-testing`). With an older labwc the
+  installer says "labwc 0.20.2: standard touchpad feel until 0.20.3" and installs its
+  settings with libinput's standard pointer motion and scrolling. Run `./install` again after
+  `sudo pacman -Syu` brings 0.20.3, and it switches to the curves. limDE's VM tests stay
+  pinned to the 2026-11-01 repositories (testing that fallback) until 0.20.3 reaches stable
+  `extra`; they never use the testing repositories.
 
 ## archinstall's answers
 
@@ -56,9 +60,10 @@ continues as on Ubuntu ([INSTALL.md](INSTALL.md)).
 
 What differs from Ubuntu:
 
-- **labwc** is Arch's own package. limDE does not build it, but checks it is 0.20.3 or newer
-  and that it starts headless with limDE's settings without a configuration error. After a
-  `pacman -Syu` that updates labwc, run `./install` again to repeat that check.
+- **labwc** is Arch's own package. limDE does not build it, but checks that it starts headless
+  with limDE's settings without a configuration error (with the standard touchpad settings
+  before 0.20.3). After a `pacman -Syu` that updates labwc, run `./install` again to repeat
+  that check and, from 0.20.3, to switch to the touchpad curves.
 - **PCManFM** with limDE's Space preview is built from the same pinned source and patches as
   on Ubuntu, as a local package called `limde-pcmanfm` (`pacman -Qi limde-pcmanfm`), so
   pacman knows its files. Arch's own `pcmanfm` package stays installed beside it.
@@ -71,9 +76,12 @@ What differs from Ubuntu:
   pacman keeps yours and leaves the new one beside it as `.pacnew`.
 - **Firefox** needs no AppArmor profile on Arch.
 
-## Printing: one manual step
+## Printing
 
-With the printing group, printers on your network are found, but their names (`printer.local`)
-resolve only once mDNS is in `/etc/nsswitch.conf`. limDE does not edit that file yet. Add
-`mdns_minimal [NOTFOUND=return]` to its `hosts:` line, before `resolve`, as the
-[Arch wiki](https://wiki.archlinux.org/title/Avahi#Hostname_resolution) describes.
+With the printing group, printers on your network are found by Avahi, but their names
+(`printer.local`) resolve only once mDNS is on the `hosts:` line of `/etc/nsswitch.conf`,
+which Ubuntu's package does by itself and Arch's does not. So limDE adds
+`mdns_minimal [NOTFOUND=return]` right before `resolve` (or `dns`), as nss-mdns's README and
+the [Arch wiki](https://wiki.archlinux.org/title/Avahi#Hostname_resolution) describe, once,
+with a copy of the file first in `~/.local/state/limde/backups`. A line that already names
+mdns is left alone, and so are your later edits.

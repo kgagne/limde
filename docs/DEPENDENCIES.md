@@ -14,8 +14,9 @@ package (0.20.3 or newer), so the build list keeps only the tools for Tinybar's 
 PCManFM package; headers come with the libraries; and a few things Ubuntu brings in by itself
 are listed: `sof-firmware` (Intel laptop audio), `polkit`, `gsettings-desktop-schemas`,
 `bluez-utils` (bluetoothctl) and `pipewire-audio` (Bluetooth sound). Arch turns on no
-services, so the installer enables BlueZ, CUPS, Avahi and PipeWire's user units itself. The
-sections below describe the Ubuntu packages.
+services, so the installer enables BlueZ, CUPS, Avahi and PipeWire's user units itself, and
+with the printing group adds nss-mdns to `/etc/nsswitch.conf`. The sections below describe
+the Ubuntu packages.
 
 ## Runtime packages
 

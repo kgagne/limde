@@ -11,7 +11,8 @@ ADMIN_GROUP=wheel
 # Resolved before anything changes, and again after the network switch.
 MIRROR_HOST=archlinux.org
 PACKAGE_DIR=$LIMDE_ROOT/packages/arch
-# limDE's rc.xml uses labwc's custom acceleration and scroll curves, new in 0.20.3.
+# limDE's rc.xml uses labwc's custom acceleration and scroll curves, new in 0.20.3; an older
+# labwc gets libinput's standard motion instead (lib/install/60-labwc.sh::labwc_rcxml).
 LABWC_MIN_VERSION=0.20.3
 
 # Arch is a rolling release: any up-to-date x86_64 install.
@@ -50,6 +51,50 @@ pkg_count_new() {
 # After a successful install of the named (until then missing) packages.
 pkg_after_install() { :; }
 
+# Printing on Arch: nss-mdns resolves printers' .local names only once its module is on the
+# hosts: line of /etc/nsswitch.conf (Ubuntu's package does that itself). Add
+# "mdns_minimal [NOTFOUND=return]" right before the first of resolve or dns, where nss-mdns's
+# README puts it: .local names are answered (or stopped) before unicast DNS, and Arch's
+# "resolve [!UNAVAIL=return]" would otherwise end the lookup first. Once, with a backup;
+# a line that already names mdns is left alone, and so is the file if you edit it later.
+NSSWITCH=/etc/nsswitch.conf
+NSSWITCH_DONE=$STATE_DIR/arch-nsswitch-mdns
+
+# Print the file with mdns_minimal added to its hosts: line; fail if that line has no
+# resolve or dns to put it before. $1: file.
+nsswitch_add_mdns() {
+  awk '
+    /^hosts:/ && !done {
+      if ($0 ~ /mdns/) { done = 1; print; next }
+      if (match($0, /[ \t](resolve|dns)([ \t[]|$)/)) {
+        $0 = substr($0, 1, RSTART) "mdns_minimal [NOTFOUND=return] " substr($0, RSTART + 1)
+        done = 1
+      }
+    }
+    { print }
+    END { exit !done }' "$1"
+}
+
+arch_printing_names() {
+  [[ " ${CHOSEN_GROUPS[*]:-} " == *" printing "* ]] || return 0
+  [[ -e $NSSWITCH_DONE ]] && return 0
+  local work
+  work=$(mktemp) || die "could not prepare the nsswitch edit"
+  if grep -q '^hosts:.*mdns' "$NSSWITCH"; then
+    ok "printer names resolve (mdns is in $NSSWITCH)"
+  elif nsswitch_add_mdns "$NSSWITCH" > "$work"; then
+    mkdir -p "$STATE_DIR/backups"
+    cp "$NSSWITCH" "$STATE_DIR/backups/nsswitch.conf.$(date +%Y%m%dT%H%M%S)"
+    sudo install -m 644 "$work" "$NSSWITCH.limde-new" && sudo mv "$NSSWITCH.limde-new" "$NSSWITCH" \
+      || { rm -f "$work"; die "could not update $NSSWITCH"; }
+    changed "printer names resolve: mdns_minimal in $NSSWITCH (previous copy in $STATE_DIR/backups)"
+  else
+    note "$NSSWITCH has no resolve or dns on its hosts: line; add mdns_minimal [NOTFOUND=return] yourself"
+  fi
+  rm -f "$work"
+  mkdir -p "$STATE_DIR"; : > "$NSSWITCH_DONE"
+}
+
 # Arch enables no services when a package is installed. Turn on the ones limDE's lists
 # need, once each: a unit is recorded in SERVICES_DONE when limDE enables it (or finds it
 # on), so one you turn off later stays off.
@@ -80,4 +125,5 @@ distro_services() {
       note "could not turn on $unit"
     fi
   done
+  arch_printing_names
 }

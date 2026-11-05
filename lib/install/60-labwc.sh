@@ -57,26 +57,48 @@ labwc_headless_test() {  # $1: labwc program, $2: rc.xml, $3: log
   return "$status"
 }
 
-# Arch: labwc is Arch's own package (packages/arch/runtime.list), current enough that limDE
-# builds nothing. It must be LABWC_MIN_VERSION or newer, and it must pass the same headless
-# test with limDE's rc.xml. The test runs again whenever pacman updates labwc; the version
-# it passed with is kept in the stamp.
+# limDE's rc.xml as it is installed: as is, or for a labwc older than LABWC_MIN_VERSION
+# (LABWC_CURVES=no) with libinput's standard pointer motion and scrolling instead of the
+# custom curves that need it (adaptive acceleration, no curve lines). One source file, so
+# the two never drift apart. $1: rc.xml; prints the result.
+labwc_rcxml() {
+  if [[ ${LABWC_CURVES:-yes} == no ]]; then
+    sed -e 's|<accelProfile>custom</accelProfile>|<accelProfile>adaptive</accelProfile>|' \
+        -e '/<\(motion\|scroll\|fallback\)Curve /d' "$1"
+  else
+    cat "$1"
+  fi
+}
+
+# Arch: labwc is Arch's own package (packages/arch/runtime.list); limDE builds nothing. It
+# must pass the same headless test with the rc.xml limDE installs. Older than
+# LABWC_MIN_VERSION, it gets the standard-touchpad variant (labwc_rcxml), and a later
+# ./install after pacman brings a newer labwc switches to the curves by itself. The stamp
+# keeps the version and variant that passed, so the test runs again only after a change.
 step_labwc_arch() {
-  local version log=$STATE_DIR/labwc-check.log
+  local version log=$STATE_DIR/labwc-check.log tmp
   version=$(pacman -Q labwc 2>/dev/null | awk '{print $2}')
   [[ -n $version ]] || die "Arch's labwc package is not installed"
   local bare=${version#*:}; bare=${bare%-*}
+  LABWC_CURVES=yes
   if [[ $(printf '%s\n' "$LABWC_MIN_VERSION" "$bare" | sort -V | head -1) != "$LABWC_MIN_VERSION" ]]; then
-    die "Arch's labwc is $bare; limDE's touchpad settings need $LABWC_MIN_VERSION or newer. Run sudo pacman -Syu once Arch's repositories have it, then ./install again"
+    LABWC_CURVES=no
+    note "labwc $bare: standard touchpad feel until $LABWC_MIN_VERSION"
   fi
-  if [[ -f $LABWC_STAMP && $(cat "$LABWC_STAMP") == "arch $version" ]]; then
+  local want="arch $version curves=$LABWC_CURVES"
+  if [[ -f $LABWC_STAMP && $(cat "$LABWC_STAMP") == "$want" ]]; then
     ok "Arch's labwc $version works with limDE's rc.xml"
     return
   fi
   mkdir -p "$STATE_DIR"; : > "$log"
-  labwc_headless_test /usr/bin/labwc "$LIMDE_ROOT/config/labwc/rc.xml" "$log" \
-    || die "Arch's labwc $version failed the headless test with limDE's rc.xml (log: $log)"
-  echo "arch $version" | sudo install -D -m 644 /dev/stdin "$LABWC_STAMP"
+  tmp=$(mktemp) || die "could not prepare the labwc test"
+  labwc_rcxml "$LIMDE_ROOT/config/labwc/rc.xml" > "$tmp"
+  if ! labwc_headless_test /usr/bin/labwc "$tmp" "$log"; then
+    rm -f "$tmp"
+    die "Arch's labwc $version failed the headless test with limDE's rc.xml (log: $log)"
+  fi
+  rm -f "$tmp"
+  echo "$want" | sudo install -D -m 644 /dev/stdin "$LABWC_STAMP"
   changed "Arch's labwc $version passed the headless test with limDE's rc.xml"
 }
 

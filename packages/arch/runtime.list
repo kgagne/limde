@@ -5,7 +5,7 @@
 # installer turns on the ones listed here (lib/install/distro/arch.sh::distro_services).
 
 ## Session
-labwc               # the window manager (Arch's own package; limDE needs 0.20.3 or newer)
+labwc               # the window manager (Arch's own package; its touchpad curves need 0.20.3 or newer)
 xorg-xwayland       # runs older X11 apps inside the Wayland desktop; labwc only suggests it
 foot                # the default terminal
 tmux                # keeps terminal programs, such as a CLI agent, running with no terminal open
