@@ -1,0 +1,65 @@
+{
+  "archinstall-language": "English",
+  "bootloader_config": {
+    "bootloader": "Systemd-boot",
+    "uki": false,
+    "removable": true
+  },
+  "disk_config": {
+    "config_type": "default_layout",
+    "device_modifications": [
+      {
+        "device": "/dev/vda",
+        "wipe": true,
+        "partitions": [
+          {
+            "obj_id": "limde-esp",
+            "status": "create",
+            "type": "primary",
+            "start": {"value": 1, "unit": "MiB", "sector_size": {"value": 512, "unit": "B"}},
+            "size": {"value": 512, "unit": "MiB", "sector_size": {"value": 512, "unit": "B"}},
+            "fs_type": "fat32",
+            "mountpoint": "/boot",
+            "mount_options": [],
+            "flags": ["boot", "esp"],
+            "btrfs": [],
+            "dev_path": null
+          },
+          {
+            "obj_id": "limde-root",
+            "status": "create",
+            "type": "primary",
+            "start": {"value": 513, "unit": "MiB", "sector_size": {"value": 512, "unit": "B"}},
+            "size": {"value": 19900, "unit": "MiB", "sector_size": {"value": 512, "unit": "B"}},
+            "fs_type": "ext4",
+            "mountpoint": "/",
+            "mount_options": [],
+            "flags": [],
+            "btrfs": [],
+            "dev_path": null
+          }
+        ]
+      }
+    ]
+  },
+  "hostname": "limde-test",
+  "kernels": ["linux"],
+  "locale_config": {"kb_layout": "us", "sys_lang": "en_US", "sys_enc": "UTF-8"},
+  "mirror_config": {
+    "custom_servers": [{"url": "@ARCHIVE_URL@"}]
+  },
+  "network_config": {"type": "nm"},
+  "ntp": true,
+  "packages": ["openssh", "sudo"],
+  "services": ["sshd"],
+  "pacman_config": {"color": false, "parallel_downloads": 5},
+  "profile_config": {"profile": {"main": "Minimal", "details": []}},
+  "swap": false,
+  "timezone": "UTC",
+  "custom_commands": [
+    "printf 'tester ALL=(ALL) NOPASSWD:ALL\\n' > /etc/sudoers.d/90-tester-test-only && chmod 0440 /etc/sudoers.d/90-tester-test-only",
+    "mkdir -p /etc/systemd/system/getty@tty1.service.d && printf '[Service]\\nExecStart=\\nExecStart=-/usr/bin/agetty --autologin tester --noclear %%I $TERM\\n' > /etc/systemd/system/getty@tty1.service.d/autologin-test-only.conf",
+    "install -d -m 700 -o tester -g tester ~tester/.ssh && printf '%s\\n' '@SSH_KEY@' > ~tester/.ssh/authorized_keys && chown tester:tester ~tester/.ssh/authorized_keys && chmod 600 ~tester/.ssh/authorized_keys",
+    "printf 'PasswordAuthentication no\\nKbdInteractiveAuthentication no\\n' > /etc/ssh/sshd_config.d/90-limde-test-only.conf"
+  ]
+}

@@ -33,6 +33,30 @@ Observed on the first build (2026-10-24):
 - The CD-ROM I/O errors during the installer's power-off are harmless: the media is
   ejected after the install has finished.
 
+## Arch Linux (second base, in progress)
+
+`--distro arch` (or `LIMDE_VM_DISTRO=arch`, which test scripts inherit) gives every command
+its own folder, `local/vm/arch`: its own base image, VMs and installed image; the SSH key
+is shared. limDE's installer does not support Arch yet, so only `base`, `up`, `ssh`,
+`copy`, `shot`, `down`, `rm`, `list`, `du` and `clean` are useful there for now.
+
+- `vm --distro arch base` checks the pinned ISO (`archlinux-2026.11.01-x86_64.iso`, sha256 in
+  `vm`; downloaded if missing), boots its own kernel and initramfs with the options of the
+  ISO's boot entry plus `script=`, which the live system runs as root on tty1
+  (`arch-install.sh`). That waits for the live system, runs archinstall 4.5 with
+  `archinstall.json` and `archinstall-creds.json` (`--silent --skip-version-check`), and
+  powers off. All three are served over HTTP on the host's loopback, as for Ubuntu.
+- The install: GPT with a 512 MiB ESP (systemd-boot, also at the removable path) and one
+  ext4 root, the `linux` kernel, the Minimal profile, NetworkManager, OpenSSH (password
+  logins off), en_US.UTF-8, UTC, no swap. Packages come from the Arch Linux Archive's copy
+  of the repositories on 2026-11-01, so a base built later installs the same versions.
+- The same test-only user as Ubuntu: `tester`/`tester` in `wheel`, passwordless sudo, tty1
+  autologin, key login over SSH. limDE never sets these up.
+- `arch-install.sh` copies its output to the serial log (`local/vm/arch/base-build/serial.log`);
+  `base` succeeds only when archinstall's answers were fetched and the log ends in
+  `limde-arch-install: done`.
+- `vm clean --all` without `--distro` deletes all of `local/vm`, Arch included.
+
 ## Fast iteration: the installed image
 
 A full install takes about 20 minutes, almost all of it apt and the labwc build, so

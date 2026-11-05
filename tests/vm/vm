@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Headless QEMU test VMs for limde. No root needed; KVM access is enough.
 #
-#   tests/vm/vm base             install Ubuntu Server into the base image (unattended)
+#   tests/vm/vm [--distro arch] COMMAND ...   Arch VMs (base, VMs, installed image) live in
+#                                their own folder, local/vm/arch; without it, Ubuntu Server.
+#                                LIMDE_VM_DISTRO=arch does the same and reaches test scripts
+#   tests/vm/vm base             install Ubuntu Server (or Arch) into the base image (unattended)
 #   tests/vm/vm up NAME [--installed]   start a throwaway VM on a copy-on-write overlay
 #                                of base, or of the saved installed image (limDE already
 #                                installed; about a minute). LIMDE_VM_RES=1920x1200 offers
@@ -31,10 +34,38 @@ set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
-dir=${LIMDE_VM_DIR:-$repo/local/vm}
+
+# --distro NAME anywhere on the command line picks the distro (ubuntu or arch).
+args=()
+while (($#)); do
+  case $1 in
+    --distro) LIMDE_VM_DISTRO=${2:-}; shift 2 || true ;;
+    --distro=*) LIMDE_VM_DISTRO=${1#--distro=}; shift ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+set -- "${args[@]+"${args[@]}"}"
+distro=${LIMDE_VM_DISTRO:-ubuntu}
+export LIMDE_VM_DISTRO=$distro
+
+vm_root=${LIMDE_VM_DIR:-$repo/local/vm}
+dir=$vm_root
+# One test key for every VM, whatever its distro.
+key=$vm_root/id_ed25519
 iso_name=ubuntu-26.04.1-live-server-amd64.iso
 iso_sha256=cc8a95cde20f6ced61a322420de00f10cc3c90ced545daa46cb9c1a117f1d927
 iso_url=https://releases.ubuntu.com/26.04/$iso_name
+# Arch: the ISO is pinned like Ubuntu's, and packages come from the Arch Linux Archive's
+# copy of the repositories on one day, so a base built later installs the same versions.
+arch_iso_name=archlinux-2026.11.01-x86_64.iso
+arch_iso_sha256=01bcdcf01af2f7d58f2794899c834770d25c9bfc945bd092b32bb66672a4a216
+arch_iso_url=https://geo.mirror.pkgbuild.com/iso/2026.11.01/$arch_iso_name
+arch_archive_url='https://archive.archlinux.org/repos/2026/11/01/$repo/os/$arch'
+case $distro in
+  ubuntu) ;;
+  arch) dir=$vm_root/arch ;;
+  *) echo "vm: unknown distro: $distro (ubuntu or arch)" >&2; exit 2 ;;
+esac
 ovmf_code=/usr/share/OVMF/OVMF_CODE_4M.fd
 ovmf_vars=/usr/share/OVMF/OVMF_VARS_4M.fd
 mem=${LIMDE_VM_MEM:-4096}
@@ -54,7 +85,7 @@ running() { [[ -S $(vmdir "$1")/qmp.sock ]] && "$here/qmp.py" "$(vmdir "$1")/qmp
 port_of() { cat "$(vmdir "$1")/ssh-port"; }
 
 ssh_opts() {
-  echo -i "$dir/id_ed25519" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+  echo -i "$key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
     -o LogLevel=ERROR -o ConnectTimeout=5 -o BatchMode=yes -p "$(port_of "$1")"
 }
 
@@ -88,6 +119,7 @@ PY
 }
 
 cmd_base() {
+  [[ $distro == arch ]] && { cmd_base_arch; return; }
   need qemu-system-x86_64 "sudo apt install qemu-system-x86"; need qemu-img; need curl
   [[ -r $ovmf_code ]] || die "missing $ovmf_code (sudo apt install ovmf)"
   mkdir -p "$dir"
@@ -103,10 +135,10 @@ cmd_base() {
   "$here/iso-extract.py" "$iso" casper/vmlinuz "$work/vmlinuz"
   "$here/iso-extract.py" "$iso" casper/initrd "$work/initrd"
 
-  [[ -f $dir/id_ed25519 ]] || ssh-keygen -q -t ed25519 -N '' -C limde-test -f "$dir/id_ed25519"
+  [[ -f $key ]] || ssh-keygen -q -t ed25519 -N '' -C limde-test -f "$key"
   local hash
   hash=$(openssl passwd -6 tester)
-  sed -e "s|@PASSWORD_HASH@|$hash|" -e "s|@SSH_KEY@|$(cat "$dir/id_ed25519.pub")|" \
+  sed -e "s|@PASSWORD_HASH@|$hash|" -e "s|@SSH_KEY@|$(cat "$key.pub")|" \
     "$here/autoinstall.yaml" > "$work/seed/user-data"
   echo "instance-id: limde-base" > "$work/seed/meta-data"
   : > "$work/seed/vendor-data"
@@ -136,11 +168,76 @@ cmd_base() {
   echo "Base image ready: $dir/base.qcow2"
 }
 
+# The Arch base: the ISO's own kernel and initramfs boot with `script=`, which runs
+# arch-install.sh on the live system; that runs archinstall with archinstall.json and
+# archinstall-creds.json (all served over HTTP on the host's loopback) and powers off.
+cmd_base_arch() {
+  need qemu-system-x86_64 "sudo apt install qemu-system-x86"; need qemu-img; need curl
+  [[ -r $ovmf_code ]] || die "missing $ovmf_code (sudo apt install ovmf)"
+  mkdir -p "$dir"
+  local iso=$dir/$arch_iso_name
+  if [[ ! -s $iso ]]; then
+    echo "Downloading $arch_iso_name"
+    curl -fL --retry 3 -o "$iso.part" "$arch_iso_url" && mv "$iso.part" "$iso"
+  fi
+  echo "$arch_iso_sha256  $iso" | sha256sum -c --quiet - || die "$arch_iso_name checksum mismatch"
+
+  local work=$dir/base-build
+  rm -rf "$work"; mkdir -p "$work/seed"
+  # ISO 9660 names: dashes read as underscores.
+  "$here/iso-extract.py" "$iso" arch/boot/x86_64/vmlinuz_linux "$work/vmlinuz"
+  "$here/iso-extract.py" "$iso" arch/boot/x86_64/initramfs_linux.img "$work/initramfs.img"
+  "$here/iso-extract.py" "$iso" loader/entries/01_archiso_linux.conf "$work/boot-entry.conf"
+  # The live system finds its ISO by the options of the ISO's own boot entry.
+  local options
+  options=$(sed -n 's/^options[[:space:]]*//p' "$work/boot-entry.conf")
+  [[ $options == *archisosearchuuid=* ]] || die "no archisosearchuuid in the ISO's boot entry"
+
+  [[ -f $key ]] || ssh-keygen -q -t ed25519 -N '' -C limde-test -f "$key"
+  local port; port=$(free_port)
+  local seed_url=http://$host_from_guest:$port
+  local hash
+  hash=$(openssl passwd -6 tester)
+  sed -e "s|@PASSWORD_HASH@|$hash|" "$here/archinstall-creds.json" > "$work/seed/archinstall-creds.json"
+  sed -e "s|@SSH_KEY@|$(cat "$key.pub")|" -e "s|@ARCHIVE_URL@|$arch_archive_url|" \
+    "$here/archinstall.json" > "$work/seed/archinstall.json"
+  sed -e "s|@SEED_URL@|$seed_url|" "$here/arch-install.sh" > "$work/seed/arch-install.sh"
+  python3 -c 'import json, sys; [json.load(open(f)) for f in sys.argv[1:]]' \
+    "$work/seed/archinstall.json" "$work/seed/archinstall-creds.json" \
+    || die "the archinstall answers are not valid JSON"
+
+  python3 -m http.server --bind 127.0.0.1 --directory "$work/seed" "$port" \
+    >"$work/seed-server.log" 2>&1 &
+  seed_server=$!  # global: the EXIT trap runs after this function returns
+  trap 'kill "$seed_server" 2>/dev/null || true' EXIT
+
+  rm -f "$dir/base.qcow2" "$dir/base-vars.fd"
+  qemu-img create -q -f qcow2 "$work/disk.qcow2" "$disk_size"
+  cp "$ovmf_vars" "$work/vars.fd"
+  echo "Installing Arch into the base image (serial log: $work/serial.log)"
+  # shellcheck disable=SC2046
+  timeout 60m qemu-system-x86_64 $(qemu_common "$work/disk.qcow2" "$work/vars.fd" "$work/qmp.sock") \
+    -drive "media=cdrom,readonly=on,file=$iso" \
+    -kernel "$work/vmlinuz" -initrd "$work/initramfs.img" \
+    -append "$options script=$seed_url/arch-install.sh console=tty0 console=ttyS0,115200" \
+    -nic user,model=virtio-net-pci -serial "file:$work/serial.log" \
+    || die "install did not finish (exit $?); see $work/serial.log"
+  grep -q 'GET /archinstall.json' "$work/seed-server.log" || die "the installer never fetched its answers"
+  grep -q 'limde-arch-install: done' "$work/serial.log" \
+    || die "archinstall did not finish; see $work/serial.log"
+
+  mv "$work/disk.qcow2" "$dir/base.qcow2"
+  mv "$work/vars.fd" "$dir/base-vars.fd"
+  chmod a-w "$dir/base.qcow2" "$dir/base-vars.fd"
+  echo "Base image ready: $dir/base.qcow2"
+}
+
 cmd_up() {
   name_ok "${1:-}"; local d; d=$(vmdir "$1")
   local from=base
   [[ ${2:-} == --installed ]] && from=installed
-  [[ -f $dir/base.qcow2 ]] || die "no base image; run: tests/vm/vm base"
+  local how=tests/vm/vm; [[ $distro == ubuntu ]] || how+=" --distro $distro"
+  [[ -f $dir/base.qcow2 ]] || die "no base image; run: $how base"
   [[ $from == base || -f $dir/installed.qcow2 ]] \
     || die "no installed image; run tests/vm/test-install NAME --save first"
   running "$1" && { echo "$1 is already running (ssh port $(port_of "$1"))"; return; }

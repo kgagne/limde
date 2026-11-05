@@ -89,7 +89,7 @@ Test: `scripts/check` (icons, both themes, contrast, renderer); `python3 compone
 
 ## VM tests: `tests/vm/` (needs KVM; details in `tests/vm/README.md`)
 - **fast bench** — `tests/vm/vm::cmd_save` (installed image), `up NAME --installed`, `tests/vm/vm::cmd_sync` (working tree in, `./install`, reboot). Full install tests are a separate pass before a push (`tests/vm/README.md`).
-- **vm tool** — `tests/vm/vm::cmd_base`, `tests/vm/vm::cmd_up`, `tests/vm/vm::cmd_copy`, `tests/vm/vm::cmd_shot`, `tests/vm/vm::cmd_click`. Trap: `copy` is `rsync --delete`; `click` assumes the same `LIMDE_VM_RES` as `up`.
+- **vm tool** — `tests/vm/vm::cmd_base`, `tests/vm/vm::cmd_up`, `tests/vm/vm::cmd_copy`, `tests/vm/vm::cmd_shot`, `tests/vm/vm::cmd_click`. Arch base (`--distro arch`, folder local/vm/arch): `tests/vm/vm::cmd_base_arch`, answers `tests/vm/archinstall.json` and `tests/vm/archinstall-creds.json`, ISO boot script `tests/vm/arch-install.sh`. Trap: `copy` is `rsync --delete`; `click` assumes the same `LIMDE_VM_RES` as `up`; archinstall's own logs exist only inside the live ISO, so `arch-install.sh` prints its tail to the serial log on failure.
 - **install test** — `tests/vm/test-install NAME [--keep]`: two runs ("No changes"), reboot, session checks.
 - **release check** — `tests/vm/test-acceptance` (about 40 min): power cut and Ctrl+C mid-install, first login, baseline, update over user changes.
 - **wifi test** — `tests/vm/test-wifi NAME` after `test-install NAME --keep`: simulated radios, two hostapd networks, `tests/vm/wifi-check`. Trap: it tests the installed Tinybar, not the repo copy.
