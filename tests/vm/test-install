@@ -64,6 +64,7 @@ sleep 25   # let autologin start the session and its autostart pieces
 check "labwc runs after reboot" on_vm 'pgrep -x labwc'
 check "running labwc is the limde build" on_vm 'pid=$(pgrep -x labwc) && [ "$(readlink /proc/$pid/exe)" = /usr/local/bin/labwc ] && grep -qx "$(. limde/pins/labwc; echo "$LABWC_COMMIT $WLROOTS_COMMIT")" /usr/local/share/limde/labwc.commit'
 check "labwc runs on tty1" on_vm 'pid=$(pgrep -x labwc) && tty=$(ps -o tty= -p $pid) && [ "$tty" = tty1 ]'
+check "tty1 login unlocks the keyring" on_vm 'grep -qx "auth  *optional  *pam_gnome_keyring.so" /etc/pam.d/login && grep -qx "session  *optional  *pam_gnome_keyring.so auto_start" /etc/pam.d/login'
 check "NetworkManager connected" on_vm 'nmcli -t -f STATE general | grep -q ^connected'
 check "networkd stays off" on_vm '! systemctl -q is-active systemd-networkd.service'
 check "built binaries have all their libraries" on_vm 'test -x /usr/local/bin/labwc -a -x /usr/local/bin/pcmanfm && ! ldd /usr/local/bin/labwc /usr/local/bin/labnag /usr/local/bin/pcmanfm | grep -q "not found"'

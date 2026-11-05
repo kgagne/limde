@@ -148,6 +148,32 @@ normally your `~/.profile` from before limDE.
 
 Running `./install` again adds the block back.
 
+## The login keyring lines
+
+The installer adds two lines to `/etc/pam.d/login`, both `optional`, so a keyring problem
+never stops you logging in:
+
+```
+auth       optional   pam_gnome_keyring.so
+session    optional   pam_gnome_keyring.so auto_start
+```
+
+Before it changed the file, it saved the previous copy in `~/.local/state/limde/backups/`,
+named `pam.d-login.` and the date and time. To take the lines out, delete them with
+`sudoedit /etc/pam.d/login`, or copy that saved file back:
+
+```
+sudo cp ~/.local/state/limde/backups/pam.d-login.DATE /etc/pam.d/login
+```
+
+Running `./install` again adds them back.
+
+If an app asks for the keyring's password even though you logged in with a password, the
+keyring's password is no longer your login password (it was set before a password reset
+done as root, for example). Give it the old one, or delete
+`~/.local/share/keyrings/login.keyring` to start a new keyring at the next login, which
+loses the passwords saved in the old one.
+
 ## The network
 
 ### During the install

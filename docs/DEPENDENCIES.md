@@ -96,7 +96,12 @@ From `packages/runtime.list`: what the desktop needs to run.
 ### Login keyring and fonts
 
 - `gnome-keyring`: stores passwords and keys for apps.
-- `libpam-gnome-keyring`: unlocks the keyring when you log in.
+- `libpam-gnome-keyring`: the login module that unlocks the keyring with your password
+  when you log in on tty1, and starts it for the session. The package itself adds only
+  the line that changes the keyring's password when you change yours with `passwd`; the
+  installer's Login keyring step adds the other two to `/etc/pam.d/login` (see
+  [INSTALL.md](INSTALL.md#4-install)). An automatic login, with no password typed, cannot
+  unlock it.
 - `fonts-open-sans`: the interface font.
 
 ## Build packages

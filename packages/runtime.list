@@ -55,5 +55,5 @@ alsa-topology-conf  # the audio DSP setup some Intel laptops need; ALSA only rec
 
 ## Login keyring and fonts
 gnome-keyring           # stores passwords and keys for apps
-libpam-gnome-keyring    # unlocks the keyring when you log in
+libpam-gnome-keyring    # unlocks the keyring with your password when you log in on tty1
 fonts-open-sans         # the interface font

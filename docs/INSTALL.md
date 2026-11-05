@@ -137,8 +137,13 @@ already in place or `changed` for what it did.
     files to your home where you don't have them yet, and hides a few redundant launcher
     entries.
 14. **agent-web:** installs the agent window's command, welcome page and menu entry.
-15. **Session:** adds the block to `~/.profile` that starts labwc on tty1.
-16. **Install record:** writes the commit, the clone's path and your optional groups to
+15. **Login keyring:** adds two optional lines to `/etc/pam.d/login`, after its
+    `common-auth` and `common-session` lines, so your tty1 login password unlocks the
+    keyring and the keyring starts with your session. Ubuntu's keyring package adds only
+    the line for password changes; a display manager would carry these two. Before it
+    changes the file it saves a copy in `~/.local/state/limde/backups/`.
+16. **Session:** adds the block to `~/.profile` that starts labwc on tty1.
+17. **Install record:** writes the commit, the clone's path and your optional groups to
     `/usr/local/share/limde/installed`, for `limde-update`.
 
 At the end it prints how many changes it made, or "No changes" when everything was
@@ -161,6 +166,9 @@ log out and back in; otherwise switch to tty1 (Ctrl+Alt+F1) and log in there.
 The block uses `exec`, so if labwc ever exits, the login ends and tty1 shows a login
 prompt again instead of leaving a logged-in shell behind. Before the installer changes
 `~/.profile` it saves a copy in `~/.local/state/limde/backups/`.
+
+The password you type at this login also unlocks the login keyring, where apps keep the
+passwords they save.
 
 ## The network switch
 
