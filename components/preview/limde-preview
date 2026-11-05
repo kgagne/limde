@@ -33,7 +33,8 @@ import time
 from pathlib import Path
 
 # On Intel + NVIDIA laptops, GTK's Vulkan renderer would otherwise wake the NVIDIA GPU
-# (docs/PREVIEW.md); everywhere else Vulkan picks the only GPU there is.
+# (docs/DEPENDENCIES.md, mesa-vulkan-drivers); everywhere else Vulkan picks the only GPU
+# there is.
 INTEL_ICD = "/usr/share/vulkan/icd.d/intel_icd.json"
 if os.path.exists(INTEL_ICD) and any(
         (dev / "vendor").read_text().strip() == "0x10de"

@@ -203,6 +203,9 @@ Description=CLI agent with Remote Control, in tmux (attach: tmux -L agent attach
 [Service]
 Type=forking
 WorkingDirectory=%h
+# The user manager's PATH lacks ~/.local/bin, where CLI agents often install themselves
+# and their tools, so the agent would not find them.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/usr/bin/tmux -L agent new-session -d -s agent %h/.local/bin/claude --remote-control
 ExecStop=/usr/bin/tmux -L agent kill-server
 Restart=always
