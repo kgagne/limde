@@ -1,2 +1,5 @@
-# Laptop extras: screen brightness keys.
-brightnessctl       # changes screen brightness without root
+# Laptop extras: screen brightness keys, power use and disk health tools.
+brightnessctl       # changes screen brightness, for the brightness keys and Tinybar's slider
+brightness-udev     # lets the video group change the backlight; without it brightnessctl needs root
+powertop            # shows what uses power on battery (sudo powertop)
+smartmontools       # reads the disks' health (sudo smartctl -a DISK); also starts smartd, which checks them every 30 min

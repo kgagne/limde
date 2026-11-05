@@ -20,6 +20,7 @@ qalc                        # the calculator in the launcher
 libgtk-4-1                  # GTK 4 for the Walker launcher
 libgtk4-layer-shell0        # lets Walker open above other windows
 libpoppler-glib8t64         # PDF previews in Walker
+xdg-utils                   # opens the files you pick in the launcher (xdg-open); wl-clipboard only recommends it
 
 ## Files and preview
 pcmanfm             # the file manager (limde later builds it with Space preview)
@@ -34,6 +35,7 @@ poppler-utils       # PDF pages in the Space preview
 libgtk-3-0t64       # GTK 3, which Firefox uses
 libasound2t64       # sound in Firefox
 libx11-xcb1         # Firefox's X11 compatibility
+libnotify4          # Firefox's and agent-web's notifications go to Mako, not Firefox's own popups
 
 ## Screenshots and clipboard
 grim                # screenshots
@@ -48,6 +50,8 @@ pipewire-pulse      # sound for apps that expect PulseAudio
 pipewire-alsa       # sound for apps that use ALSA directly
 wireplumber         # chooses and connects sound devices
 rtkit               # glitch-free sound scheduling
+alsa-ucm-conf       # sound device profiles many laptops need (Intel SOF and others); ALSA only recommends it
+alsa-topology-conf  # the audio DSP setup some Intel laptops need; ALSA only recommends it
 
 ## Login keyring and fonts
 gnome-keyring           # stores passwords and keys for apps

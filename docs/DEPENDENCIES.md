@@ -43,6 +43,9 @@ From `packages/runtime.list`: what the desktop needs to run.
 - `libgtk-4-1`: GTK 4 for the Walker launcher.
 - `libgtk4-layer-shell0`: lets Walker open above other windows.
 - `libpoppler-glib8t64`: PDF previews in Walker.
+- `xdg-utils`: `xdg-open`, which opens the files you pick in the launcher: Elephant's
+  file search hands each result to it. It is only a recommended package of
+  `wl-clipboard`, so it is listed.
 
 ### Files and preview
 
@@ -62,6 +65,9 @@ From `packages/runtime.list`: what the desktop needs to run.
 - `libgtk-3-0t64`: GTK 3, which Firefox uses.
 - `libasound2t64`: sound in Firefox.
 - `libx11-xcb1`: Firefox's X11 compatibility.
+- `libnotify4`: Firefox loads it to send system notifications, which Mako then shows.
+  limDE has no desktop portal, so without it Firefox and the agent window draw their own
+  popups instead.
 
 ### Screenshots and clipboard
 
@@ -81,6 +87,11 @@ From `packages/runtime.list`: what the desktop needs to run.
 - `pipewire-alsa`: sound for apps that use ALSA directly.
 - `wireplumber`: chooses and connects sound devices.
 - `rtkit`: glitch-free sound scheduling.
+- `alsa-ucm-conf`: the device profiles (UCM) that name and route the inputs and outputs
+  of many laptops' sound hardware, Intel's SOF among them; without them such a laptop
+  has no usable sound.
+- `alsa-topology-conf`: the audio DSP topology some Intel laptops need.
+  `libasound2-data` only recommends this and `alsa-ucm-conf`, so both are listed.
 
 ### Login keyring and fonts
 
@@ -157,10 +168,19 @@ Bluetooth: headphones, speakers, keyboards and mice, from the panel.
 
 ### laptop
 
-Laptop extras: screen brightness keys.
+Laptop extras: screen brightness keys, power use and disk health tools.
 
-- `brightnessctl`: changes screen brightness without root. `tinybar-brightness`, which
-  the brightness keys run, uses it.
+- `brightnessctl`: changes screen brightness. `tinybar-brightness`, which the brightness
+  keys and Tinybar's brightness slider run, uses it.
+- `brightness-udev`: a udev rule that gives the `video` group write access to the
+  backlight, so `brightnessctl` works without root for a user in that group. Ubuntu's
+  `brightnessctl` only recommends it, and without it the keys and the slider fail.
+- `powertop`: shows what uses power on battery, process by process and device by device
+  (`sudo powertop`). Its service that changes power settings at boot stays off.
+- `smartmontools`: reads the disks' health (`sudo smartctl -a` and a disk, such as
+  `/dev/nvme0`; `sudo smartctl --scan` lists them). The package also starts `smartd`,
+  which checks the disks every 30 minutes and logs problems to the journal; turn it off
+  with `sudo systemctl disable --now smartmontools`.
 
 ### papers
 

@@ -120,7 +120,7 @@ Wi-Fi from the Wi-Fi icon in the panel; NetworkManager remembers it after that.
 | Group | Adds | Pick it when |
 | --- | --- | --- |
 | `bluetooth` | BlueZ, PipeWire's Bluetooth audio | you use Bluetooth headphones, speakers, keyboards or mice; the panel then shows a Bluetooth menu |
-| `laptop` | `brightnessctl` | the machine has a screen backlight; without it the brightness keys do nothing |
+| `laptop` | `brightnessctl` and its udev rule, `powertop`, `smartmontools` | the machine has a screen backlight; without it the brightness keys do nothing |
 | `papers` | GNOME Papers | you want a PDF and document viewer |
 | `printing` | CUPS, Avahi | you print, including to network printers |
 

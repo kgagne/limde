@@ -59,7 +59,9 @@ with more detail.
 The optional groups are the files in `packages/optional/`:
 
 - `bluetooth`: BlueZ and PipeWire's Bluetooth audio. Tinybar then shows a Bluetooth menu.
-- `laptop`: `brightnessctl`. Without it the brightness keys do nothing.
+- `laptop`: `brightnessctl` and its udev rule, for the brightness keys and Tinybar's
+  brightness slider (without them both do nothing), plus `powertop` for power use and
+  `smartmontools` for disk health.
 - `papers`: GNOME Papers, a PDF and document viewer.
 - `printing`: CUPS and Avahi, for printing, including to network printers.
 
