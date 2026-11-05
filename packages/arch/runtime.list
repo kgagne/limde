@@ -69,4 +69,5 @@ sof-firmware        # the audio DSP firmware most Intel laptops need; not in lin
 
 ## Login keyring and fonts
 gnome-keyring       # stores passwords and keys for apps; includes the PAM module that unlocks it at login
+openssh             # OpenSSH's key agent (ssh-agent.socket), the session's one SSH agent, as on Ubuntu
 ttf-opensans        # the interface font

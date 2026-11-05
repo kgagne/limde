@@ -99,7 +99,9 @@ fi
 check "labwc runs on tty1" on_vm 'pid=$(pgrep -x labwc) && tty=$(ps -o tty= -p $pid) && [ "$tty" = tty1 ]'
 check "tty1 login unlocks the keyring" on_vm 'grep -qx "auth  *optional  *pam_gnome_keyring.so" /etc/pam.d/login && grep -qx "session  *optional  *pam_gnome_keyring.so auto_start" /etc/pam.d/login'
 [[ $distro == arch ]] && check "passwd changes the keyring's password too" on_vm 'grep -qxE "password[[:space:]]+optional[[:space:]]+pam_gnome_keyring.so" /etc/pam.d/passwd'
-check "gcr-ssh-agent masked; SSH_AUTH_SOCK is OpenSSH's agent" on_vm 'for u in gcr-ssh-agent.socket gcr-ssh-agent.service; do [ "$(systemctl --user is-enabled $u)" = masked ] && ! systemctl --user -q is-active $u || exit 1; done; systemctl --user show-environment | grep -qx "SSH_AUTH_SOCK=$XDG_RUNTIME_DIR/openssh_agent"'
+# OpenSSH's agent socket: Ubuntu's unit names it openssh_agent, Arch's ssh-agent.socket.
+agent_sock=openssh_agent; [[ $distro == arch ]] && agent_sock=ssh-agent.socket
+check "gcr-ssh-agent masked; SSH_AUTH_SOCK is OpenSSH's agent" on_vm 'for u in gcr-ssh-agent.socket gcr-ssh-agent.service; do [ "$(systemctl --user is-enabled $u)" = masked ] && ! systemctl --user -q is-active $u || exit 1; done; systemctl --user -q is-active ssh-agent.socket && systemctl --user show-environment | grep -qx "SSH_AUTH_SOCK=$XDG_RUNTIME_DIR/'"$agent_sock"'"'
 check "NetworkManager connected" on_vm 'nmcli -t -f STATE general | grep -q ^connected'
 check "networkd stays off" on_vm "$networkd_off"
 if [[ $distro == ubuntu ]]; then

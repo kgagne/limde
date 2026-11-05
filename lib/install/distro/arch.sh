@@ -104,18 +104,19 @@ SERVICES_DONE=$STATE_DIR/arch-services-enabled
 distro_services() {
   local unit pkg pair scope enable said
   mkdir -p "$STATE_DIR"; touch "$SERVICES_DONE"
-  # System services for the optional groups, then PipeWire's user units for every user.
+  # System services for the optional groups, then user units for every user: PipeWire's,
+  # and OpenSSH's key agent (on by default on Ubuntu; limDE keeps it as the one SSH agent).
   for pair in bluez:bluetooth.service cups:cups.socket avahi:avahi-daemon.service \
               pipewire:pipewire.socket pipewire-pulse:pipewire-pulse.socket \
-              wireplumber:wireplumber.service; do
+              wireplumber:wireplumber.service openssh:ssh-agent.socket; do
     pkg=${pair%%:*} unit=${pair#*:}
     installed "$pkg" || continue
     # A service belongs to the package lists only when its package is on them: avahi also
     # comes in as a dependency (pipewire-pulse, libcups) without the printing group.
     printf '%s\n' "${PACKAGES[@]}" | grep -qx "$pkg" || continue
     grep -qx "$unit" "$SERVICES_DONE" && continue
-    # PipeWire's units are user units: enabled for every user, started at the next login.
-    if [[ $pkg == pipewire* || $pkg == wireplumber ]]; then
+    # User units: enabled for every user, started at the next login.
+    if [[ $pkg == pipewire* || $pkg == wireplumber || $pkg == openssh ]]; then
       scope=(--global) enable=(enable) said="turned on $unit for every user (from the next login)"
     else
       scope=() enable=(enable --now) said="turned on $unit"
@@ -129,5 +130,19 @@ distro_services() {
       note "could not turn on $unit"
     fi
   done
+  arch_ssh_agent_env
   arch_printing_names
+}
+
+# Ubuntu's ssh-agent.socket puts SSH_AUTH_SOCK in the user manager's environment when it
+# starts; Arch's leaves that to the system ("Requires SSH_AUTH_SOCK ... to be set"), so
+# limDE sets it for every user's manager through environment.d.
+SSH_AGENT_ENV=/etc/environment.d/90-limde-ssh-agent.conf
+arch_ssh_agent_env() {
+  installed openssh || return 0
+  local want='SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket'
+  [[ $(cat "$SSH_AGENT_ENV" 2>/dev/null) == "$want" ]] && return 0
+  sudo install -d -m 755 /etc/environment.d
+  printf '%s\n' "$want" | sudo tee "$SSH_AGENT_ENV" >/dev/null
+  changed "SSH_AUTH_SOCK points at OpenSSH's agent ($SSH_AGENT_ENV, from the next login)"
 }
