@@ -53,6 +53,10 @@
     <keybind key="A-S-Tab"><action name="Execute" command="walker --close" /><action name="PreviousWindow" /></keybind>
     <keybind key="W-d"><action name="Execute" command="walker --close" /><action name="ToggleShowDesktop" /></keybind>
     <keybind key="A-Space"><action name="Execute" command="walker --close" /><action name="ShowMenu" menu="client-menu" atCursor="no" /></keybind>
+    <!-- The pointer to the middle of the screen. The session start presses this once
+         (autostart.d/80-pointer.sh); otherwise the pointer starts near the top-left
+         corner, at 100,100. -->
+    <keybind key="A-W-h"><action name="WarpCursor" to="output" x="center" y="center" /></keybind>
 
     <keybind key="XF86AudioRaiseVolume"><action name="Execute" command="tinybar-volume up" /></keybind>
     <keybind key="XF86AudioLowerVolume"><action name="Execute" command="tinybar-volume down" /></keybind>

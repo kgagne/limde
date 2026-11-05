@@ -154,6 +154,7 @@ If you install from a VM onto a USB stick or another disk for a laptop, add
 | Super+L | lock the screen |
 | Super+W / Super+Q | close the tab or window / quit the app |
 | Super+Escape | pass every key to the focused window (VMs, remote desktops); press again to undo |
+| Alt+Super+H | move the pointer to the middle of the screen (done once at login) |
 | Print / Shift+Print | screenshot a region / the whole screen, saved and copied |
 | Ctrl+Print | copy a region to the clipboard only |
 | Volume and brightness keys | change them, with a short readout in the panel |

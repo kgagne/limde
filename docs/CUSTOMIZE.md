@@ -131,6 +131,7 @@ labwc runs `/etc/xdg/labwc/autostart` when the session starts. It runs every pie
 - `50-launcher.sh`: Walker, kept running so it opens at once.
 - `60-agent-web.sh`: the agent window.
 - `70-clipboard-notify.sh`: the notice when files are cut or copied.
+- `80-pointer.sh`: moves the pointer to the middle of the screen (it presses Alt+Super+H).
 
 Your pieces follow three rules:
 
