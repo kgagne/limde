@@ -88,8 +88,13 @@
 
   <mouse>
     <default />
+    <!-- Clicks on the empty desktop do nothing. labwc's defaults open its root menu there,
+         and without a menu.xml that menu has an Exit that ends the session without asking.
+         A binding whose only action is None removes the default one before it. -->
     <context name="Root">
-      <mousebind button="Right" action="Press"><action name="ShowMenu" menu="root-menu" /></mousebind>
+      <mousebind button="Left" action="Press"><action name="None" /></mousebind>
+      <mousebind button="Right" action="Press"><action name="None" /></mousebind>
+      <mousebind button="Middle" action="Press"><action name="None" /></mousebind>
     </context>
   </mouse>
 

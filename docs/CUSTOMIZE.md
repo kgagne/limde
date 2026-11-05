@@ -98,6 +98,28 @@ run `tinybar-volume` and `tinybar-brightness`, and the screenshot keys run
 `limde-screenshot`; if you rebind those keys, keep those commands so the panel still shows
 the change.
 
+### Desktop clicks
+
+Clicks on the empty desktop do nothing. labwc's defaults open its root menu there, and
+without a `menu.xml` that menu has an Exit that ends the session without asking, so
+limDE's file binds those three buttons to `None`. For a desktop menu, write your own
+`~/.config/labwc/menu.xml` (`man labwc-menu`) and bind a button to it in your own
+`rc.xml`, for example a right-click:
+
+```xml
+<?xml version="1.0"?>
+<labwc_config>
+  <mouse>
+    <context name="Root">
+      <mousebind button="Right" action="Press"><action name="ShowMenu" menu="root-menu" /></mousebind>
+    </context>
+  </mouse>
+</labwc_config>
+```
+
+A `<default />` in your own `<mouse>` section loads labwc's defaults again after limDE's
+file, and brings back the menu on all three buttons.
+
 ### Touchpad
 
 limDE's touchpad settings are one `<device category="touchpad">` block in the
