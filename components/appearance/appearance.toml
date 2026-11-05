@@ -59,7 +59,7 @@ load_moderate = "#8A5A00"
 load_high = "#B24A00"
 load_severe = "#B3261E"
 button_close = "#E54742"
-button_iconify = "#A57818"
+button_iconify = "#B47A00"
 button_maximize = "#18942C"
 button_inactive = "#707070"
 
