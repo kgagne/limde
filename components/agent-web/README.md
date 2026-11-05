@@ -31,6 +31,6 @@ ID `limde.AgentWeb`. Firefox autoconfig (`agent-web.cfg`, copied into the Firefo
 install folder at each start, because Firefox updates can replace it) decides which pages
 stay. Tinybar puts that app ID first; the labwc config guards it from the close keys. The
 session start runs `limde-agent`, which in web mode runs `agent-web`, which starts one
-loop that reopens the window about 2 s after it closes. The loop ends with the labwc session it started in, and a loop left from
-the last session is stopped at the next start, so a quick log out and back in still leaves
-one window.
+loop that reopens the window about 2 s after it closes. The loop ends with the labwc
+session it started in, and a loop left from the last session is stopped at the next
+start, so a quick log out and back in still leaves one window.

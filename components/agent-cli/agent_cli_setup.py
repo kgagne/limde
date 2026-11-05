@@ -54,10 +54,12 @@ def config_home(home):
 
 
 def conf_path(home):
-    return config_home(home) / "limde" / "agent-cli.conf"
+    """Always under ~/.config, where agent-cli and limde-agent read it."""
+    return Path(home) / ".config" / "limde" / "agent-cli.conf"
 
 
 def unit_path(home):
+    """Where systemd looks for your user units, which honours XDG_CONFIG_HOME."""
     return config_home(home) / "systemd" / "user" / UNIT
 
 
@@ -187,7 +189,7 @@ class System:
 
     def mode(self):
         try:
-            for line in (config_home(self.home) / "limde" / "agent.conf").read_text().splitlines():
+            for line in (self.home / ".config" / "limde" / "agent.conf").read_text().splitlines():
                 if line.startswith("mode="):
                     return line[5:].strip()
         except OSError:

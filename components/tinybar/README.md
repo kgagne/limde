@@ -7,8 +7,9 @@ Python with GTK 4 and gtk4-layer-shell, plus a small C helper (`toplevel-helper`
 lists windows through the wlr foreign-toplevel protocol.
 
 - Icons come from the icon theme (limDE's), as SVG; no icon fonts.
-- Settings: `~/.config/tinybar/settings.toml`, optional. `first_app_id` picks the app
-  that always sits leftmost (default `limde.AgentWeb`). `tailscale` controls the
+- Settings: `~/.config/tinybar/settings.toml`, optional. `first_app_id` picks the app,
+  or a list of apps, that always sits leftmost (default the agent window in either mode,
+  `limde.AgentWeb` and `limde.AgentCLI`). `tailscale` controls the
   Tailscale button: `"auto"` (default) shows it when the `tailscale` command is
   installed, `false` hides it, `true` shows it even when it is missing.
   `bluetooth` works the same way for the Bluetooth menu: `"auto"` shows it while BlueZ

@@ -210,6 +210,14 @@ class FileTests(unittest.TestCase):
             (Path(home) / ".config/limde/agent.conf").write_text("mode=cli\n")
             self.assertEqual(system.mode(), "cli")
 
+    def test_conf_stays_where_the_shell_scripts_read_it(self):
+        # agent-cli and limde-agent read ~/.config/limde; only the unit follows systemd's
+        # XDG_CONFIG_HOME.
+        with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": "/elsewhere"}):
+            self.assertEqual(setup.conf_path("/h"), Path("/h/.config/limde/agent-cli.conf"))
+            self.assertEqual(setup.unit_path("/h"),
+                             Path("/elsewhere/systemd/user/limde-agent-cli.service"))
+
 
 if __name__ == "__main__":
     unittest.main()
