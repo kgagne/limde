@@ -29,15 +29,18 @@ show_list() {
          -e 's/^\([a-z0-9][a-z0-9.+-]*\)\s*#\s*\(.*\)/      \1 — \2/p' "$1"
 }
 
-# A package install was cut short (power loss, Ctrl+C) and dpkg is half done: what apt
-# checks before refusing to install ("dpkg was interrupted"), or what dpkg --audit lists.
-# dpkg --audit needs root to read its lock; without sudo, only the first check runs.
-dpkg_interrupted() {
-  compgen -G '/var/lib/dpkg/updates/[0-9]*' >/dev/null && return 0
-  [[ -n $(sudo -n dpkg --audit 2>/dev/null) ]]
+# Source the file for this system's distro (lib/install/distro/ID.sh), which sets how
+# packages are installed and checked. Dies on a system limDE does not support.
+# LIMDE_OS_RELEASE names another os-release file, for tests.
+load_distro() {
+  # shellcheck source=/dev/null
+  . "${LIMDE_OS_RELEASE:-/etc/os-release}"
+  local file=$LIMDE_ROOT/lib/install/distro/${ID:-unknown}.sh
+  [[ -f $file ]] || die "limde supports Ubuntu 26.04 only (this is ${PRETTY_NAME:-unknown})"
+  # shellcheck source=lib/install/distro/ubuntu.sh
+  . "$file"
+  distro_supported || die "limde supports $DISTRO_LABEL only (this is ${PRETTY_NAME:-unknown})"
 }
-
-installed() { dpkg-query -W -f '${db:Status-Status}' "$1" 2>/dev/null | grep -qx installed; }
 
 # Keep sudo's ticket fresh during long steps, so the user is asked once.
 sudo_keepalive() {

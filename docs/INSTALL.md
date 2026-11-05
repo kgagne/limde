@@ -57,7 +57,7 @@ with more detail.
 
 ## 3. Choose the optional parts
 
-The optional groups are the files in `packages/optional/`:
+The optional groups are the files in `packages/ubuntu/optional/`:
 
 - `bluetooth`: BlueZ and PipeWire's Bluetooth audio. Tinybar then shows a Bluetooth menu.
 - `laptop`: `brightnessctl` and its udev rule, for the brightness keys and Tinybar's

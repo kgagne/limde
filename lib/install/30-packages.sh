@@ -1,4 +1,4 @@
-# Install the chosen packages from Ubuntu's archive.
+# Install the chosen packages with the distro's package manager (lib/install/distro).
 
 # brightness-udev lets the video group change the backlight, and Ubuntu Server's installer
 # does not put the first user in that group.
@@ -10,18 +10,13 @@ brightness_group() {
 
 step_packages() {
   heading "Packages"
-  # A package install cut short (power loss, Ctrl+C) leaves dpkg half done, and apt
-  # refuses to install anything until it is finished. Finish it first.
-  if dpkg_interrupted; then
+  # A package install cut short (power loss, Ctrl+C) leaves the package manager half
+  # done, and it refuses to install anything until that is finished. Finish it first.
+  if pkg_interrupted; then
     mkdir -p "$STATE_DIR"
-    {
-      sudo DEBIAN_FRONTEND=noninteractive dpkg --configure -a
-      # A package that was only half unpacked needs apt to fetch and unpack it again.
-      dpkg_interrupted && sudo DEBIAN_FRONTEND=noninteractive apt-get install -f -y -q
-      ! dpkg_interrupted
-    } >"$STATE_DIR/dpkg-configure.log" 2>&1 \
+    pkg_finish_interrupted >"$STATE_DIR/dpkg-configure.log" 2>&1 \
       || { tail -n 20 "$STATE_DIR/dpkg-configure.log" >&2; die "could not finish an interrupted package install (log: $STATE_DIR/dpkg-configure.log)"; }
-    changed "finished an interrupted package install (dpkg --configure -a)"
+    changed "finished an interrupted package install ($PKG_FINISH_NOTE)"
   fi
   local missing=() p
   for p in "${PACKAGES[@]}"; do installed "$p" || missing+=("$p"); done
@@ -33,19 +28,11 @@ step_packages() {
   note "installing: ${missing[*]}"
   mkdir -p "$STATE_DIR"
   local log=$STATE_DIR/apt.log
-  {
-    sudo apt-get update -q
-    # No recommends: only what is listed, plus what those packages strictly need.
-    sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 \
-      apt-get install -y -q --no-install-recommends "${missing[@]}"
-  } >"$log" 2>&1 || { tail -n 20 "$log" >&2; die "package installation failed (full log: $log)"; }
-  note "$(grep -c '^Setting up' "$log") packages set up, including dependencies (log: $log)"
+  pkg_install "${missing[@]}" >"$log" 2>&1 \
+    || { tail -n 20 "$log" >&2; die "package installation failed (full log: $log)"; }
+  note "$(pkg_count_set_up "$log") packages set up, including dependencies (log: $log)"
   for p in "${missing[@]}"; do installed "$p" || die "$p did not install"; done
   changed "installed ${#missing[@]} package(s)"
-  # Ubuntu's smartmontools turns on smartd, a disk-check service; limDE adds no services, so
-  # switch it off once, when the laptop group first installs it (smartctl still works).
-  if [[ " ${missing[*]} " == *" smartmontools "* ]] && systemctl -q is-enabled smartmontools.service 2>/dev/null; then
-    sudo systemctl disable --now smartmontools.service >/dev/null 2>&1 && changed "switched smartd off (sudo systemctl enable --now smartmontools to turn it on)"
-  fi
+  pkg_after_install "${missing[@]}"
   brightness_group
 }

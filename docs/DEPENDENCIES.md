@@ -1,6 +1,6 @@
 # Dependencies
 
-Everything limDE installs, and why. The package lists are the files in `packages/`; each
+Everything limDE installs, and why. The package lists are the files in `packages/ubuntu/`; each
 line there is a package name and a comment with its reason, and `./install --plan` prints
 the same reasons. The reasons below come from those comments, with a note on where limDE
 uses the package when that adds something.
@@ -10,7 +10,7 @@ those packages strictly need, and nothing else.
 
 ## Runtime packages
 
-From `packages/runtime.list`: what the desktop needs to run.
+From `packages/ubuntu/runtime.list`: what the desktop needs to run.
 
 ### Session
 
@@ -122,7 +122,7 @@ From `packages/runtime.list`: what the desktop needs to run.
 
 ## Build packages
 
-From `packages/build.list`: compilers and headers for the parts limDE builds from source.
+From `packages/ubuntu/build.list`: compilers and headers for the parts limDE builds from source.
 They stay installed so updates and rebuilds work without asking again.
 
 ### Build tools
@@ -175,7 +175,7 @@ They stay installed so updates and rebuilds work without asking again.
 
 ## Optional groups
 
-From `packages/optional/`. Each file is one group; its first comment line is the group's
+From `packages/ubuntu/optional/`. Each file is one group; its first comment line is the group's
 description. [INSTALL.md](INSTALL.md#3-choose-the-optional-parts) explains how to choose
 them.
 

@@ -7,7 +7,7 @@ NETPLAN_FILE=/etc/netplan/90-limde-networkmanager.yaml
 
 # Connected, and names resolve: NetworkManager reports "connected" slightly before DNS works.
 nm_connected() {
-  [[ $(nmcli -t -f STATE general 2>/dev/null) == connected* ]] && getent hosts archive.ubuntu.com >/dev/null
+  [[ $(nmcli -t -f STATE general 2>/dev/null) == connected* ]] && getent hosts "$MIRROR_HOST" >/dev/null
 }
 
 # networkd's service and sockets that are running, one per line. Turning networkd off

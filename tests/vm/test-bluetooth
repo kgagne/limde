@@ -22,7 +22,7 @@ on_vm 'test -f /usr/local/share/limde/tinybar/tinybar.py' \
   || { echo "limde is not installed in $name; run tests/vm/test-install $name --keep" >&2; exit 2; }
 "$vm" copy "$name" "$here/bluetooth-check" /tmp/
 
-packages=$(sed -e 's/#.*//' "$repo/packages/optional/bluetooth.list" | xargs)
+packages=$(sed -e 's/#.*//' "$repo/packages/ubuntu/optional/bluetooth.list" | xargs)
 on_vm "set -e
 had_plugin=\$(dpkg-query -W -f '\${db:Status-Status}' libspa-0.2-bluetooth 2>/dev/null || true)
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \

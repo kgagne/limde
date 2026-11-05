@@ -77,7 +77,7 @@ fi
 # 4c. Tinybar's unit tests (no display; a private D-Bus and a stand-in brightnessctl) and
 # the updater's (throwaway Git repositories, no network); quiet unless they fail. Tinybar
 # runs with an empty home, so the panel's own settings.toml there can't change a result.
-# Its tests need GTK 4 for Python (packages/runtime.list); without it they are skipped.
+# Its tests need GTK 4 for Python (packages/ubuntu/runtime.list); without it they are skipped.
 if python3 -c 'import gi; gi.require_version("Gtk", "4.0"); gi.require_version("Gtk4LayerShell", "1.0")' 2>/dev/null; then
   tmp_home=$(mktemp -d)
   if ! out=$(HOME=$tmp_home python3 -B -m unittest discover -s "$root/components/tinybar/tests" 2>&1); then
