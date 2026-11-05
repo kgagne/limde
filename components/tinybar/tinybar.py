@@ -106,8 +106,10 @@ DOUBLE_CLICK_MS = 400
 # those two metrics also stop being added to the history file. The battery
 # popover shows both anyway (see update_battery).
 SHOW_USAGE = False
+# Tinybar's own app IDs (its application ID, then its name), kept out of the task list
+# and idle hide. Written casefolded: every check casefolds the window's app ID first.
 TINYBAR_APP_IDS = {
-    "limde.Tinybar",
+    "limde.tinybar",
     "tinybar",
 }
 
@@ -2250,7 +2252,7 @@ def idle_hide_order(windows, focus_order, keep):
         if not window.get("parent")
         and not window.get("minimized")
         and str(window.get("app_id", "")).casefold() not in keep
-        and str(window.get("app_id", "")).casefold() not in {i.casefold() for i in TINYBAR_APP_IDS}
+        and str(window.get("app_id", "")).casefold() not in TINYBAR_APP_IDS
     ]
     return sorted(chosen, key=lambda window: rank.get(window["id"], -1))
 

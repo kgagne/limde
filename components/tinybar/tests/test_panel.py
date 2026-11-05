@@ -372,6 +372,38 @@ class IdleHideTests(unittest.TestCase):
         order = tinybar.idle_hide_order(windows, [], keep={"com.freerdp.client.sdl3"})
         self.assertEqual([w["id"] for w in order], [5])
 
+    def test_leaves_the_panel_whatever_the_case_of_its_app_id(self):
+        windows = [self.window(1, "limde.Tinybar"), self.window(2, "LIMDE.TINYBAR"),
+                   self.window(3, "foot")]
+        order = tinybar.idle_hide_order(windows, [], keep=set())
+        self.assertEqual([w["id"] for w in order], [3])
+
+
+class TaskListTests(unittest.TestCase):
+    def snapshot(self, windows):
+        # apply_toplevel_snapshot without a running panel: only the state it reads and writes.
+        panel = mock.Mock(focus_order=[], last_active_toplevel={})
+        tinybar.TinyBar.apply_toplevel_snapshot(panel, windows)
+        panel.render_task_list.assert_called_once_with()
+        return panel
+
+    def test_app_ids_are_stored_casefolded(self):
+        # Both checks casefold the window's app ID, so a capital here never matches.
+        self.assertEqual(tinybar.TINYBAR_APP_IDS, {i.casefold() for i in tinybar.TINYBAR_APP_IDS})
+
+    def test_panel_windows_are_not_listed(self):
+        panel = self.snapshot([
+            {"id": 1, "app_id": "limde.Tinybar", "title": "Panel"},
+            {"id": 2, "app_id": "Tinybar", "title": ""},
+            {"id": 3, "app_id": "something", "title": "tinybar"},
+            {"id": 4, "app_id": "foot", "title": "Terminal", "active": True},
+            {"id": 5, "app_id": "foot", "title": "Dialog", "parent": 4},
+        ])
+        self.assertEqual(list(panel.toplevel_groups), ["foot"])
+        self.assertEqual([w["id"] for w in panel.toplevel_groups["foot"]], [4])
+        self.assertEqual(panel.active_toplevel["id"], 4)
+        self.assertEqual(panel.last_active_toplevel, {"foot": 4})
+
 
 class WifiJoinTests(unittest.TestCase):
     def test_security_kinds(self):
