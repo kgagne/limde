@@ -309,6 +309,13 @@ only, not the apps it opens. For another theme, set `PCMANFM_GTK_THEME` to its n
 `~/.config/labwc/environment` (labwc's own file, read at login); set it empty for the
 desktop theme. PCManFM runs as one process, so close all its windows for a change to show.
 
+Its toolbar has Back, with a list of recent folders beside it, then Forward and Up before
+the location bar. View > Toolbar turns these buttons, or the whole toolbar, on and off,
+and PCManFM saves the choice as `toolbar=` in `~/.config/pcmanfm/default/pcmanfm.conf`:
+`navigation;` for these buttons, `hidden;` for no toolbar. A `pcmanfm.conf` from an
+earlier limDE has `toolbar=` with nothing after it, which shows the location bar alone;
+choose View > Toolbar > Show Navigation Buttons to add them.
+
 ## Default apps
 
 The starting `~/.config/mimeapps.list` opens web links and HTML in Firefox, folders in

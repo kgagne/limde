@@ -33,6 +33,22 @@ toolbar image, menuitem image, notebook tab image, button image {
   margin-right: 4px;
 }
 
+/* Toolbar: Back, Forward and Up are as tall as the location bar, which stands 4 px clear
+   of them and of Go. Back's history arrow is a narrow, muted part beside it, like the
+   icons around it rather than bright text. */
+toolbar > toolitem > box {
+  margin-left: 4px;
+  margin-right: 4px;
+}
+
+toolbar button.toggle {
+  min-width: 0;
+  padding-left: 2px;
+  padding-right: 2px;
+}
+
+toolbar button.toggle:not(:checked) { color: ${colors_muted}; }
+
 window, dialog, .background {
   background-color: @theme_bg_color;
   color: @theme_fg_color;
