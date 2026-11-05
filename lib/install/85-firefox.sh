@@ -7,7 +7,10 @@ FIREFOX_PROFILE=/etc/apparmor.d/limde-firefox
 
 # Mozilla's locale for this system's language, if Mozilla builds it; else en-US.
 firefox_locale() {  # $1: SHA256SUMS text
-  local lang=${LANG%%.*} candidate
+  # LANG can be unset in a shell that is not a login shell (Arch over SSH); then the
+  # system's own setting from /etc/locale.conf.
+  local lang=${LANG:-$(sed -n 's/^LANG=//p' /etc/locale.conf 2>/dev/null)} candidate
+  lang=${lang%%.*}
   for candidate in "${lang/_/-}" "${lang%%_*}"; do
     [[ -n $candidate && $candidate != C && $candidate != POSIX ]] || continue
     grep -q " linux-x86_64/$candidate/firefox-" <<< "$1" && { echo "$candidate"; return; }

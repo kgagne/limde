@@ -19,9 +19,21 @@ fi
 EOF
 }
 
+# The file a bash login shell reads: the first of these that exists, as bash itself picks.
+# Ubuntu's new homes have only ~/.profile; Arch's also have ~/.bash_profile, and then bash
+# never reads ~/.profile.
+login_file() {
+  local name
+  for name in .bash_profile .bash_login; do
+    [[ -f $HOME/$name ]] && { echo "$HOME/$name"; return; }
+  done
+  echo "$HOME/.profile"
+}
+
 step_session() {
   heading "Session"
-  local profile=$HOME/.profile want current
+  local profile want current name
+  profile=$(login_file); name=${profile#"$HOME"/}
   want=$(profile_block)
   if [[ -f $profile ]]; then
     current=$(sed -n "/^$PROFILE_BEGIN\$/,/^$PROFILE_END\$/p" "$profile")
@@ -29,11 +41,11 @@ step_session() {
     current=
   fi
   if [[ $current == "$want" ]]; then
-    ok "labwc starts on tty1 (~/.profile)"
+    ok "labwc starts on tty1 (~/$name)"
     return
   fi
   mkdir -p "$STATE_DIR/backups"
-  [[ -f $profile ]] && cp -p "$profile" "$STATE_DIR/backups/profile.$(date +%Y%m%dT%H%M%S)"
+  [[ -f $profile ]] && cp -p "$profile" "$STATE_DIR/backups/${name#.}.$(date +%Y%m%dT%H%M%S)"
   local tmp block; tmp=$(mktemp); block=$(mktemp)
   if [[ -n $current ]]; then   # replace an older block in place
     echo "$want" > "$block"
@@ -46,5 +58,5 @@ step_session() {
     { [[ -f $profile ]] && cat "$profile"; echo; echo "$want"; } > "$tmp"
   fi
   mv "$tmp" "$profile"
-  changed "labwc starts on tty1 (~/.profile; previous copy in $STATE_DIR/backups)"
+  changed "labwc starts on tty1 (~/$name; previous copy in $STATE_DIR/backups)"
 }

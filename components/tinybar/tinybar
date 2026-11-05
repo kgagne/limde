@@ -4,6 +4,9 @@ export GSK_RENDERER=cairo
 # No accessibility bus is installed by default; without this GTK logs a warning at start.
 export GTK_A11Y=none
 # gtk4-layer-shell must be loaded before GTK for the panel to sit at the screen edge.
-export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libgtk4-layer-shell.so.0
+# Ubuntu keeps it in /usr/lib/x86_64-linux-gnu, Arch in /usr/lib.
+for lib in /usr/lib/x86_64-linux-gnu/libgtk4-layer-shell.so.0 /usr/lib/libgtk4-layer-shell.so.0; do
+  [ -e "$lib" ] && { export LD_PRELOAD=$lib; break; }
+done
 here=$(dirname "$(readlink -f "$0")")
 exec "$here/../share/limde/tinybar/tinybar.py" "$@"
