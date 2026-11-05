@@ -185,6 +185,8 @@ Laptop extras: screen brightness keys, power use and disk health tools.
 - `brightness-udev`: a udev rule that gives the `video` group write access to the
   backlight, so `brightnessctl` works without root for a user in that group. Ubuntu's
   `brightnessctl` only recommends it, and without it the keys and the slider fail.
+  Ubuntu Server's installer leaves the first user out of `video`, so `./install` adds you
+  to it when this group is installed; it takes effect at your next login.
 - `powertop`: shows what uses power on battery, process by process and device by device
   (`sudo powertop`). Its service that changes power settings at boot stays off.
 - `smartmontools`: reads the disks' health (`sudo smartctl -a` and a disk, such as

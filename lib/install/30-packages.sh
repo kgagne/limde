@@ -1,5 +1,13 @@
 # Install the chosen packages from Ubuntu's archive.
 
+# brightness-udev lets the video group change the backlight, and Ubuntu Server's installer
+# does not put the first user in that group.
+brightness_group() {
+  if installed brightness-udev && ! id -nG "$USER" | grep -qw video; then
+    sudo usermod -aG video "$USER" && changed "added you to the video group, for the brightness keys (from your next login)"
+  fi
+}
+
 step_packages() {
   heading "Packages"
   # A package install cut short (power loss, Ctrl+C) leaves dpkg half done, and apt
@@ -19,6 +27,7 @@ step_packages() {
   for p in "${PACKAGES[@]}"; do installed "$p" || missing+=("$p"); done
   if ((${#missing[@]} == 0)); then
     ok "all ${#PACKAGES[@]} packages installed"
+    brightness_group
     return
   fi
   note "installing: ${missing[*]}"
@@ -38,4 +47,5 @@ step_packages() {
   if [[ " ${missing[*]} " == *" smartmontools "* ]] && systemctl -q is-enabled smartmontools.service 2>/dev/null; then
     sudo systemctl disable --now smartmontools.service >/dev/null 2>&1 && changed "switched smartd off (sudo systemctl enable --now smartmontools to turn it on)"
   fi
+  brightness_group
 }
