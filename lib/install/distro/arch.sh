@@ -40,7 +40,8 @@ PKG_FINISH_NOTE="removed pacman's stale lock"
 pkg_install() { sudo pacman -Syu --needed --noconfirm "$@"; }
 
 # How many packages pkg_install installed or upgraded, from its log.
-pkg_count_set_up() { grep -cE '^\([0-9]+/[0-9]+\) (installing|upgrading|reinstalling) ' "$1" || true; }
+# pacman prints "(3/56) installing NAME" on a terminal and "installing NAME..." without one.
+pkg_count_set_up() { grep -cE '^(\([0-9]+/[0-9]+\) )?(installing|upgrading|reinstalling) ' "$1" || true; }
 
 # How many packages are new, dependencies included, for the plan: what pacman would
 # fetch, read from the local sync database (no root; it may be a few days old).
@@ -109,6 +110,9 @@ distro_services() {
               wireplumber:wireplumber.service; do
     pkg=${pair%%:*} unit=${pair#*:}
     installed "$pkg" || continue
+    # A service belongs to the package lists only when its package is on them: avahi also
+    # comes in as a dependency (pipewire-pulse, libcups) without the printing group.
+    printf '%s\n' "${PACKAGES[@]}" | grep -qx "$pkg" || continue
     grep -qx "$unit" "$SERVICES_DONE" && continue
     # PipeWire's units are user units: enabled for every user, started at the next login.
     if [[ $pkg == pipewire* || $pkg == wireplumber ]]; then

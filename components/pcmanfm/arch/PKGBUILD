@@ -42,5 +42,8 @@ package() {
   make DESTDIR="$pkgdir" install
   # The patched build's own menu entries would list PCManFM twice next to Arch's.
   rm -f "$pkgdir"/usr/local/share/applications/pcmanfm*.desktop
+  # Arch's filesystem package owns /usr/local/share/man (a link to ../man), so a package may
+  # not ship it; Arch's own pcmanfm package already has the manual page.
+  rm -rf "$pkgdir"/usr/local/share/man
   install -D -m 644 /dev/stdin "$pkgdir/usr/local/share/limde/pcmanfm.build" <<< "$LIMDE_PCMANFM_STAMP_TEXT"
 }
