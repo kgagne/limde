@@ -168,6 +168,12 @@ sudo cp ~/.local/state/limde/backups/pam.d-login.DATE /etc/pam.d/login
 
 Running `./install` again adds them back.
 
+The file belongs to Ubuntu's `login` package. If an update changes Ubuntu's own copy, apt
+asks whether to keep yours: keep it (`N`, the default) and the lines stay; take the new
+one and they are gone until the next `./install`. Automatic security updates skip a
+package that would ask this, so when `sudo apt upgrade` shows that question, answer it
+there.
+
 If an app asks for the keyring's password even though you logged in with a password, the
 keyring's password is no longer your login password (it was set before a password reset
 done as root, for example). Give it the old one, or delete
