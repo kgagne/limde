@@ -133,7 +133,8 @@ cmp -s "$SHARE/agent-web.cfg" "$FIREFOX/agent-web.cfg" ||
     cp "$SHARE/agent-web.cfg" "$FIREFOX/agent-web.cfg"
 
 # No crash reporter for this window: when labwc exits, this Firefox goes with it, and with
-# autologin its "Firefox crashed" dialog would open in the next session.
+# autologin its "Firefox crashed" dialog would open in the next session. The main Firefox
+# keeps its own: agent-web.cfg starts it without this variable.
 export MOZ_CRASHREPORTER_DISABLE=1
 exec "$FIREFOX/firefox" --profile "$PROFILE" --name limde.AgentWeb \
     "${url:-file://$(readlink -f "$SHARE/welcome.html")}"
