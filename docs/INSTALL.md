@@ -142,7 +142,8 @@ already in place or `changed` for what it did.
     keyring and the keyring starts with your session. Ubuntu's keyring package adds only
     the line for password changes; a display manager would carry these two. Before it
     changes the file it saves a copy in `~/.local/state/limde/backups/`.
-16. **Session:** adds the block to `~/.profile` that starts labwc on tty1.
+16. **Session:** adds the block to `~/.profile` that clears the console and starts labwc
+    on tty1.
 17. **Install record:** writes the commit, the clone's path and your optional groups to
     `/usr/local/share/limde/installed`, for `limde-update`.
 
@@ -167,8 +168,9 @@ The block uses `exec`, so if labwc ever exits, the login ends and tty1 shows a l
 prompt again instead of leaving a logged-in shell behind. Before the installer changes
 `~/.profile` it saves a copy in `~/.local/state/limde/backups/`.
 
-The password you type at this login also unlocks the login keyring, where apps keep the
-passwords they save.
+The block clears the console before it starts labwc: tty1 shows for a moment at suspend
+and resume, and without it your login text would flash up. The password you type at this
+login also unlocks the login keyring, where apps keep the passwords they save.
 
 ## The network switch
 

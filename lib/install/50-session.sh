@@ -11,6 +11,8 @@ profile_block() {
 # Start the desktop on tty1. Managed by limde's installer; edit outside this block.
 if [ -z "${WAYLAND_DISPLAY:-}" ] && [ "$(tty)" = /dev/tty1 ] && command -v labwc >/dev/null; then
   mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/limde"
+  # Clear the console, so the login text doesn't flash up when tty1 shows at suspend and resume.
+  printf '\033[H\033[2J\033[3J'
   exec labwc --merge-config >"${XDG_STATE_HOME:-$HOME/.local/state}/limde/labwc.log" 2>&1
 fi
 # <<< limde session <<<
