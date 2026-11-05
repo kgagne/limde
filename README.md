@@ -87,7 +87,11 @@ And three habits that follow from those goals:
 ## Install
 
 You need a fresh **Ubuntu Server 26.04** (x86_64) install, a normal user with `sudo`, and a
-network connection. Choose no extra snaps or server roles in Ubuntu's installer.
+network connection. Choose no extra snaps or server roles in Ubuntu's installer;
+[Installing Ubuntu Server](docs/SERVER-INSTALL.md) goes through its screens.
+
+Only 26.04 is supported: it is a long-term support release and the only one limDE is
+tested on, so the installer refuses any other version, 26.10 included.
 
 1. Log in on the text console and clone this repository:
 
@@ -136,8 +140,12 @@ If you install from a VM onto a USB stick or another disk for a laptop, add
 
 ### Documentation
 
+- [Installing Ubuntu Server](docs/SERVER-INSTALL.md): Ubuntu's installer screen by
+  screen, and the server services a laptop can do without.
 - [Installing](docs/INSTALL.md): every step, the questions, the network switch, and
   what to do when a step fails.
+- [Battery life](docs/BATTERY.md): what limDE does for the battery and how to see what
+  uses power.
 - [Trying it in a VM](docs/VM-TRIAL.md): a trial run before you install on hardware.
 - [Dependencies](docs/DEPENDENCIES.md): every package and pinned download, and why.
 - [Customizing](docs/CUSTOMIZE.md): where defaults and your own files live, and what

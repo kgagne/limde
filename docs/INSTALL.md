@@ -6,8 +6,9 @@ This takes you from a fresh Ubuntu Server 26.04 install to the limDE desktop. Th
 ## What you need
 
 - **Ubuntu Server 26.04 on x86_64.** The installer checks `/etc/os-release` and the
-  machine type first and stops on anything else. In Ubuntu's installer, choose no extra
-  snaps or server roles.
+  machine type first and stops on anything else, including 26.10. In Ubuntu's
+  installer, choose no extra snaps or server roles. [SERVER-INSTALL.md](SERVER-INSTALL.md)
+  goes through that installer screen by screen.
 - **A normal user in the `sudo` group.** Run the installer as that user, not as root. It
   asks for your password once, when it starts changing things, and keeps sudo's ticket
   fresh until it finishes.
