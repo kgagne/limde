@@ -106,18 +106,22 @@ step_network() {
   active=$(networkd_active)
   if [[ -n $active ]]; then
     mapfile -t sockets < <(grep '\.socket$' <<< "$active" || true)
-    ((${#sockets[@]} == 0)) || sudo systemctl stop "${sockets[@]}"
-    sudo systemctl stop systemd-networkd.service
+    # Until now networkd also ran the links NetworkManager took over (Ubuntu's boot leaves
+    # it a runtime .network file). Stopping it releases its DHCP lease, which removes the
+    # address they shared, and systemd-resolved drops the DNS servers it had from networkd
+    # (it refused NetworkManager's while networkd ran). Connecting NetworkManager's devices
+    # again sets both. Until then the machine has no address, so an install over SSH can
+    # lose its session there, and this script with it: the stop and the reconnect run as
+    # one system job, which finishes whatever happens to this shell.
+    local devices
+    devices=$(nmcli -t -f DEVICE,STATE device 2>/dev/null | sed -n 's/:connected$//p' | tr '\n' ' ')
+    sudo systemd-run --quiet --wait --collect --unit="limde-network-switch-$$" \
+      --setenv=LIMDE_DEVICES="$devices" \
+      /bin/sh -c 'systemctl stop "$@" systemd-networkd.service
+        for device in $LIMDE_DEVICES; do nmcli device connect "$device" >/dev/null 2>&1 || true; done' \
+      sh "${sockets[@]}" 2>/dev/null || true
     active=$(networkd_active)
     [[ -z $active ]] || die "networkd is still running: ${active//$'\n'/ }"
-    # Until now networkd also ran the links NetworkManager took over. Stopping it removed
-    # the address they shared, and systemd-resolved dropped the DNS servers it had from
-    # networkd (it refused NetworkManager's while networkd ran). Connect NetworkManager's
-    # devices again, so it sets both.
-    local device
-    while read -r device; do
-      sudo nmcli device connect "$device" >/dev/null 2>&1 || true
-    done < <(nmcli -t -f DEVICE,STATE device 2>/dev/null | sed -n 's/:connected$//p')
     changed "stopped networkd and its sockets"
   fi
   local i
