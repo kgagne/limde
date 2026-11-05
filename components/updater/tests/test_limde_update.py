@@ -22,7 +22,10 @@ class UpdateTests(unittest.TestCase):
         base = Path(tmp.name)
         self.origin, self.clone = base / "origin", base / "clone"
         self.record, self.log = base / "installed", base / "install.log"
-        self.env = dict(os.environ, LIMDE_INSTALL_RECORD=str(self.record), INSTALL_LOG=str(self.log),
+        # No GIT_* from the caller: a pre-commit hook runs with GIT_DIR and GIT_INDEX_FILE
+        # set, and they would turn every git call here on the repository being committed.
+        caller = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        self.env = dict(caller, LIMDE_INSTALL_RECORD=str(self.record), INSTALL_LOG=str(self.log),
                         GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t",
                         GIT_COMMITTER_EMAIL="t@t", GIT_CONFIG_GLOBAL="/dev/null",
                         GIT_CONFIG_NOSYSTEM="1")

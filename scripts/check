@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Repository checks. Run before every commit (the pre-commit hook does this).
-#   scripts/check            scrub gate + syntax checks on the tracked tree
+#   scripts/check            scrub gate, syntax checks and unit tests on the tracked tree
 #   scripts/check --clone    also clone the repository into a temp dir and check there
 set -euo pipefail
 root=$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel)
@@ -71,6 +71,27 @@ python3 "$root/components/appearance/check-contrast" || fail=1
 if ! out=$(python3 -B "$root/components/appearance/tests/test_limde_appearance.py" 2>&1); then
   printf '%s\n' "$out" >&2
   echo "appearance: the renderer tests fail" >&2
+  fail=1
+fi
+
+# 4c. Tinybar's unit tests (no display; a private D-Bus and a stand-in brightnessctl) and
+# the updater's (throwaway Git repositories, no network); quiet unless they fail. Tinybar
+# runs with an empty home, so the panel's own settings.toml there can't change a result.
+# Its tests need GTK 4 for Python (packages/runtime.list); without it they are skipped.
+if python3 -c 'import gi; gi.require_version("Gtk", "4.0"); gi.require_version("Gtk4LayerShell", "1.0")' 2>/dev/null; then
+  tmp_home=$(mktemp -d)
+  if ! out=$(HOME=$tmp_home python3 -B -m unittest discover -s "$root/components/tinybar/tests" 2>&1); then
+    printf '%s\n' "$out" >&2
+    echo "tinybar: the unit tests fail" >&2
+    fail=1
+  fi
+  rm -rf "$tmp_home"
+else
+  echo "tinybar: unit tests skipped: needs python3-gi, gir1.2-gtk-4.0 and gir1.2-gtk4layershell-1.0" >&2
+fi
+if ! out=$(python3 -B "$root/components/updater/tests/test_limde_update.py" 2>&1); then
+  printf '%s\n' "$out" >&2
+  echo "updater: the limde-update tests fail" >&2
   fail=1
 fi
 
