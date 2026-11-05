@@ -8,6 +8,15 @@ uses the package when that adds something.
 apt installs these without recommended packages, so you get what is listed plus what
 those packages strictly need, and nothing else.
 
+**On Arch Linux** the lists are in `packages/arch/` instead, with the same groups and reasons
+(`./install --plan` prints them). They differ where Arch's packaging does: labwc is Arch's own
+package (0.20.3 or newer), so the build list keeps only the tools for Tinybar's helpers and the
+PCManFM package; headers come with the libraries; and a few things Ubuntu brings in by itself
+are listed: `sof-firmware` (Intel laptop audio), `polkit`, `gsettings-desktop-schemas`,
+`bluez-utils` (bluetoothctl) and `pipewire-audio` (Bluetooth sound). Arch turns on no
+services, so the installer enables BlueZ, CUPS, Avahi and PipeWire's user units itself. The
+sections below describe the Ubuntu packages.
+
 ## Runtime packages
 
 From `packages/ubuntu/runtime.list`: what the desktop needs to run.

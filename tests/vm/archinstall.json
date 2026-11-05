@@ -50,7 +50,7 @@
   },
   "network_config": {"type": "nm"},
   "ntp": true,
-  "packages": ["openssh", "sudo"],
+  "packages": ["openssh", "sudo", "rsync", "git"],
   "services": ["sshd"],
   "pacman_config": {"color": false, "parallel_downloads": 5},
   "profile_config": {"profile": {"main": "Minimal", "details": []}},

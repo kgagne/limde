@@ -48,8 +48,11 @@ is shared. limDE's installer does not support Arch yet, so only `base`, `up`, `s
   powers off. All three are served over HTTP on the host's loopback, as for Ubuntu.
 - The install: GPT with a 512 MiB ESP (systemd-boot, also at the removable path) and one
   ext4 root, the `linux` kernel, the Minimal profile, NetworkManager, OpenSSH (password
-  logins off), en_US.UTF-8, UTC, no swap. Packages come from the Arch Linux Archive's copy
-  of the repositories on 2026-11-01, so a base built later installs the same versions.
+  logins off), rsync and git (for `vm copy`, `vm sync` and the install record), en_US.UTF-8,
+  UTC, no swap. Packages come from the Arch Linux Archive's copy of the repositories on
+  2026-11-01, so a base built later installs the same versions. Trap: that day's labwc is
+  0.20.2, older than limDE's minimum (0.20.3, in `extra-testing` from 2026-10-31), so
+  `./install` stops at the labwc step until the pinned day is one with 0.20.3 in `extra`.
 - The same test-only user as Ubuntu: `tester`/`tester` in `wheel`, passwordless sudo, tty1
   autologin, key login over SSH. limDE never sets these up.
 - `arch-install.sh` copies its output to the serial log (`local/vm/arch/base-build/serial.log`);
