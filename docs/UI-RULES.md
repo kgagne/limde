@@ -100,6 +100,11 @@ their inner button, so the popover keeps the normal cursor).
 height for pills (the switch), `border_width` for every framed control. No other radius or
 border numbers.
 
+labwc's title-bar buttons are one-bit masks, so they cannot be anti-aliased. Their corners
+leave out 3, 1 and 1 pixels on the first three rows, which looks closest to
+`control_radius`. A 4-pixel arc drawn without anti-aliasing (2 and 1 pixels) looks like a
+square with chipped corners.
+
 ## Known differences, not yet settled
 
 - The panel grows 2 px when the bell shows a count; its height is not fixed.

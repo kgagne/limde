@@ -20,8 +20,11 @@ window.button.width: 22
 window.button.height: 22
 window.button.spacing: 0
 
+# The buttons are masks (/usr/local/share/themes/limde/labwc/*.xbm) filled with the
+# colours below. Pointing changes nothing: labwc draws the hover colour on top of the
+# button, so any visible colour would tint the button too.
 window.button.hover.bg.color: #00000000
-window.button.hover.bg.corner-radius: 11
+window.button.hover.bg.corner-radius: ${shape_control_radius}
 
 window.active.button.close.unpressed.image.color: ${colors_button_close}
 window.active.button.iconify.unpressed.image.color: ${colors_button_iconify}

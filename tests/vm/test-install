@@ -80,6 +80,7 @@ check "firefox AppArmor profile loaded" on_vm 'sudo aa-status 2>/dev/null | grep
 check "firefox renders a page headless" on_vm 'rm -f /tmp/ff.png; timeout 90 ~/.local/opt/firefox/firefox --headless --screenshot /tmp/ff.png "data:text/html,<h1>limde</h1>" >/tmp/ff.log 2>&1; test -s /tmp/ff.png'
 check "icon theme installed and resolves names" on_vm 'test -L /usr/local/share/icons/limde/24x24/icons/user-home.svg && test -f /usr/local/share/icons/limde/symbolic/icons/folder-symbolic.svg && test -f /usr/local/share/icons/limde/index.theme && test -f /usr/local/share/icons/limde-light/index.theme'
 check "labwc merges config" on_vm 'tr "\0" " " < /proc/$(pgrep -x labwc)/cmdline | grep -q -- --merge-config'
+check "title-bar buttons are where labwc looks" on_vm 'for b in close iconify max max_toggled; do test -f /usr/local/share/themes/limde/labwc/$b.xbm || exit 1; done; d=$(tr "\0" "\n" < /proc/$(pgrep -x labwc)/environ | sed -n "s/^XDG_DATA_DIRS=//p"); [ -z "$d" ] || case ":$d:" in *:/usr/local/share:*) ;; *) exit 1 ;; esac'
 for proc in tinybar.py mako swayidle elephant 'walker --gapplication-service'; do
   check "session runs $proc" on_vm "pgrep -f '$proc' >/dev/null"
 done

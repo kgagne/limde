@@ -2,6 +2,8 @@
 # copies of the program styles (GTK, labwc, Tinybar, Walker, Mako, PCManFM) into your home.
 
 APPEARANCE_SHARE=/usr/local/share/limde/appearance
+# The title-bar buttons of labwc's "limde" theme; its themerc is rendered into your home.
+LABWC_BUTTONS=/usr/local/share/themes/limde/labwc
 
 step_appearance() {
   heading "Appearance"
@@ -25,6 +27,18 @@ step_appearance() {
     changed "installed the appearance defaults and limde-appearance"
   fi
   rm -rf "$stage"
+
+  # labwc looks for its title-bar buttons in every folder of the theme, your home first,
+  # and fills these 1-bit masks with the button colours of the themerc rendered below,
+  # so the shapes are shared and the colours follow the mode.
+  if diff -rq "$src/labwc-buttons" "$LABWC_BUTTONS" >/dev/null 2>&1; then
+    ok "title-bar buttons are up to date"
+  else
+    sudo rm -rf "$LABWC_BUTTONS"
+    sudo install -d "$LABWC_BUTTONS"
+    sudo install -m 644 "$src"/labwc-buttons/* "$LABWC_BUTTONS/"
+    changed "installed the title-bar buttons"
+  fi
 
   if /usr/local/bin/limde-appearance --check >/dev/null 2>&1; then
     ok "your program styles match the appearance"

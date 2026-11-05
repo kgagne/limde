@@ -39,10 +39,11 @@ PAIRS = [
     ('load_moderate', 'background', G, 'battery icon, moderate draw'),
     ('load_high', 'background', G, 'battery icon, high draw'),
     ('load_severe', 'background', G, 'battery icon, severe draw'),
+    # Title bars: background on the active window, surface on the others.
     ('button_close', 'background', G, 'close button'),
     ('button_iconify', 'background', G, 'minimise button'),
     ('button_maximize', 'background', G, 'maximise button'),
-    ('button_inactive', 'background', G, 'buttons on inactive windows'),
+    ('button_inactive', 'surface', G, 'buttons on inactive windows'),
 ]
 
 
