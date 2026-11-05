@@ -48,6 +48,27 @@ running() {
     pgrep -f -- "$WINDOW" >/dev/null
 }
 
+# The window's size in characters, kept when "stop" closes it (limde-agent stop or restart)
+# so the next window opens the same size. Wayland gives no way to read or set a window's
+# position, so only the size is kept.
+SIZE_FILE="${XDG_STATE_HOME:-$HOME/.local/state}/limde/agent-cli-size"
+
+save_size() {  # the size of the tmux client running in the window, as COLSxROWS
+    window=$(pgrep -f -- "$WINDOW" | head -n 1)
+    [ -n "$window" ] || return 0
+    tmux -L "$SOCKET" list-clients -F '#{client_pid} #{client_width}x#{client_height}' 2>/dev/null |
+    while read -r pid size; do
+        # The client is the window's child: foot runs this script with --attach, which
+        # execs tmux attach.
+        [ "$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')" = "$window" ] || continue
+        case $size in
+            *[!0-9x]*|x*|*x) ;;
+            *) mkdir -p "$(dirname "$SIZE_FILE")" && echo "$size" >"$SIZE_FILE" ;;
+        esac
+        break
+    done
+}
+
 loop_session() {  # $1: a loop's pid; prints the pid of the labwc it was started in
     tr '\0' '\n' 2>/dev/null <"/proc/$1/environ" | sed -n 's/^LABWC_PID=//p'
 }
@@ -94,7 +115,8 @@ stop)
         tries=$((tries + 1))
     done
     # Then the window, and one the loop was just opening (--window, not yet the window):
-    # killed before the loop, it could still open after this.
+    # killed before the loop, it could still open after this. Its size first.
+    save_size
     pkill -f -- "$OPENING" || true
     pkill -TERM -f -- "$WINDOW" || true
     exit 0
@@ -122,7 +144,12 @@ setup)
     [ -r "$ini" ] || ini="$SHARE/foot.ini"
     # Not inside another tmux's environment, so attaching never nests.
     unset TMUX TMUX_PANE
-    exec foot --app-id=limde.AgentCLI --title=Agent --config="$ini" "$0" --attach
+    size=$(cat "$SIZE_FILE" 2>/dev/null)
+    case $size in
+        ''|*[!0-9x]*|x*|*x) set -- ;;
+        *) set -- -o "initial-window-size-chars=$size" ;;
+    esac
+    exec foot --app-id=limde.AgentCLI --title=Agent --config="$ini" "$@" "$0" --attach
     ;;
 --attach)
     unset TMUX TMUX_PANE
