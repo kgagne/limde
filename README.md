@@ -1,11 +1,12 @@
 # limDE
 
-**limDE — less is more.** A small labwc desktop for Ubuntu Server.
+**limDE — less is more.** A small labwc desktop for Ubuntu Server (and, newly, Arch Linux).
 
 A small Wayland desktop for Ubuntu Server: labwc, a compact panel (Tinybar), the Walker
 launcher, a consistent dark or light theme, Space-bar file preview in PCManFM, and a persistent
-window for a web-based AI agent. Install Ubuntu Server 26.04, clone this repository,
-run `./install`, and log in.
+window for a web-based AI agent, or a terminal for a command-line one. Install Ubuntu Server
+26.04, clone this repository, run `./install`, and log in. Arch Linux works the same way
+([Installing on Arch](docs/ARCH-INSTALL.md)); it is newer and tested in VMs only.
 
 Dark and light are both complete themes: the panel, launcher, file manager, notifications,
 window borders and app icons all follow the one you pick (only foot's terminal colours stay
@@ -14,9 +15,9 @@ dark), and `scripts/check` holds both to WCAG 2.2's contrast minimums.
 It's made for laptops first: careful with the battery, with trackpad motion and scrolling
 modelled on a MacBook's.
 
-> **Status: beta (`v1.0.0-beta.4`).** It's in daily use on one laptop, and installs from
-> scratch have only been tested in QEMU and from a USB stick on that same laptop. Expect
-> rough edges, and see [Known gaps](#known-gaps).
+> **Status: beta (`v1.0.0-beta.5`).** It's in daily use on one laptop, and installs from
+> scratch have only been tested in QEMU and from a USB stick on that same laptop; Arch
+> installs only in QEMU. Expect rough edges, and see [Known gaps](#known-gaps).
 
 ## Screenshots
 
@@ -92,6 +93,11 @@ network connection. Choose no extra snaps or server roles in Ubuntu's installer;
 
 Only 26.04 is supported: it is a long-term support release and the only one limDE is
 tested on, so the installer refuses any other version, 26.10 included.
+
+On **Arch Linux**, start from archinstall's minimal profile with NetworkManager instead;
+[Installing on Arch](docs/ARCH-INSTALL.md) has the steps, and the rest below is the same.
+Until Arch's stable labwc reaches 0.20.3, the touchpad keeps libinput's standard motion and
+scrolling (limDE's curves need 0.20.3) and switches over by itself on the next `./install`.
 
 1. Log in on the text console and clone this repository:
 
@@ -272,6 +278,8 @@ followed by `./install` also works, for a clone that follows a branch.
 - Not yet tested from scratch on any other hardware. A fresh `./install` has been tested
   only in QEMU and from a USB stick booted on that same laptop, not on a laptop's
   internal drive.
+- Arch Linux is tested only in QEMU (a fresh install, a second run, the desktop after a
+  reboot). The acceptance, Wi-Fi and Bluetooth tests still run on Ubuntu only.
 - The trackpad curves were tuned on one laptop's touchpad and may feel different on
   yours. To change them, copy the whole `<device category="touchpad">` block from
   `/etc/xdg/labwc/rc.xml` into `~/.config/labwc/rc.xml` and edit it there; your block
