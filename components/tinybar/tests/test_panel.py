@@ -406,6 +406,35 @@ class TaskListTests(unittest.TestCase):
         self.assertEqual(panel.active_toplevel["id"], 4)
         self.assertEqual(panel.last_active_toplevel, {"foot": 4})
 
+    def test_agent_windows_are_listed_in_either_mode(self):
+        panel = self.snapshot([
+            {"id": 1, "app_id": "limde.AgentCLI", "title": "Agent"},
+            {"id": 2, "app_id": "limde.AgentWeb", "title": "Claude"},
+        ])
+        self.assertEqual(list(panel.toplevel_groups), ["limde.AgentCLI", "limde.AgentWeb"])
+
+
+class FirstAppTests(unittest.TestCase):
+    def test_default_pins_both_agent_windows(self):
+        # Whichever mode limde-agent runs, its window sits leftmost.
+        self.assertEqual(tinybar.first_app_ids(None), {"limde.AgentWeb", "limde.AgentCLI"})
+        self.assertEqual(tinybar.FIRST_APP_IDS, {"limde.AgentWeb", "limde.AgentCLI"})
+
+    def test_setting_replaces_them(self):
+        self.assertEqual(tinybar.first_app_ids("firefox"), {"firefox"})
+        self.assertEqual(tinybar.first_app_ids(["a", "b"]), {"a", "b"})
+
+    def test_broken_setting_keeps_the_default(self):
+        for setting in ("", [], [1], 3, {"a": 1}):
+            self.assertEqual(tinybar.first_app_ids(setting), set(tinybar.AGENT_APP_IDS))
+
+    def test_idle_hide_treats_both_agent_windows_alike(self):
+        # Neither is kept by default; idle_hide_keep keeps either the same way.
+        windows = [{"id": 1, "app_id": "limde.AgentCLI"}, {"id": 2, "app_id": "limde.AgentWeb"}]
+        self.assertEqual(len(tinybar.idle_hide_order(windows, [], keep=set())), 2)
+        keep = {"limde.agentcli", "limde.agentweb"}
+        self.assertEqual(tinybar.idle_hide_order(windows, [], keep=keep), [])
+
 
 class WifiJoinTests(unittest.TestCase):
     def test_security_kinds(self):

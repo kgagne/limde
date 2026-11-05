@@ -122,10 +122,24 @@ def load_settings():
         return {}
 
 
-# This app's button always sits leftmost, ahead of every other app, however
-# often its window closes and reopens, and shows only its icon. Defaults to
-# limDE's agent-web window; set first_app_id in settings.toml to change it.
-FIRST_APP_ID = load_settings().get("first_app_id", "limde.AgentWeb")
+# The agent window's app IDs: the website (agent-web) and the command-line agent
+# (agent-cli). `limde-agent mode` picks which one runs.
+AGENT_APP_IDS = ("limde.AgentWeb", "limde.AgentCLI")
+
+
+def first_app_ids(setting):
+    """The app IDs whose button sits leftmost: first_app_id from settings.toml, one app
+    ID or a list of them, or else the agent window's, so it stays first in either mode."""
+    if isinstance(setting, str) and setting:
+        return frozenset({setting})
+    if isinstance(setting, list) and setting and all(isinstance(i, str) for i in setting):
+        return frozenset(setting)
+    return frozenset(AGENT_APP_IDS)
+
+
+# These apps' buttons always sit leftmost, ahead of every other app, however
+# often their windows close and reopen, and show only their icon.
+FIRST_APP_IDS = first_app_ids(load_settings().get("first_app_id"))
 
 # Widest an app's name gets on its task button, in characters, before it ends in "…".
 # With many apps open the names shrink further, so the list stops short of the clock.
@@ -5666,7 +5680,7 @@ class TinyBar(Gtk.Application):
                 button.name_label.set_max_width_chars(TASK_NAME_MAX_CHARS)
                 button.count_label = Gtk.Label()
                 # The first app shows its icon alone when it has one.
-                icon_only = app_id == FIRST_APP_ID and icon is not None
+                icon_only = app_id in FIRST_APP_IDS and icon is not None
                 button.name_label.set_visible(not icon_only)
                 button.icon_only = icon_only
                 if icon_only:
@@ -5678,7 +5692,7 @@ class TinyBar(Gtk.Application):
                 # A None sibling inserts at the start of the box.
                 self.task_list.insert_child_after(
                     button,
-                    None if app_id == FIRST_APP_ID
+                    None if app_id in FIRST_APP_IDS
                     else self.task_list.get_last_child()
                 )
 

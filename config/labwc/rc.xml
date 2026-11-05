@@ -69,19 +69,20 @@
     <keybind key="S-Print"><action name="Execute" command="limde-screenshot screen" /></keybind>
     <keybind key="C-Print"><action name="Execute" command="limde-screenshot clip" /></keybind>
 
-    <!-- Mac-style, app-aware close (Super+W) and quit (Super+Q). The agent-web window is
-         skipped by these and by Alt+F4, so it isn't closed by accident; "agent-web stop"
-         closes it. -->
+    <!-- Mac-style, app-aware close (Super+W) and quit (Super+Q). The agent window, web
+         (limde.AgentWeb) or CLI (limde.AgentCLI), is skipped by these and by Alt+F4, so
+         it isn't closed by accident; "limde-agent stop" closes it. If runs "else" only
+         when no query matches. -->
     <keybind key="W-w" onRelease="yes">
-      <action name="If"><query identifier="limde.AgentWeb" />
+      <action name="If"><query identifier="limde.AgentWeb" /><query identifier="limde.AgentCLI" />
         <else><action name="Execute" command="app-shortcut close" /></else></action>
     </keybind>
     <keybind key="W-q" onRelease="yes">
-      <action name="If"><query identifier="limde.AgentWeb" />
+      <action name="If"><query identifier="limde.AgentWeb" /><query identifier="limde.AgentCLI" />
         <else><action name="Execute" command="app-shortcut quit" /></else></action>
     </keybind>
     <keybind key="A-F4">
-      <action name="If"><query identifier="limde.AgentWeb" />
+      <action name="If"><query identifier="limde.AgentWeb" /><query identifier="limde.AgentCLI" />
         <else><action name="Close" /></else></action>
     </keybind>
   </keyboard>

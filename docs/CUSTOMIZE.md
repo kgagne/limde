@@ -17,8 +17,9 @@ these; your changes would be lost at the next install or update:
 - `/usr/local/share/limde/autostart.d/`: the pieces the session starts.
 - `/usr/local/share/limde/appearance/`: the default `appearance.toml` and the style
   templates.
-- `/usr/local/share/limde/tinybar/` and `/usr/local/share/limde/agent-web/`: the panel
-  and the agent window.
+- `/usr/local/share/limde/tinybar/`, `/usr/local/share/limde/agent-web/` and
+  `/usr/local/share/limde/agent-cli/`: the panel and the agent window (its CLI mode's
+  tmux and foot settings and setup walkthrough).
 - `/usr/local/share/icons/limde` and `/usr/local/share/icons/limde-light`: the icon
   themes.
 - `/usr/local/share/themes/limde/labwc/`: the shapes of the window title-bar buttons.
@@ -36,8 +37,14 @@ them:
 - `~/.config/limde/autostart.d/`: your session pieces.
 - `~/.config/limde/appearance.toml`: your colours, fonts, shapes and icon settings.
 - `~/.config/tinybar/settings.toml`: the panel's settings.
+- `~/.config/limde/agent.conf`: the agent window's mode, web or CLI (`limde-agent mode`).
 - `~/.config/limde/agent-web.conf`: the agent window's page (see
   `components/agent-web/README.md`).
+- `~/.config/limde/agent-cli.conf` and `~/.config/systemd/user/limde-agent-cli.service`:
+  the command-line agent and the service that keeps it in tmux, written by
+  `limde-agent setup`. `~/.config/limde/agent-cli/tmux.conf` (read after limDE's) and
+  `~/.config/limde/agent-cli/foot.ini` (used instead of limDE's) change its window (see
+  `components/agent-cli/README.md`).
 
 Starting files, which the installer puts in your home only when you don't have them yet.
 After that they are yours to edit, and the installer leaves them alone (it says how many
@@ -156,7 +163,8 @@ labwc runs `/etc/xdg/labwc/autostart` when the session starts. It runs every pie
 - `30-elephant.sh`: Elephant, the launcher's data service.
 - `40-tinybar.sh`: Tinybar, the panel.
 - `50-launcher.sh`: Walker, kept running so it opens at once.
-- `60-agent-web.sh`: the agent window.
+- `60-agent.sh`: the agent window, web or CLI (`limde-agent`). It was `60-agent-web.sh`
+  before; an empty file of yours by that name still turns it off.
 - `70-clipboard-notify.sh`: the notice when files are cut or copied.
 - `80-pointer.sh`: moves the pointer to the middle of the screen (it presses Alt+Super+H).
 
@@ -289,8 +297,8 @@ limde-appearance --apply
 Tinybar reads `~/.config/tinybar/settings.toml` once, when it starts. Every setting is
 optional:
 
-- `first_app_id`: the app that always sits leftmost. The default is `"limde.AgentWeb"`,
-  the agent window.
+- `first_app_id`: the app that always sits leftmost, or a list of them. The default is
+  the agent window in either mode, `["limde.AgentWeb", "limde.AgentCLI"]`.
 - `tailscale`: the Tailscale button. `"auto"` (the default) shows it when the `tailscale`
   command is installed, `false` hides it, `true` shows it even when it is missing.
 - `bluetooth`: the Bluetooth menu. `"auto"` (the default) shows it while BlueZ runs with
@@ -364,6 +372,10 @@ The installer masks them only once (it notes that in
 
 ## The agent window
 
-To use a different page, run `agent-web set-home` with its address; to turn the window
-off, add an empty `~/.config/limde/autostart.d/60-agent-web.sh` and run `agent-web stop`.
-`components/agent-web/README.md` has the details.
+`limde-agent mode web` shows your web agent's site (the default); `limde-agent mode cli`
+shows a command-line agent in tmux instead, and walks you through setting one up the
+first time. The switch is immediate and lasts. To use a different page in web mode, run
+`agent-web set-home` with its address; to pick another command-line agent, run
+`limde-agent setup`. To turn the window off, add an empty
+`~/.config/limde/autostart.d/60-agent.sh` and run `limde-agent stop`.
+`components/agent-web/README.md` and `components/agent-cli/README.md` have the details.

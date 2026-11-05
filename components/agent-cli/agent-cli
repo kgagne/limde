@@ -1,0 +1,164 @@
+#!/bin/sh
+# agent-cli: a command-line AI agent (Claude Code, Codex CLI, Gemini CLI, ...) as the agent
+# window, a terminal at the left of the panel. The agent runs in tmux (socket "agent",
+# session "agent"), which the user service limde-agent-cli.service keeps going, so it
+# carries on with the window closed; the window only attaches to it, and reopens by itself
+# if closed. `limde-agent mode cli` picks this over agent-web.
+#
+#   agent-cli               open the window and keep it open (limde-agent runs this)
+#   agent-cli stop          close the window and stop reopening it; the agent keeps running
+#   agent-cli setup         choose the agent, write its service and start it
+#   agent-cli --keep-open   the loop that reopens the window whenever it closes, until
+#                           this labwc session ends (started by agent-cli)
+#   agent-cli --window      open the window once (used by --keep-open)
+#   agent-cli --attach      inside the window: attach to the agent, or set one up first
+#   agent-cli --run         inside tmux: run the agent, and again whenever it stops
+#
+# Settings: ~/.config/limde/agent-cli.conf, lines "command=..." (run by your login shell)
+# and "name=..."; written by agent-cli setup.
+set -eu
+
+SHARE=$(dirname "$(readlink -f "$0")")/../share/limde/agent-cli
+CONF="$HOME/.config/limde/agent-cli.conf"
+UNIT=limde-agent-cli.service
+UNIT_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$UNIT"
+SOCKET=agent
+SESSION=agent
+# The reopening loop's command line: the shell running this script with --keep-open, and
+# not another command line that only mentions it.
+LOOP='^[^ ]*sh [^ ]*agent-cli --keep-open$'
+# The window: foot started below, with the app ID first. Anchored, so other command lines
+# that mention the app ID do not count.
+WINDOW='^foot --app-id=limde\.AgentCLI( |$)'
+
+running() {
+    pgrep -f -- "$WINDOW" >/dev/null
+}
+
+loop_session() {  # $1: a loop's pid; prints the pid of the labwc it was started in
+    tr '\0' '\n' 2>/dev/null <"/proc/$1/environ" | sed -n 's/^LABWC_PID=//p'
+}
+
+setting() {  # $1: key; prints its value from the conf file
+    [ -r "$CONF" ] || return 0
+    sed -n "s/^$1=//p" "$CONF" | tail -n 1
+}
+
+has_session() {
+    tmux -L "$SOCKET" has-session -t "=$SESSION" 2>/dev/null
+}
+
+configured() {
+    [ -e "$UNIT_FILE" ] && [ -n "$(setting command)" ]
+}
+
+setup() {
+    python3 -I "$SHARE/agent_cli_setup.py" "$@"
+}
+
+case "${1:-}" in
+"")
+    # One loop at a time, as agent-web: a loop whose labwc has gone is stopped, not
+    # counted, so a quick log out and back in still leaves one loop, this session's.
+    for loop in $(pgrep -f -- "$LOOP"); do
+        session=$(loop_session "$loop")
+        if [ -n "$session" ] && ! kill -0 "$session" 2>/dev/null; then
+            kill "$loop" 2>/dev/null || true
+        elif kill -0 "$loop" 2>/dev/null; then
+            exit 0
+        fi
+    done
+    setsid -f "$0" --keep-open >/dev/null 2>&1
+    exit 0
+    ;;
+stop)
+    pkill -f -- "$LOOP" || true
+    pkill -TERM -f -- "$WINDOW" || true
+    # Gone before returning, so a start right after this (limde-agent mode) is not
+    # turned away by a loop that is still ending.
+    tries=0
+    while pgrep -f -- "$LOOP" >/dev/null && [ "$tries" -lt 30 ]; do
+        sleep 0.1
+        tries=$((tries + 1))
+    done
+    exit 0
+    ;;
+setup)
+    shift
+    setup "$@"
+    exit $?
+    ;;
+--keep-open)
+    # The loop ends with its own labwc session (see agent-web).
+    session=${LABWC_PID:-}
+    socket="${XDG_RUNTIME_DIR:-/nonexistent}/${WAYLAND_DISPLAY:-wayland-0}"
+    while [ -S "$socket" ] && { [ -z "$session" ] || kill -0 "$session" 2>/dev/null; }; do
+        if ! running; then
+            "$0" --window >/dev/null 2>&1 &
+        fi
+        sleep 2
+    done
+    exit 0
+    ;;
+--window)
+    running && exit 0
+    ini="$HOME/.config/limde/agent-cli/foot.ini"
+    [ -r "$ini" ] || ini="$SHARE/foot.ini"
+    # Not inside another tmux's environment, so attaching never nests.
+    unset TMUX TMUX_PANE
+    exec foot --app-id=limde.AgentCLI --title=Agent --config="$ini" "$0" --attach
+    ;;
+--attach)
+    unset TMUX TMUX_PANE
+    if ! has_session; then
+        if ! configured; then
+            # Nothing set up yet: the walkthrough, in this window.
+            if setup --in-window; then
+                exec "$0" --attach
+            fi
+            printf '\nSetup did not finish. Press Enter to start it again.\n'
+            read -r _ || exit 0
+            exec "$0" --attach
+        fi
+        systemctl --user start "$UNIT" >/dev/null 2>&1 || true
+        tries=0
+        until has_session || [ "$tries" -ge 50 ]; do
+            sleep 0.2
+            tries=$((tries + 1))
+        done
+    fi
+    if has_session; then
+        exec tmux -L "$SOCKET" attach-session -t "=$SESSION"
+    fi
+    printf 'The agent did not start. What systemd says:\n\n'
+    systemctl --user --no-pager --lines=5 status "$UNIT" 2>&1 | sed 's/^/  /' || true
+    printf '\nPress Enter to run the setup again, or close this window to try later.\n'
+    read -r _ || exit 0
+    setup --in-window && exec "$0" --attach
+    exit 1
+    ;;
+--run)
+    # The agent's pane. Ctrl+C here reaches the agent; the loop itself only shows a new
+    # line, so the session (and its scrollback) outlives the agent stopping.
+    trap 'echo' INT
+    shell=${SHELL:-/bin/sh}
+    while :; do
+        command=$(setting command)
+        name=$(setting name)
+        if [ -n "$command" ]; then
+            # The agent's name for the status line.
+            tmux set-option -q @agent "${name:-agent}" 2>/dev/null || true
+            # A login shell, so the agent finds what your terminals find (~/.profile).
+            "$shell" -lc "$command" || true
+            printf '\nThe agent stopped. It starts again in 30 s, or press Enter to start it now.\n'
+        else
+            printf 'No agent is set up yet. Run: limde-agent setup\n'
+        fi
+        timeout --foreground 30 head -n 1 >/dev/null 2>&1 || true
+    done
+    ;;
+*)
+    echo "usage: agent-cli [stop | setup]" >&2
+    exit 2
+    ;;
+esac

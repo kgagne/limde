@@ -59,9 +59,11 @@ the newest good install.
 
 `test-logout NAME` runs on an installed VM (`vm up NAME --installed` is enough). It does what the
 panel's Log out does, waits for the image's autologin to start the next session, and checks that
-that session has its own Elephant, which answers a query, and exactly one agent-web loop and
-window, both its own. The autologin is back within the old agent-web loop's 2 s check, so this
-also covers a loop outliving its session.
+that session has its own Elephant, which answers a query, and exactly one agent window loop and
+window, both its own, for the mode set: agent-web's in web mode, agent-cli's in CLI mode
+(`limde-agent mode cli` first; a stand-in agent such as `bash` is enough, set up with
+`limde-agent setup`). The autologin is back within the old loop's 2 s check, so this also
+covers a loop outliving its session.
 
 ## Wi-Fi
 

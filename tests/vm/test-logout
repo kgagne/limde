@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Log out and back in, in a VM with limde installed (the base image logs in again by itself):
-# the new session must get its own Elephant, which answers queries, and one agent-web loop and
-# window of its own. This image's autologin is back within the old agent-web loop's 2 s check,
-# the case where an old loop used to stay and open its window in the new session.
+# the new session must get its own Elephant, which answers queries, and one agent window loop
+# and window of its own, for the mode limde-agent has set (web: agent-web, cli: agent-cli).
+# This image's autologin is back within the old loop's 2 s check, the case where an old loop
+# used to stay and open its window in the new session.
 #   tests/vm/test-logout [VM_NAME]
 # Saves the output under local/vm/results/<VM_NAME>/logout.txt. Exit 0 = all passed.
 set -uo pipefail
@@ -43,8 +44,11 @@ check "Elephant answers on its socket" on_vm \
   "timeout 10 elephant query 'desktopapplications;fire;5;false' 2>&1 | grep -qi firefox"
 check "its log shows no errors" on_vm '! grep -iE "panic|fatal|error" ~/.local/state/limde/elephant.log'
 
-# agent-web's reopening loops and windows (Firefox main processes), as "all/in the new session".
-agent_web_count() {
+# The agent window's reopening loops and windows, for each mode, as "all/in the new
+# session": web is agent-web's loop and Firefox main process, cli agent-cli's loop and
+# foot. The mode set must have one of each, the other none.
+mode=$(on_vm limde-agent mode) || mode=web
+agent_count() {
   on_vm 'labwc=$(pgrep -x labwc)
     count() { all=0 mine=0
       for p in $(pgrep -f "$1"); do
@@ -53,12 +57,23 @@ agent_web_count() {
       done
       echo "$all/$mine"; }
     echo "$(count "^[^ ]*sh [^ ]*agent-web --keep-open\$")" \
-      "$(count "^$HOME/.local/opt/firefox/firefox(-bin)? --profile $HOME/.local/share/agent-web/profile")"'
+      "$(count "^$HOME/.local/opt/firefox/firefox(-bin)? --profile $HOME/.local/share/agent-web/profile")" \
+      "$(count "^[^ ]*sh [^ ]*agent-cli --keep-open\$")" \
+      "$(count "^foot --app-id=limde\.AgentCLI( |\$)")"'
 }
-agent_web=
-for _ in $(seq 15); do agent_web=$(agent_web_count) && [ "$agent_web" = "1/1 1/1" ] && break; sleep 2; done
-echo "agent-web loops and windows (all/new session): $agent_web" >>"$out/logout.txt"
-check "exactly one agent-web loop runs, the new session's" test "${agent_web% *}" = 1/1
-check "exactly one agent-web window runs, the new session's" test "${agent_web#* }" = 1/1
+if [ "$mode" = cli ]; then want="0/0 0/0 1/1 1/1"; else want="1/1 1/1 0/0 0/0"; fi
+agent=
+for _ in $(seq 15); do agent=$(agent_count) && [ "$agent" = "$want" ] && break; sleep 2; done
+echo "mode $mode; agent-web loops, windows, agent-cli loops, windows (all/new session): $agent" >>"$out/logout.txt"
+read -r web_loops web_windows cli_loops cli_windows <<<"$agent"
+if [ "$mode" = cli ]; then
+  check "cli mode: exactly one agent-cli loop runs, the new session's" test "$cli_loops" = 1/1
+  check "cli mode: exactly one agent-cli window runs, the new session's" test "$cli_windows" = 1/1
+  check "cli mode: no agent-web loop or window" test "$web_loops $web_windows" = "0/0 0/0"
+else
+  check "exactly one agent-web loop runs, the new session's" test "$web_loops" = 1/1
+  check "exactly one agent-web window runs, the new session's" test "$web_windows" = 1/1
+  check "no agent-cli loop or window" test "$cli_loops $cli_windows" = "0/0 0/0"
+fi
 on_vm 'cat ~/.local/state/limde/elephant.log; loginctl list-sessions --no-pager' >>"$out/logout.txt" 2>&1
 exit "$failed"

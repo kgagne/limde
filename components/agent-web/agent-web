@@ -1,9 +1,10 @@
 #!/bin/sh
 # agent-web: your web agent (Claude, ChatGPT, Gemini, ...) in its own window. A separate
 # Firefox profile, so the sign-in persists; no tabs or toolbars; links to other sites open
-# in your main Firefox; reopens by itself if closed.
+# in your main Firefox; reopens by itself if closed. It is the agent window in web mode,
+# limDE's default; `limde-agent mode cli` swaps it for a command-line agent (agent-cli).
 #
-#   agent-web               open the window and keep it open (the session autostart runs this)
+#   agent-web               open the window and keep it open (limde-agent runs this at login)
 #   agent-web stop          close the window and stop reopening it
 #   agent-web set-home URL  open on this page (the window then saves the page it is on)
 #   agent-web reset         forget the page and sign-in domains; show the welcome page again
@@ -58,6 +59,13 @@ case "${1:-}" in
 stop)
     pkill -f -- "$LOOP" || true
     pkill -TERM -f -- "$WINDOW" || true
+    # Gone before returning, so a start right after this (limde-agent restart) is not
+    # turned away by a loop that is still ending.
+    tries=0
+    while pgrep -f -- "$LOOP" >/dev/null && [ "$tries" -lt 30 ]; do
+        sleep 0.1
+        tries=$((tries + 1))
+    done
     exit 0
     ;;
 set-home)

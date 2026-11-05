@@ -71,7 +71,7 @@ shared pages are split between the processes that use them):
 
 Most of it is the browser, and it grows with the conversation: with one long claude.ai
 conversation the agent window took 1.2 to 1.8 GiB, and Firefox keeps that memory until the
-window restarts (`agent-web stop; agent-web`). The desktop itself is a few hundred MiB.
+window restarts (`limde-agent restart`). The desktop itself is a few hundred MiB.
 
 And three habits that follow from those goals:
 
@@ -172,16 +172,27 @@ file under the keyboard focus outline.
 
 ### The agent window
 
-**agent-web** is the window at the left of the panel: your web AI agent, kept open as
-part of the desktop instead of as one tab among many. On first start it shows a page of
-common web agents. Open yours and sign in. After that the window keeps to that site,
-reopens if it is closed, ignores the close keys, and sends every other link to your main
-Firefox.
+The window at the left of the panel is your AI agent, kept open as part of the desktop
+instead of as one tab among many. It runs in one of two modes, and `limde-agent mode web`
+or `limde-agent mode cli` switches between them at once and for every login after:
+
+- **web** (the default): **agent-web**, your web agent's site. On first start it shows a
+  page of common web agents. Open yours and sign in. After that the window keeps to that
+  site and sends every other link to your main Firefox.
+- **cli**: **agent-cli**, a terminal on a command-line agent such as Claude Code, Codex
+  CLI or Gemini CLI. The agent runs in tmux, kept going by a user service, so closing the
+  window only hides it and the agent carries on. The first time, the window walks you
+  through choosing the agent, shows its official install command if it is missing, and
+  starts it (`limde-agent setup` runs that again).
+
+In either mode the window reopens if it is closed, Super+W, Super+Q and Alt+F4 skip it,
+and it stays leftmost in the panel. `limde-agent status` says what runs, and `limde-agent
+stop` closes it until your next login.
 
 It's meant for an agent you use all day: a chat you keep coming back to, or a
 long-running session you check on and steer, such as a coding agent at work on this or
-another machine. `agent-web set-home URL` opens it straight on one page, such as a
-particular session.
+another machine. In web mode, `agent-web set-home URL` opens it straight on one page,
+such as a particular session.
 
 **Why not a desktop app?** Many web agents have no official Linux app, and the apps and
 wrappers that do exist usually bundle their own browser engine to show the same website.
@@ -190,40 +201,18 @@ nothing more to install or keep updated, you get the same features as the websit
 agent's sign-in stays apart from your everyday browsing. It still uses a Firefox
 process's memory while it's open. What a website can't do is reach your files, code or
 system, which is the usual reason to want a desktop app. A command-line agent covers that
-instead (next).
+instead.
 
-**With a CLI agent on the machine.** A command-line agent works directly in your code,
-files and system, and some can be driven from their website. Claude Code, for example,
-has Remote Control: start `claude --remote-control` (or type `/rc` in a running session)
-and the session appears on claude.ai, where the agent window can steer it. Run the CLI in
-tmux, which limDE installs, so it keeps going when no terminal is open and you can still
-attach to it locally. The agent window becomes the front end, and the CLI does the local
-work with its own permission prompts. Together they do what a desktop app would, without installing one,
-and the same session can be reached from your phone. This isn't part of limDE: the CLI,
-its account and its permissions are yours to choose. To keep one running from boot, a
-user unit such as this works (with `loginctl enable-linger` so it starts without a login):
+**Web and CLI together.** A command-line agent works directly in your code, files and
+system, with its own permission prompts, and some can be driven from their website.
+Claude Code, for example, has Remote Control: the setup offers to start it as `claude
+--remote-control`, and the session then appears on claude.ai, where the agent window in
+web mode can steer it, as can your phone. Switching modes never stops the CLI agent: it
+keeps running in tmux, and `tmux -L agent attach` reaches it from any terminal. To keep it
+running before you log in as well, run `loginctl enable-linger`. The CLI, its account and
+its permissions are yours to choose; limDE installs none of them.
 
-```ini
-# ~/.config/systemd/user/agent-cli.service
-[Unit]
-Description=CLI agent with Remote Control, in tmux (attach: tmux -L agent attach)
-
-[Service]
-Type=forking
-WorkingDirectory=%h
-# The user manager's PATH lacks ~/.local/bin, where CLI agents often install themselves
-# and their tools, so the agent would not find them.
-Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/usr/bin/tmux -L agent new-session -d -s agent %h/.local/bin/claude --remote-control
-ExecStop=/usr/bin/tmux -L agent kill-server
-Restart=always
-RestartSec=30
-
-[Install]
-WantedBy=default.target
-```
-
-If you'd rather use a desktop app anyway, turn agent-web off as
+If you'd rather use a desktop app anyway, turn the agent window off as
 `components/agent-web/README.md` describes.
 
 ## Customizing

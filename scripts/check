@@ -94,6 +94,12 @@ if ! out=$(python3 -B "$root/components/updater/tests/test_limde_update.py" 2>&1
   echo "updater: the limde-update tests fail" >&2
   fail=1
 fi
+# The agent window's CLI setup walkthrough, with a stand-in for systemctl and installs.
+if ! out=$(python3 -B "$root/components/agent-cli/tests/test_agent_cli_setup.py" 2>&1); then
+  printf '%s\n' "$out" >&2
+  echo "agent-cli: the setup tests fail" >&2
+  fail=1
+fi
 
 # 5. The code map still points at files and names that exist.
 scripts/check-codemap || fail=1

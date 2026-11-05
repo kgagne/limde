@@ -12,11 +12,14 @@ toolbars. It always sits at the left of the panel and reopens if it is closed.
   other link, or one sent to the window from elsewhere, opens in your main Firefox. The
   window remembers the conversation it was last on and reopens there (not sign-in or
   settings pages, and not pages on the extra domains).
-- **Commands:** `agent-web stop` closes it until your next login. `agent-web set-home
-  https://...` picks a page directly, until the window moves to another one. `agent-web reset` forgets the page and shows the
-  welcome page again.
-- **Turning it off:** create an empty `~/.config/limde/autostart.d/60-agent-web.sh`, then
-  run `agent-web stop`. Delete that file to bring the window back at the next login.
+- **Commands:** `agent-web stop` (or `limde-agent stop`) closes it until your next login.
+  `agent-web set-home https://...` picks a page directly, until the window moves to
+  another one. `agent-web reset` forgets the page and shows the welcome page again.
+- **Web or CLI:** this is the agent window's web mode, the default. `limde-agent mode cli`
+  swaps it for a command-line agent in a terminal ([agent-cli](../agent-cli/README.md));
+  `limde-agent mode web` brings it back.
+- **Turning it off:** create an empty `~/.config/limde/autostart.d/60-agent.sh`, then
+  run `limde-agent stop`. Delete that file to bring the window back at the next login.
 - **Settings:** `~/.config/limde/agent-web.conf`, with lines `url=...` and
   `keep=domain ...` (extra domains to keep in the window, such as a separate login site).
 - **Keys:** Super+W, Super+Q, Alt+F4 and Firefox's Ctrl+W and Ctrl+Q don't close it, so it
@@ -27,7 +30,7 @@ How it works: the `agent-web` script launches Firefox with its own profile and W
 ID `limde.AgentWeb`. Firefox autoconfig (`agent-web.cfg`, copied into the Firefox
 install folder at each start, because Firefox updates can replace it) decides which pages
 stay. Tinybar puts that app ID first; the labwc config guards it from the close keys. The
-session start runs `agent-web`, which starts one loop that reopens the window about 2 s
-after it closes. The loop ends with the labwc session it started in, and a loop left from
+session start runs `limde-agent`, which in web mode runs `agent-web`, which starts one
+loop that reopens the window about 2 s after it closes. The loop ends with the labwc session it started in, and a loop left from
 the last session is stopped at the next start, so a quick log out and back in still leaves
 one window.

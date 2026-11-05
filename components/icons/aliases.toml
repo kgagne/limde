@@ -273,6 +273,7 @@
 
 [apps]
 "limde.AgentWeb" = "agent-threads"
+"limde.AgentCLI" = "agent-threads"
 "limde.Preview" = "eye"
 
 [categories]

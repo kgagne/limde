@@ -15,7 +15,11 @@ From `packages/runtime.list`: what the desktop needs to run.
 ### Session
 
 - `foot`: the default terminal (Super+Return).
-- `tmux`: keeps terminal programs, such as a CLI agent, running with no terminal open.
+- `tmux`: keeps terminal programs running with no terminal open. The agent window's CLI
+  mode runs the command-line agent in it (`components/agent-cli`), so the agent carries
+  on while its window is closed, and you can attach from any terminal.
+- `fonts-jetbrains-mono`: the CLI agent window's font, a monospace with distinct `0`/`O`
+  and `1`/`l`/`I` that stays clear at 11 pt. foot's own default font is left as it is.
 - `swayidle`: runs the screen locker after inactivity (`config/autostart.d/20-idle.sh`).
 - `swaylock`: the screen locker.
 - `wlopm`: turns the screen off when idle on mains power.

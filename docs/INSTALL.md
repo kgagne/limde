@@ -137,22 +137,25 @@ already in place or `changed` for what it did.
 11. **Appearance:** installs the appearance defaults, `limde-appearance` and the window
     title-bar buttons, then renders your own copies of the program styles into your home.
 12. **Helpers:** installs `limde-preview`, `limde-screenshot`, `limde-clipboard-notify`,
-    `limde-update` and `app-shortcut` to `/usr/local/bin`.
+    `limde-update`, `limde-agent` and `app-shortcut` to `/usr/local/bin`.
 13. **Session configuration:** installs labwc's defaults to `/etc/xdg/labwc` and the
     autostart pieces to `/usr/local/share/limde/autostart.d`, adds the starting config
     files to your home where you don't have them yet, and hides a few redundant launcher
     entries.
 14. **agent-web:** installs the agent window's command, welcome page and menu entry.
-15. **Login keyring:** adds two optional lines to `/etc/pam.d/login`, after its
+15. **agent-cli:** installs the agent window's CLI mode: its command, tmux and foot
+    settings, setup walkthrough and menu entry. The CLI agent's own service is written
+    later, by `limde-agent setup`.
+16. **Login keyring:** adds two optional lines to `/etc/pam.d/login`, after its
     `common-auth` and `common-session` lines, so your tty1 login password unlocks the
     keyring and the keyring starts with your session. Ubuntu's keyring package adds only
     the line for password changes; a display manager would carry these two. Before it
     changes the file it saves a copy in `~/.local/state/limde/backups/`. It also masks
     GNOME's SSH agent for you, once, so OpenSSH's agent stays the SSH agent (see
     [DEPENDENCIES.md](DEPENDENCIES.md#login-keyring-and-fonts)).
-16. **Session:** adds the block to `~/.profile` that clears the console and starts labwc
+17. **Session:** adds the block to `~/.profile` that clears the console and starts labwc
     on tty1.
-17. **Install record:** writes the commit, the clone's path and your optional groups to
+18. **Install record:** writes the commit, the clone's path and your optional groups to
     `/usr/local/share/limde/installed`, for `limde-update`.
 
 At the end it prints how many changes it made, or "No changes" when everything was

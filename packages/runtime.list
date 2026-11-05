@@ -4,6 +4,7 @@
 ## Session
 foot                # the default terminal
 tmux                # keeps terminal programs, such as a CLI agent, running with no terminal open
+fonts-jetbrains-mono  # the CLI agent window's font: a clear monospace with distinct 0/O and 1/l/I
 swayidle            # runs the screen locker after inactivity
 swaylock            # the screen locker
 wlopm               # turns the screen off when idle on mains power

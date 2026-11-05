@@ -1,0 +1,161 @@
+#!/bin/sh
+# limde-agent: the agent window at the left of the panel, either your web agent's site
+# (agent-web) or a command-line agent in tmux (agent-cli). One of them runs at a time;
+# the mode is kept in ~/.config/limde/agent.conf ("mode=web" or "mode=cli"; web if unset).
+#
+#   limde-agent               open the agent window for the mode set (the session start runs this)
+#   limde-agent mode          print the mode: web or cli
+#   limde-agent mode web|cli  switch now, and at every login from now on
+#   limde-agent status        the mode, and whether its window and the CLI agent run
+#   limde-agent stop          close the agent window until the next login or start
+#   limde-agent restart       close the agent window and open it again
+#   limde-agent setup         choose and set up the CLI agent (agent-cli setup)
+#
+# Run from outside the desktop (over SSH, or inside the CLI agent's tmux, which has no
+# Wayland session of its own), it opens the window in the session whose agent window is
+# open now, with that window's environment.
+set -eu
+
+CONF="$HOME/.config/limde/agent.conf"
+# The two reopening loops, as agent-web and agent-cli match them.
+WEB_LOOP='^[^ ]*sh [^ ]*agent-web --keep-open$'
+CLI_LOOP='^[^ ]*sh [^ ]*agent-cli --keep-open$'
+
+mode() {
+    m=
+    [ -r "$CONF" ] && m=$(sed -n 's/^mode=//p' "$CONF" | tail -n 1)
+    case "$m" in
+    cli) echo cli ;;
+    *) echo web ;;
+    esac
+}
+
+command_for() {  # $1: mode
+    case "$1" in
+    cli) echo agent-cli ;;
+    *) echo agent-web ;;
+    esac
+}
+
+in_session() {
+    [ -n "${WAYLAND_DISPLAY:-}" ] && [ -n "${LABWC_PID:-}" ] && kill -0 "$LABWC_PID" 2>/dev/null
+}
+
+loop_session() {  # $1: a loop's pid; prints the pid of the labwc it was started in
+    tr '\0' '\n' 2>/dev/null <"/proc/$1/environ" | sed -n 's/^LABWC_PID=//p'
+}
+
+# Outside a session: copy the environment of a loop whose labwc still runs, before stopping
+# it, to start the next window with. Sets $borrowed to that copy's path.
+borrowed=
+borrow() {
+    in_session && return 0
+    [ -n "$borrowed" ] && return 0
+    for loop in $(pgrep -u "$(id -u)" -f -- "$WEB_LOOP") $(pgrep -u "$(id -u)" -f -- "$CLI_LOOP"); do
+        session=$(loop_session "$loop")
+        [ -n "$session" ] && kill -0 "$session" 2>/dev/null || continue
+        borrowed=$(mktemp)
+        cat "/proc/$loop/environ" >"$borrowed" 2>/dev/null && return 0
+        rm -f "$borrowed"
+        borrowed=
+    done
+    return 0
+}
+trap '[ -z "$borrowed" ] || rm -f "$borrowed"' EXIT
+
+start() {  # $1: mode; opens its window here or in the borrowed session; 1 if neither
+    cmd=$(command -v "$(command_for "$1")") || { echo "limde-agent: $(command_for "$1") is not installed" >&2; return 1; }
+    if in_session; then
+        "$cmd" >/dev/null 2>&1
+    elif [ -n "$borrowed" ]; then
+        # Each NUL-separated VAR=value becomes an argument of env -i, then the command.
+        xargs -0 -a "$borrowed" sh -c 'exec env -i "$@" "$0"' "$cmd" >/dev/null 2>&1
+    else
+        return 1
+    fi
+}
+
+stop_all() {
+    agent-web stop >/dev/null 2>&1 || true
+    agent-cli stop >/dev/null 2>&1 || true
+}
+
+window_open() {  # $1: mode
+    case "$1" in
+    cli) pgrep -u "$(id -u)" -f -- '^foot --app-id=limde\.AgentCLI( |$)' >/dev/null ;;
+    *) pgrep -u "$(id -u)" -f -- "^$HOME/.local/opt/firefox/firefox(-bin)? --profile $HOME/.local/share/agent-web/profile" >/dev/null ;;
+    esac
+}
+
+later() {
+    echo "No desktop session to open it in now: it opens at your next login, or run limde-agent in a terminal on the desktop."
+}
+
+case "${1:-}" in
+"" | start)
+    borrow
+    start "$(mode)" || later
+    ;;
+mode)
+    case "${2:-}" in
+    "")
+        mode
+        ;;
+    web | cli)
+        mkdir -p "${CONF%/*}"
+        printf '# The agent window: web (agent-web) or cli (agent-cli). Set with limde-agent mode.\nmode=%s\n' "$2" >"$CONF"
+        borrow
+        stop_all
+        if start "$2"; then
+            if [ "$2" = cli ]; then
+                echo "The agent window now runs your command-line agent, and will at every login."
+                [ -e "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/limde-agent-cli.service" ] ||
+                    echo "None is set up yet: the window walks you through it."
+            else
+                echo "The agent window now shows your web agent, and will at every login."
+                echo "A command-line agent set up before keeps running in tmux (tmux -L agent attach)."
+            fi
+        else
+            echo "Saved: the agent window is in $2 mode."
+            later
+        fi
+        ;;
+    *)
+        echo "usage: limde-agent mode [web | cli]" >&2
+        exit 2
+        ;;
+    esac
+    ;;
+status)
+    m=$(mode)
+    echo "mode: $m ($(command_for "$m"))"
+    if window_open "$m"; then echo "window: open"; else echo "window: closed"; fi
+    unit=limde-agent-cli.service
+    if [ -e "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$unit" ]; then
+        command=$(sed -n 's/^command=//p' "$HOME/.config/limde/agent-cli.conf" 2>/dev/null | tail -n 1)
+        state=$(systemctl --user is-active "$unit" 2>/dev/null || true)
+        echo "cli agent: ${command:-none} (${state:-unknown}; attach with tmux -L agent attach)"
+    else
+        echo "cli agent: not set up (limde-agent setup)"
+    fi
+    ;;
+stop)
+    stop_all
+    ;;
+restart)
+    borrow
+    stop_all
+    start "$(mode)" || later
+    ;;
+setup)
+    shift
+    exec agent-cli setup "$@"
+    ;;
+-h | --help | help)
+    sed -n '2,/^set -eu/p' "$0" | sed '$d; s/^# \{0,1\}//'
+    ;;
+*)
+    echo "usage: limde-agent [mode [web | cli] | status | stop | restart | setup]" >&2
+    exit 2
+    ;;
+esac
