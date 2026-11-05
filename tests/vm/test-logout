@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Log out and back in, in a VM with limde installed (the base image logs in again by itself):
-# the new session must get its own Elephant, which answers queries. The old session itself may
-# linger here: logging back in within agent-web's 2 s check keeps its old --keep-open loop alive,
-# which only this image's autologin is fast enough to do.
+# the new session must get its own Elephant, which answers queries, and one agent-web loop and
+# window of its own. This image's autologin is back within the old agent-web loop's 2 s check,
+# the case where an old loop used to stay and open its window in the new session.
 #   tests/vm/test-logout [VM_NAME]
 # Saves the output under local/vm/results/<VM_NAME>/logout.txt. Exit 0 = all passed.
 set -uo pipefail
@@ -42,5 +42,23 @@ check "Elephant runs in the new session" on_vm \
 check "Elephant answers on its socket" on_vm \
   "timeout 10 elephant query 'desktopapplications;fire;5;false' 2>&1 | grep -qi firefox"
 check "its log shows no errors" on_vm '! grep -iE "panic|fatal|error" ~/.local/state/limde/elephant.log'
+
+# agent-web's reopening loops and windows (Firefox main processes), as "all/in the new session".
+agent_web_count() {
+  on_vm 'labwc=$(pgrep -x labwc)
+    count() { all=0 mine=0
+      for p in $(pgrep -f "$1"); do
+        all=$((all + 1))
+        tr "\0" "\n" </proc/$p/environ 2>/dev/null | grep -qx "LABWC_PID=$labwc" && mine=$((mine + 1))
+      done
+      echo "$all/$mine"; }
+    echo "$(count "^[^ ]*sh [^ ]*agent-web --keep-open\$")" \
+      "$(count "^$HOME/.local/opt/firefox/firefox(-bin)? --profile $HOME/.local/share/agent-web/profile")"'
+}
+agent_web=
+for _ in $(seq 15); do agent_web=$(agent_web_count) && [ "$agent_web" = "1/1 1/1" ] && break; sleep 2; done
+echo "agent-web loops and windows (all/new session): $agent_web" >>"$out/logout.txt"
+check "exactly one agent-web loop runs, the new session's" test "${agent_web% *}" = 1/1
+check "exactly one agent-web window runs, the new session's" test "${agent_web#* }" = 1/1
 on_vm 'cat ~/.local/state/limde/elephant.log; loginctl list-sessions --no-pager' >>"$out/logout.txt" 2>&1
 exit "$failed"

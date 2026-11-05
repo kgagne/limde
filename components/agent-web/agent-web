@@ -3,11 +3,12 @@
 # Firefox profile, so the sign-in persists; no tabs or toolbars; links to other sites open
 # in your main Firefox; reopens by itself if closed.
 #
-#   agent-web               open the window (and keep it open)
+#   agent-web               open the window and keep it open (the session autostart runs this)
 #   agent-web stop          close the window and stop reopening it
 #   agent-web set-home URL  open on this page (the window then saves the page it is on)
 #   agent-web reset         forget the page and sign-in domains; show the welcome page again
-#   agent-web --keep-open   session autostart: reopen the window whenever it closes
+#   agent-web --keep-open   the loop that reopens the window whenever it closes, until
+#                           this labwc session ends (started by agent-web)
 #   agent-web --window      open the window once (used by --keep-open)
 #
 # Settings: ~/.config/limde/agent-web.conf, lines "url=..." and "keep=domain ..."
@@ -18,12 +19,18 @@ SHARE=$(dirname "$(readlink -f "$0")")/../share/limde/agent-web
 CONF="$HOME/.config/limde/agent-web.conf"
 PROFILE="$HOME/.local/share/agent-web/profile"
 FIREFOX="$HOME/.local/opt/firefox"
-LOOP="agent-web --keep-open"
+# The reopening loop's command line: the shell running this script with --keep-open, and
+# not another command line that only mentions it.
+LOOP='^[^ ]*sh [^ ]*agent-web --keep-open$'
 # Anchored, so other command lines that mention the profile do not count.
 WINDOW="^$FIREFOX/firefox(-bin)? --profile $PROFILE"
 
 running() {
     pgrep -f -- "$WINDOW" >/dev/null
+}
+
+loop_session() {  # $1: a loop's pid; prints the pid of the labwc it was started in
+    tr '\0' '\n' 2>/dev/null <"/proc/$1/environ" | sed -n 's/^LABWC_PID=//p'
 }
 
 setting() {  # $1: key; prints its value from the conf file
@@ -33,11 +40,21 @@ setting() {  # $1: key; prints its value from the conf file
 
 case "${1:-}" in
 "")
-    pgrep -f "[a]gent-web --keep-open" >/dev/null || setsid -f "$0" --keep-open >/dev/null 2>&1
+    # One loop at a time. A loop whose labwc has gone is stopped, not counted: autologin can
+    # start the next session before that loop notices, and this session would get no loop.
+    for loop in $(pgrep -f -- "$LOOP"); do
+        session=$(loop_session "$loop")
+        if [ -n "$session" ] && ! kill -0 "$session" 2>/dev/null; then
+            kill "$loop" 2>/dev/null || true
+        else
+            exit 0
+        fi
+    done
+    setsid -f "$0" --keep-open >/dev/null 2>&1
     exit 0
     ;;
 stop)
-    pkill -f "[a]gent-web --keep-open" || true
+    pkill -f -- "$LOOP" || true
     pkill -TERM -f -- "$WINDOW" || true
     exit 0
     ;;
@@ -61,8 +78,11 @@ reset)
     exit 0
     ;;
 --keep-open)
+    # The loop ends with its own labwc session. The Wayland socket alone is not enough:
+    # autologin can open the next session, under the same socket name, within one check.
+    session=${LABWC_PID:-}
     socket="${XDG_RUNTIME_DIR:-/nonexistent}/${WAYLAND_DISPLAY:-wayland-0}"
-    while [ -S "$socket" ]; do
+    while [ -S "$socket" ] && { [ -z "$session" ] || kill -0 "$session" 2>/dev/null; }; do
         if ! running; then
             "$0" --window >/dev/null 2>&1 &
         fi

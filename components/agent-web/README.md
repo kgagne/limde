@@ -26,4 +26,8 @@ toolbars. It always sits at the left of the panel and reopens if it is closed.
 How it works: the `agent-web` script launches Firefox with its own profile and Wayland app
 ID `limde.AgentWeb`. Firefox autoconfig (`agent-web.cfg`, copied into the Firefox
 install folder at each start, because Firefox updates can replace it) decides which pages
-stay. Tinybar puts that app ID first; the labwc config guards it from the close keys.
+stay. Tinybar puts that app ID first; the labwc config guards it from the close keys. The
+session start runs `agent-web`, which starts one loop that reopens the window about 2 s
+after it closes. The loop ends with the labwc session it started in, and a loop left from
+the last session is stopped at the next start, so a quick log out and back in still leaves
+one window.

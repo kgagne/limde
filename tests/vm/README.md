@@ -59,7 +59,9 @@ the newest good install.
 
 `test-logout NAME` runs on an installed VM (`vm up NAME --installed` is enough). It does what the
 panel's Log out does, waits for the image's autologin to start the next session, and checks that
-that session has its own Elephant, which answers a query.
+that session has its own Elephant, which answers a query, and exactly one agent-web loop and
+window, both its own. The autologin is back within the old agent-web loop's 2 s check, so this
+also covers a loop outliving its session.
 
 ## Wi-Fi
 
