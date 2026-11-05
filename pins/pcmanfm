@@ -1,7 +1,12 @@
-# PCManFM is built from a pinned upstream tag plus limde's patches
-# (components/preview/pcmanfm-space-preview.patch and
-# components/pcmanfm/pcmanfm-focus-file-shortcuts.patch, GPL-2.0-or-later like PCManFM).
-# The Space preview patch is proposed upstream as https://github.com/lxde/pcmanfm/pull/64.
+# PCManFM is built from a pinned upstream tag plus limde's patches, applied in this order
+# (GPL-2.0-or-later like PCManFM):
+#   components/preview/pcmanfm-space-preview.patch: Space preview, proposed upstream as
+#     https://github.com/lxde/pcmanfm/pull/64
+#   components/pcmanfm/pcmanfm-focus-file-shortcuts.patch: Cut, Copy and Paste keys after a
+#     side-pane click
+#   components/pcmanfm/pcmanfm-icon-spacing.patch: as much space after list icons as before
+#   components/pcmanfm/pcmanfm-own-gtk-theme.patch: PCMANFM_GTK_THEME, the panel's theme
+#     for PCManFM alone
 PCMANFM_URL=https://github.com/lxde/pcmanfm.git
 PCMANFM_TAG=1.4.0
 PCMANFM_COMMIT=50aa9435c49551993fcd3c20d18615795c8daedf

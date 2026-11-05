@@ -22,7 +22,8 @@ these; your changes would be lost at the next install or update:
 - `/usr/local/share/icons/limde` and `/usr/local/share/icons/limde-light`: the icon
   themes.
 - `/usr/local/share/themes/limde/labwc/`: the shapes of the window title-bar buttons.
-- `/usr/local/bin/`: limDE's commands, and labwc, PCManFM, Walker and Elephant.
+- `/usr/local/bin/`: limDE's commands, and labwc, PCManFM, Walker and Elephant (PCManFM's
+  program is in `/usr/local/libexec/limde/`; the `pcmanfm` command starts it).
 
 Your own files, which limDE reads and never overwrites. None of them exist until you make
 them:
@@ -298,6 +299,15 @@ idle_hide_keep = ["com.freerdp.client.sdl3"]
 If the file is not valid TOML, Tinybar ignores all of it, without a message, and uses the
 defaults. Log out and back in for changes to take effect. `components/tinybar/README.md`
 describes the rest of the panel.
+
+## The file manager
+
+PCManFM has the panel's look: the `LimDE-Panel` GTK theme that `limde-appearance` renders,
+with more room in lists and the panel's spacing, while other GTK apps keep the desktop
+theme. The `pcmanfm` command sets `PCMANFM_GTK_THEME=LimDE-Panel`, which reaches PCManFM
+only, not the apps it opens. For another theme, set `PCMANFM_GTK_THEME` to its name in
+`~/.config/labwc/environment` (labwc's own file, read at login); set it empty for the
+desktop theme. PCManFM runs as one process, so close all its windows for a change to show.
 
 ## Default apps
 

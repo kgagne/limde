@@ -1,0 +1,10 @@
+#!/bin/sh
+# PCManFM, built by limde's installer, in the panel's look: the LimDE-Panel GTK theme that
+# limde-appearance renders, while other GTK apps keep the desktop theme. PCMANFM_GTK_THEME
+# (pcmanfm-own-gtk-theme.patch) reaches PCManFM alone; GTK_THEME would pass on to every
+# app it opens. Set PCMANFM_GTK_THEME to another theme, or to nothing for the desktop one.
+if [ -z "${PCMANFM_GTK_THEME+set}" ] &&
+   [ -f "${XDG_DATA_HOME:-$HOME/.local/share}/themes/LimDE-Panel/gtk-3.0/gtk.css" ]; then
+    export PCMANFM_GTK_THEME=LimDE-Panel
+fi
+exec /usr/local/libexec/limde/pcmanfm "$@"

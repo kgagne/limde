@@ -1,0 +1,64 @@
+From 43d49ec25928776e4ee84260863052bcfb10ae78 Mon Sep 17 00:00:00 2001
+From: Keith Gagne <kgagne@users.noreply.github.com>
+Date: Wed, 28 Oct 2026 13:12:09 -0400
+Subject: [PATCH] Space each tree view column's cells so icons have equal
+ margins
+
+libfm packs a list's icon and its label into one column with no
+spacing, so only the label's 2 px pad follows the icon while the tree
+view's horizontal separator puts 8 px before it. Give every tree view
+column 6 px between its cells, set as columns are added.
+---
+ src/pcmanfm.c | 29 +++++++++++++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/src/pcmanfm.c b/src/pcmanfm.c
+index 08a7fc3..68c85d7 100644
+--- a/src/pcmanfm.c
++++ b/src/pcmanfm.c
+@@ -196,6 +196,30 @@ static void on_config_changed(FmAppConfig *cfg, gpointer _unused)
+     pcmanfm_save_config(FALSE);
+ }
+ 
++/* libfm packs a list's icon and its label into one column with no spacing,
++ * so the label's own 2 px pad is all that follows the icon, while the tree
++ * view's horizontal separator gives the icon 8 px before it. Space every
++ * column's cells so the gap after the icon matches the gap before it. */
++#define CELL_SPACING 6
++
++static gboolean on_tree_view_columns_changed(GSignalInvocationHint* hint,
++                                             guint n_params,
++                                             const GValue* params,
++                                             gpointer user_data)
++{
++    GObject* view = g_value_get_object(&params[0]);
++    GList *columns, *l;
++
++    if(!GTK_IS_TREE_VIEW(view))
++        return TRUE;
++    columns = gtk_tree_view_get_columns(GTK_TREE_VIEW(view));
++    for(l = columns; l; l = l->next)
++        if(gtk_tree_view_column_get_spacing(l->data) < CELL_SPACING)
++            gtk_tree_view_column_set_spacing(l->data, CELL_SPACING);
++    g_list_free(columns);
++    return TRUE;
++}
++
+ int main(int argc, char** argv)
+ {
+     FmConfig* config;
+@@ -250,6 +274,11 @@ int main(int argc, char** argv)
+         signal( SIGINT, unix_signal_handler );
+     }
+ 
++    /* Columns are added to tree views throughout, so watch for them. */
++    g_type_class_unref(g_type_class_ref(GTK_TYPE_TREE_VIEW));
++    g_signal_add_emission_hook(g_signal_lookup("columns-changed", GTK_TYPE_TREE_VIEW),
++                               0, on_tree_view_columns_changed, NULL, NULL);
++
+     config = fm_app_config_new(); /* this automatically load libfm config file. */
+ 
+     fm_gtk_init(config);
+-- 
+2.53.0
+

@@ -1,4 +1,5 @@
-/* KG Tinybar: use the installed GTK theme as the widget foundation. */
+/* LimDE-Panel, PCManFM's GTK3 theme (the pcmanfm wrapper selects it): the desktop
+   theme's colours with Tinybar's spacing, over the installed widget foundation. */
 @import url("resource:///org/gtk/libgtk/theme/Adwaita/${desktop_gtk3_base}");
 
 @define-color theme_bg_color ${colors_background};
@@ -215,4 +216,32 @@ tooltip {
   color: @theme_fg_color;
   border: ${shape_border_width}px solid @borders;
   border-radius: ${shape_popup_radius}px;
+}
+
+/* As in the desktop theme: rows, text selections and checked controls take the palette's
+   selection, not the Adwaita base's blue (preferences, dialogs, progress windows). */
+list, listbox, filechooser, filechooserwidget, placessidebar {
+  background-color: @theme_base_color;
+  color: @theme_text_color;
+}
+row:hover:not(:selected) { background-color: @kg_hover; }
+row:selected, row:selected:hover,
+.sidebar row:selected, .sidebar row:selected:hover {
+  background-color: @theme_selected_bg_color;
+  color: @theme_selected_fg_color;
+}
+row:selected label, row:selected image {
+  color: @theme_selected_fg_color;
+}
+selection { background-color: @theme_selected_bg_color; color: @theme_selected_fg_color; }
+check:checked, radio:checked, switch:checked {
+  background-image: none;
+  background-color: @theme_selected_bg_color;
+  color: @theme_selected_fg_color;
+  border-color: @theme_selected_bg_color;
+}
+progressbar progress, scale highlight {
+  background-image: none;
+  background-color: @theme_selected_bg_color;
+  border-color: @theme_selected_bg_color;
 }

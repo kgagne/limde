@@ -240,9 +240,15 @@ providers to `/usr/local/lib/elephant`.
   upstream as `https://github.com/lxde/pcmanfm/pull/64`.
 - `components/pcmanfm/pcmanfm-focus-file-shortcuts.patch`: Cut, Copy and Paste keys that
   work after you pick a place in the side pane.
+- `components/pcmanfm/pcmanfm-icon-spacing.patch`: as much space after a list's icons as
+  before them.
+- `components/pcmanfm/pcmanfm-own-gtk-theme.patch`: `PCMANFM_GTK_THEME`, a GTK theme for
+  PCManFM alone. `GTK_THEME` would also reach every app PCManFM opens.
 
 The patches are GPL-2.0-or-later, like PCManFM. The build is installed to `/usr/local`,
-where it takes precedence over Ubuntu's `pcmanfm`.
+with the program itself in `/usr/local/libexec/limde/`. `/usr/local/bin/pcmanfm`
+(`components/pcmanfm/pcmanfm`) starts it in the panel's GTK theme and takes precedence
+over Ubuntu's `pcmanfm`.
 
 ### Firefox (`pins/firefox`)
 
