@@ -39,6 +39,7 @@ SESSION=${SESSION:-agent}
 # The reopening loop's command line: the shell running this script with --keep-open, and
 # not another command line that only mentions it.
 LOOP='^[^ ]*sh [^ ]*agent-cli --keep-open$'
+OPENING='^[^ ]*sh [^ ]*agent-cli --window$'
 # The window: foot started below, with the app ID first. Anchored, so other command lines
 # that mention the app ID do not count.
 WINDOW='^foot --app-id=limde\.AgentCLI( |$)'
@@ -56,7 +57,12 @@ has_session() {
 }
 
 configured() {  # a unit of your own needs no command here: it runs its own
-    [ -e "$UNIT_FILE" ] && { [ -n "$OWN_UNIT" ] || [ -n "$(setting command)" ]; }
+    if [ -n "$OWN_UNIT" ]; then
+        # Wherever systemd finds it, not only in ~/.config/systemd/user.
+        [ "$(systemctl --user show -p LoadState --value "$UNIT" 2>/dev/null)" = loaded ]
+    else
+        [ -e "$UNIT_FILE" ] && [ -n "$(setting command)" ]
+    fi
 }
 
 setup() {
@@ -80,7 +86,6 @@ case "${1:-}" in
     ;;
 stop)
     pkill -f -- "$LOOP" || true
-    pkill -TERM -f -- "$WINDOW" || true
     # Gone before returning, so a start right after this (limde-agent mode) is not
     # turned away by a loop that is still ending.
     tries=0
@@ -88,6 +93,10 @@ stop)
         sleep 0.1
         tries=$((tries + 1))
     done
+    # Then the window, and one the loop was just opening (--window, not yet the window):
+    # killed before the loop, it could still open after this.
+    pkill -f -- "$OPENING" || true
+    pkill -TERM -f -- "$WINDOW" || true
     exit 0
     ;;
 setup)

@@ -21,8 +21,10 @@ on, and the window reopens by itself.
 - **When the agent exits:** it starts again after 30 s, or at once when you press Enter.
   The session, and its scrollback, stay.
 - **Keys:** Super+W, Super+Q and Alt+F4 don't close the window. In tmux, the keys for a
-  new window (Ctrl+B c) and for killing a pane or window (Ctrl+B x, Ctrl+B &) do nothing:
-  the status line shows no window list, so a new window would hide the agent. Shift+Enter
+  new window (Ctrl+B c) and for killing a pane or window (Ctrl+B x, Ctrl+B &) do nothing,
+  nor do Ctrl+B ! (pane to a new window), $ (rename the session), s and w (the trees) and
+  the menus (Ctrl+B < and >, right click): the status line shows no window list, so a new
+  window would hide the agent. A right click goes to the agent. Shift+Enter
   reaches the agent (tmux extended keys). The mouse wheel scrolls; a drag selects and
   copies.
 - **Turning it off:** `limde-agent mode web`, then, to stop the agent itself,
