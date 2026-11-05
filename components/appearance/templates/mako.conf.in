@@ -38,6 +38,11 @@ border-color=${colors_error_background}
 # Critical alerts persist until acted on, as they do on a phone.
 default-timeout=0
 
+# A banner with an action (Tinybar's sign-in notice, a file handed over to open) does it
+# on a left click; everything else is still dismissed by it.
+[actionable]
+on-button-left=invoke-default-action
+
 # Do not disturb, the switch in the Tinybar bell (makoctl mode -a do-not-disturb):
 # no pop-ups, but every notification still arrives and is listed in the bell.
 # Critical ones (the 5 % battery warning) still show. Later sections win.
