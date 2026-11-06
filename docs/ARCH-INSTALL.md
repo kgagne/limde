@@ -1,10 +1,9 @@
 # Installing Arch Linux for limDE
 
-> **Status: in progress, not tested on hardware.** The Arch path is new. Its package lists
-> and installer branches are written, and the base system below is what limDE's Arch VM
-> tests build (`tests/vm/vm --distro arch base`), but no Arch install of limDE has been
-> tested yet, in a VM or on a laptop. Ubuntu Server 26.04 ([SERVER-INSTALL.md](SERVER-INSTALL.md))
-> is the tested path.
+> **Status: tested in a VM, not yet on hardware.** limDE's Arch VM tests build the base system
+> below from the Arch ISO (`tests/vm/vm --distro arch base`), and the full install test passes
+> on it (two runs, the second with no changes, a reboot to the desktop). No laptop install has
+> been tested yet. Ubuntu Server 26.04 ([SERVER-INSTALL.md](SERVER-INSTALL.md)) is the main path.
 
 limDE goes on top of a minimal Arch Linux system with NetworkManager. This page assumes you
 have installed Arch before, or are happy to follow the
@@ -23,6 +22,47 @@ have installed Arch before, or are happy to follow the
   pinned to the 2026-11-01 repositories (testing that fallback) until 0.20.3 reaches stable
   `extra`; they never use the testing repositories.
 
+## On a laptop
+
+- **Wi-Fi in the live system:** the ISO uses iwd. Run `iwctl`, then `station wlan0 scan`,
+  `station wlan0 get-networks` and `station wlan0 connect NAME` (the device may have another
+  name: `device list`). Check with `ping -c 3 archlinux.org`.
+- **Secure Boot** must be off for the Arch ISO and the installed systemd-boot, which are not
+  signed.
+- **Pick the disk by its model and size,** never by its `/dev/nvme0n1` name: with two NVMe
+  drives, the names can swap between boots. `lsblk -o NAME,SIZE,MODEL` shows both.
+
+### Another system on a second disk
+
+limDE on Arch can go on a disk of its own beside another system. Choose only that disk in
+archinstall, with its own EFI partition (archinstall's default layout does that), and the
+other disk's partitions and boot loader stay untouched.
+
+One thing changes outside that disk: installing systemd-boot adds a "Linux Boot Manager"
+entry to the firmware and puts it first, so the laptop now starts Arch by default. To keep the
+other system first, put the order back before you reboot, still in the live system:
+
+```
+efibootmgr
+```
+
+The `BootOrder` line lists the entry numbers; the new one is "Linux Boot Manager". Write the
+order with your other system's number first, for example:
+
+```
+efibootmgr -o 0005,0006,0000
+```
+
+Then choose Arch from the firmware's boot menu (F12 on Dell laptops) when you want it.
+
+### Laptops with an NVIDIA GPU
+
+Arch loads the open `nouveau` driver for NVIDIA GPUs; limDE draws on the built-in Intel or
+AMD GPU and installs `vulkan-nouveau` only so apps can use the NVIDIA one. After the install,
+check that the NVIDIA GPU sleeps while unused (its `power/runtime_status` under
+`/sys/bus/pci/devices/` should say `suspended`), since an awake one costs several watts on
+battery.
+
 ## archinstall's answers
 
 Start `archinstall` from the ISO and set:
@@ -37,7 +77,13 @@ Start `archinstall` from the ISO and set:
 - **Audio, desktop, greeter:** none. limDE installs PipeWire and starts its desktop when you
   log in on the first console (tty1); it uses no display manager.
 
-Install, reboot, and log in on the text console as your user.
+Install, reboot, and log in on the text console as your user. On Wi-Fi, connect the installed
+system once, since archinstall does not carry the live system's network over to
+NetworkManager:
+
+```
+nmcli device wifi connect NAME --ask
+```
 
 ## Install limDE
 
