@@ -84,6 +84,26 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(self.git(self.clone, "rev-parse", "HEAD"), old)
         self.assertEqual(self.install_calls(), [])
 
+    def test_a_pcmanfm_patch_change_announces_its_rebuild(self):
+        self.installed_at("v1.0.0-beta.1")
+        (self.origin / "components/pcmanfm").mkdir(parents=True)
+        self.commit("patch", "components/pcmanfm/pcmanfm-icon-spacing.patch")
+        self.commit("wrapper only", "components/pcmanfm/pcmanfm")
+        self.tag("v1.0.0-beta.2")
+        done = self.run_update("--check")
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertIn("Built or downloaded again: PCManFM", done.stdout)
+        self.assertNotIn("labwc", done.stdout)
+
+    def test_a_wrapper_change_rebuilds_nothing(self):
+        self.installed_at("v1.0.0-beta.1")
+        (self.origin / "components/pcmanfm").mkdir(parents=True)
+        self.commit("wrapper only", "components/pcmanfm/pcmanfm")
+        self.tag("v1.0.0-beta.2")
+        done = self.run_update("--check")
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertNotIn("Built or downloaded again", done.stdout)
+
     def test_update_checks_out_the_release_and_installs_with_saved_groups(self):
         self.installed_at("v1.0.0-beta.1", groups="laptop,bluetooth")
         new = self.commit("second")

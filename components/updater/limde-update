@@ -27,9 +27,12 @@ from pathlib import Path
 
 RECORD = Path(os.environ.get("LIMDE_INSTALL_RECORD", "/usr/local/share/limde/installed"))
 RELEASE = re.compile(r"v(\d+)\.(\d+)\.(\d+)(?:-(beta|rc)\.(\d+))?")
-# What the install rebuilds or downloads again when these change.
-REBUILDS = {"pins/labwc": "labwc", "pins/launcher": "Walker and Elephant",
-            "pins/pcmanfm": "PCManFM", "pins/firefox": "Firefox"}
+# What the install rebuilds or downloads again when these change. PCManFM's build stamp
+# also covers its patches (lib/install/70-pcmanfm.sh), so a patch change rebuilds it too.
+REBUILDS = {"labwc": ("pins/labwc",), "Walker and Elephant": ("pins/launcher",),
+            "PCManFM": ("pins/pcmanfm", "components/preview/pcmanfm-space-preview.patch",
+                        "components/pcmanfm/*.patch"),
+            "Firefox": ("pins/firefox",)}
 
 
 class Stop(Exception):
@@ -122,9 +125,10 @@ def describe_change(root, installed, target, name):
                 say(f"  | {line}")
             if len(notes) > 20:
                 say(f"  | … ({len(notes) - 20} more lines: git -C {root} tag -n999 {name})")
-    changed = set((git(root, "diff", "--name-only", installed, target, "--", "pins", "packages")
+    rebuilt = [what for what, paths in REBUILDS.items()
+               if git(root, "diff", "--name-only", installed, target, "--", *paths)]
+    changed = set((git(root, "diff", "--name-only", installed, target, "--", "packages")
                    or "").split())
-    rebuilt = [what for path, what in REBUILDS.items() if path in changed]
     if rebuilt:
         say()
         say("  Built or downloaded again: " + ", ".join(rebuilt))
