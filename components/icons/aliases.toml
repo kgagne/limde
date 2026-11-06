@@ -182,6 +182,9 @@
 "application-certificate" = "file-certificate"
 "application-pdf" = "file-pdf"
 "application-rss+xml" = "rss"
+"application-octet-stream" = "file"  # binary or unknown data: a plain page, not the white fallback
+"application-x-generic" = "file"
+"unknown" = "file"
 "application-x-addon" = "puzzle"
 "application-x-archive" = "file-zipper"
 "application-x-executable" = "file-gear"
