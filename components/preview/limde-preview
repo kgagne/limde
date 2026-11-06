@@ -228,6 +228,10 @@ class RenderJob:
 
 
 def main(argv):
+    # Before GTK, which needs a display: the usage shows without one.
+    if not argv:
+        print(__doc__.strip().split("\n\n")[1], file=sys.stderr)
+        return 2
     import gi
     gi.require_version("Gdk", "4.0")
     gi.require_version("Gtk", "4.0")
@@ -620,9 +624,6 @@ def main(argv):
                 return False
             return True
 
-    if not argv:
-        print(__doc__.strip().split("\n\n")[1], file=sys.stderr)
-        return 2
     return Preview().run([sys.argv[0], *argv])
 
 
