@@ -24,22 +24,38 @@ pkg_interrupted() {
   [[ -n $(sudo -n dpkg --audit 2>/dev/null) ]]
 }
 
+# Another package manager may hold dpkg's lock: right after a boot Ubuntu's daily update
+# (apt-daily, unattended-upgrades) often does. Wait for it, up to 10 minutes, instead of
+# failing. apt-get waits by itself (DPkg::Lock::Timeout); dpkg does not, so this also runs
+# first. Output goes to the caller's log; the note goes to the terminal.
+APT_WAIT=(-o DPkg::Lock::Timeout=600)
+wait_for_dpkg() {
+  command -v fuser >/dev/null || return 0
+  local waited=0
+  while sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock >/dev/null 2>&1; do
+    ((waited == 0)) && note "waiting for another package install (apt) to finish…" >/dev/tty 2>/dev/null
+    ((waited >= 600)) && return 1
+    sleep 5; waited=$((waited + 5))
+  done
+}
+
 # Finish an interrupted install. Output goes to the caller's log; fails if dpkg is
 # still half done afterwards.
 pkg_finish_interrupted() {
+  wait_for_dpkg
   sudo DEBIAN_FRONTEND=noninteractive dpkg --configure -a
   # A package that was only half unpacked needs apt to fetch and unpack it again.
-  pkg_interrupted && sudo DEBIAN_FRONTEND=noninteractive apt-get install -f -y -q
+  pkg_interrupted && sudo DEBIAN_FRONTEND=noninteractive apt-get "${APT_WAIT[@]}" install -f -y -q
   ! pkg_interrupted
 }
 PKG_FINISH_NOTE="dpkg --configure -a"
 
 # Install the named packages. Output goes to the caller's log.
 pkg_install() {
-  sudo apt-get update -q
+  sudo apt-get "${APT_WAIT[@]}" update -q
   # No recommends: only what is listed, plus what those packages strictly need.
   sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 \
-    apt-get install -y -q --no-install-recommends "$@"
+    apt-get "${APT_WAIT[@]}" install -y -q --no-install-recommends "$@"
 }
 
 # How many packages pkg_install would set up, from its log.
