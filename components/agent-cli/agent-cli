@@ -144,7 +144,7 @@ setup)
     [ -r "$ini" ] || ini="$SHARE/foot.ini"
     # Not inside another tmux's environment, so attaching never nests.
     unset TMUX TMUX_PANE
-    size=$(cat "$SIZE_FILE" 2>/dev/null)
+    size=$(cat "$SIZE_FILE" 2>/dev/null) || size=  # none yet: foot's own size
     case $size in
         ''|*[!0-9x]*|x*|*x) set -- ;;
         *) set -- -o "initial-window-size-chars=$size" ;;
