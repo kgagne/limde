@@ -6,7 +6,7 @@ A small Wayland desktop for Ubuntu Server: labwc, a compact panel (Tinybar), the
 launcher, a consistent dark or light theme, Space-bar file preview in PCManFM, and a persistent
 window for a web-based AI agent, or a terminal for a command-line one. Install Ubuntu Server
 26.04, clone this repository, run `./install`, and log in. Arch Linux works the same way
-([Installing on Arch](docs/ARCH-INSTALL.md)); it is newer and tested in VMs only.
+([Installing on Arch](docs/ARCH-INSTALL.md)); it is newer, tested in VMs and on one laptop.
 
 Dark and light are both complete themes: the panel, launcher, file manager, notifications,
 window borders and app icons all follow the one you pick (only foot's terminal colours stay
@@ -16,8 +16,8 @@ It's made for laptops first: careful with the battery, with trackpad motion and 
 modelled on a MacBook's.
 
 > **Status: beta (`v1.0.0-beta.5`).** It's in daily use on one laptop, and installs from
-> scratch have only been tested in QEMU and from a USB stick on that same laptop; Arch
-> installs only in QEMU. Expect rough edges, and see [Known gaps](#known-gaps).
+> scratch have only been tested in QEMU, from a USB stick and (Arch) on a second drive in that
+> same laptop. Expect rough edges, and see [Known gaps](#known-gaps).
 
 ## Screenshots
 
@@ -278,8 +278,11 @@ followed by `./install` also works, for a clone that follows a branch.
 - Not yet tested from scratch on any other hardware. A fresh `./install` has been tested
   only in QEMU and from a USB stick booted on that same laptop, not on a laptop's
   internal drive.
-- Arch Linux is tested only in QEMU (a fresh install, a second run, the desktop after a
-  reboot). The acceptance, Wi-Fi and Bluetooth tests still run on Ubuntu only.
+- Arch Linux is tested in QEMU (a fresh install, a second run, the desktop after a
+  reboot) and installed on that same laptop's second NVMe drive, where the desktop, Wi-Fi,
+  audio, brightness, battery, touchpad and lid suspend with the lock screen work; Suspend
+  from Tinybar's menu and Bluetooth are not tested there yet. The acceptance, Wi-Fi and
+  Bluetooth VM tests still run on Ubuntu only.
 - The trackpad curves were tuned on one laptop's touchpad and may feel different on
   yours. To change them, copy the whole `<device category="touchpad">` block from
   `/etc/xdg/labwc/rc.xml` into `~/.config/labwc/rc.xml` and edit it there; your block

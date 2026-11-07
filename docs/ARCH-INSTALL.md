@@ -1,9 +1,13 @@
 # Installing Arch Linux for limDE
 
-> **Status: tested in a VM, not yet on hardware.** limDE's Arch VM tests build the base system
+> **Status: tested in a VM and on one laptop.** limDE's Arch VM tests build the base system
 > below from the Arch ISO (`tests/vm/vm --distro arch base`), and the full install test passes
-> on it (two runs, the second with no changes, a reboot to the desktop). No laptop install has
-> been tested yet. Ubuntu Server 26.04 ([SERVER-INSTALL.md](SERVER-INSTALL.md)) is the main path.
+> on it (two runs, the second with no changes, a reboot to the desktop). On hardware, limDE has
+> been installed on Arch on the second NVMe drive of the laptop it is developed on (see
+> [Known gaps](../README.md#known-gaps)): the desktop, Wi-Fi, audio, brightness, battery and
+> charge limit, the touchpad, the login keyring, and lid suspend and resume with the lock screen
+> all work. Suspend from Tinybar's menu and Bluetooth with real devices are not tested yet.
+> Ubuntu Server 26.04 ([SERVER-INSTALL.md](SERVER-INSTALL.md)) is the main path.
 
 limDE goes on top of a minimal Arch Linux system with NetworkManager. This page assumes you
 have installed Arch before, or are happy to follow the
