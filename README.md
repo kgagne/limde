@@ -96,8 +96,8 @@ tested on, so the installer refuses any other version, 26.10 included.
 
 On **Arch Linux**, start from archinstall's minimal profile with NetworkManager instead;
 [Installing on Arch](docs/ARCH-INSTALL.md) has the steps, and the rest below is the same.
-Until Arch's stable labwc reaches 0.20.3, the touchpad keeps libinput's standard motion and
-scrolling (limDE's curves need 0.20.3) and switches over by itself on the next `./install`.
+While Arch's stable labwc is older than 0.20.3, the installer builds 0.20.3 from the same
+pinned source as on Ubuntu, as a local package that Arch's own replaces once it ships.
 
 1. Log in on the text console and clone this repository:
 

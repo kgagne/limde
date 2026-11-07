@@ -14,13 +14,11 @@ have installed Arch before, or are happy to follow the
 
 - **Back up your files.** Installing Arch erases the disk you choose.
 - **Use an up-to-date ISO** from archlinux.org, written to a USB stick.
-- **labwc:** limDE's MacBook-like touchpad curves need labwc 0.20.3 or newer. On 2026-11-05
-  Arch's stable `extra` had 0.20.2 (0.20.3 was in `extra-testing`). With an older labwc the
-  installer says "labwc 0.20.2: standard touchpad feel until 0.20.3" and installs its
-  settings with libinput's standard pointer motion and scrolling. Run `./install` again after
-  `sudo pacman -Syu` brings 0.20.3, and it switches to the curves. limDE's VM tests stay
-  pinned to the 2026-11-01 repositories (testing that fallback) until 0.20.3 reaches stable
-  `extra`; they never use the testing repositories.
+- **labwc:** limDE needs labwc 0.20.3 or newer, for its MacBook-like touchpad curves and for
+  a lock-screen fix: with 0.20.2, an open menu or popup could keep the keyboard from
+  swaylock after a resume, so the lock screen could not be unlocked. On 2026-11-07 Arch's
+  stable `extra` still had 0.20.2 (0.20.3 was in `extra-testing`), so the installer builds
+  limDE's pinned 0.20.3 as a local `labwc` package (a few minutes; details below).
 
 ## On a laptop
 
@@ -106,10 +104,13 @@ continues as on Ubuntu ([INSTALL.md](INSTALL.md)).
 
 What differs from Ubuntu:
 
-- **labwc** is Arch's own package. limDE does not build it, but checks that it starts headless
-  with limDE's settings without a configuration error (with the standard touchpad settings
-  before 0.20.3). After a `pacman -Syu` that updates labwc, run `./install` again to repeat
-  that check and, from 0.20.3, to switch to the touchpad curves.
+- **labwc** is Arch's own package when it is 0.20.3 or newer. Older, the installer builds the
+  release pinned in `pins/labwc` against Arch's wlroots, as a local package with the same
+  name and release `0.1` (`pacman -Q labwc` shows `0.20.3-0.1`). `pacman -Syu` warns that the
+  local one is newer than Arch's until Arch catches up; Arch's `0.20.3-1` then replaces it by
+  itself. Either way limDE checks that labwc starts headless with limDE's settings without a
+  configuration error; after a `pacman -Syu` that updates labwc, run `./install` again to
+  repeat that check.
 - **PCManFM** with limDE's Space preview is built from the same pinned source and patches as
   on Ubuntu, as a local package called `limde-pcmanfm` (`pacman -Qi limde-pcmanfm`), so
   pacman knows its files. Arch's own `pcmanfm` package stays installed beside it.

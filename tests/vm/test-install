@@ -2,7 +2,7 @@
 # Acceptance test for the installer, in a fresh throwaway VM.
 #   tests/vm/test-install [VM_NAME] [--distro arch] [--keep] [--save] [-- INSTALL_ARGS...]
 # Ubuntu by default; --distro arch (or LIMDE_VM_DISTRO=arch) tests an Arch VM, with Arch's
-# checks where the two differ (pacman, Arch's labwc and its touchpad fallback, PCManFM as
+# checks where the two differ (pacman, Arch's labwc or limDE's local build of it, PCManFM as
 # a local package, PipeWire's user units, no AppArmor or unattended upgrades).
 # 1. copy this working tree into the VM and run ./install --yes (plus INSTALL_ARGS);
 #    networkd must be off right after it, before any reboot
@@ -84,17 +84,15 @@ check "labwc runs after reboot" on_vm 'pgrep -x labwc'
 if [[ $distro == ubuntu ]]; then
 check "running labwc is the limde build" on_vm 'pid=$(pgrep -x labwc) && [ "$(readlink /proc/$pid/exe)" = /usr/local/bin/labwc ] && grep -qx "$(. limde/pins/labwc; echo "$LABWC_COMMIT $WLROOTS_COMMIT")" /usr/local/share/limde/labwc.commit'
 else
-  # Arch's own labwc; before 0.20.3 limDE installs rc.xml with the standard touchpad feel.
-  check "running labwc is Arch's package" on_vm 'pid=$(pgrep -x labwc) && [ "$(readlink /proc/$pid/exe)" = /usr/bin/labwc ] && pacman -Qqo /usr/bin/labwc | grep -qx labwc'
-  if on_vm '[ "$(printf "%s\n" 0.20.3 "$(pacman -Q labwc | sed "s/.* //; s/^[0-9]*://; s/-[^-]*$//")" | sort -V | head -1)" = 0.20.3 ]' 2>/dev/null; then
-    curves=yes
-    check "labwc 0.20.3 or newer: rc.xml has the touchpad curves" on_vm 'grep -q "<accelProfile>custom</accelProfile>" /etc/xdg/labwc/rc.xml && grep -q "<scrollCurve " /etc/xdg/labwc/rc.xml'
-  else
-    curves=no
-    check "older labwc: the install says standard touchpad feel" grep -q 'standard touchpad feel until 0.20.3' "$out/install-1.log"
-    check "older labwc: rc.xml has the standard touchpad settings" on_vm 'grep -q "<accelProfile>adaptive</accelProfile>" /etc/xdg/labwc/rc.xml && ! grep -qE "<(motion|scroll|fallback)Curve " /etc/xdg/labwc/rc.xml'
+  # Arch's labwc package: Arch's own when it is 0.20.3 or newer, else limDE's build of the
+  # pin as a local package of the same name (pkgrel 0.1). Either way rc.xml has the curves.
+  check "running labwc is the labwc package" on_vm 'pid=$(pgrep -x labwc) && [ "$(readlink /proc/$pid/exe)" = /usr/bin/labwc ] && pacman -Qqo /usr/bin/labwc | grep -qx labwc'
+  check "labwc is 0.20.3 or newer" on_vm '[ "$(printf "%s\n" 0.20.3 "$(pacman -Q labwc | sed "s/.* //; s/^[0-9]*://; s/-[^-]*$//")" | sort -V | head -1)" = 0.20.3 ]'
+  if grep -q "building labwc .* as a local package" "$out/install-1.log"; then
+    check "the local labwc package is the pinned release" on_vm '[ "$(pacman -Q labwc | sed "s/.* //")" = "$(. limde/pins/labwc; echo "$LABWC_TAG")-0.1" ]'
   fi
-  check "labwc's tested version and rc.xml form are recorded" on_vm 'grep -qx "arch $(pacman -Q labwc | sed "s/.* //") curves='$curves'" /usr/local/share/limde/labwc.commit'
+  check "rc.xml has the touchpad curves" on_vm 'grep -q "<accelProfile>custom</accelProfile>" /etc/xdg/labwc/rc.xml && grep -q "<scrollCurve " /etc/xdg/labwc/rc.xml'
+  check "labwc's tested version is recorded" on_vm 'grep -qx "arch $(pacman -Q labwc | sed "s/.* //")" /usr/local/share/limde/labwc.commit'
 fi
 check "labwc runs on tty1" on_vm 'pid=$(pgrep -x labwc) && tty=$(ps -o tty= -p $pid) && [ "$tty" = tty1 ]'
 check "tty1 login unlocks the keyring" on_vm 'grep -qx "auth  *optional  *pam_gnome_keyring.so" /etc/pam.d/login && grep -qx "session  *optional  *pam_gnome_keyring.so auto_start" /etc/pam.d/login'

@@ -1,5 +1,5 @@
 # Build packages: compilers and tools for the parts limde builds from source. Arch ships
-# headers with the libraries, so this list is short; labwc is Arch's own package.
+# headers with the libraries, so this list is short.
 # They stay installed so updates and rebuilds work without asking again.
 
 ## Build tools
@@ -14,3 +14,8 @@ automake            # prepares PCManFM's build scripts
 libtool             # prepares PCManFM's build scripts
 intltool            # PCManFM's translations
 libfm-gtk3          # the file-manager library PCManFM is built on, with its GTK 3 widgets
+
+## labwc (only while Arch's own is older than limDE's pin)
+meson               # labwc's build system (with arch-meson)
+scdoc               # labwc's manual pages
+wayland-protocols   # protocol definitions labwc is built against

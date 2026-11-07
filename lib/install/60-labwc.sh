@@ -57,49 +57,67 @@ labwc_headless_test() {  # $1: labwc program, $2: rc.xml, $3: log
   return "$status"
 }
 
-# limDE's rc.xml as it is installed: as is, or for a labwc older than LABWC_MIN_VERSION
-# (LABWC_CURVES=no) with libinput's standard pointer motion and scrolling instead of the
-# custom curves that need it (adaptive acceleration, no curve lines). One source file, so
-# the two never drift apart. $1: rc.xml; prints the result.
-labwc_rcxml() {
-  if [[ ${LABWC_CURVES:-yes} == no ]]; then
-    sed -e 's|<accelProfile>custom</accelProfile>|<accelProfile>adaptive</accelProfile>|' \
-        -e '/<\(motion\|scroll\|fallback\)Curve /d' "$1"
-  else
-    cat "$1"
-  fi
-}
-
-# Arch: labwc is Arch's own package (packages/arch/runtime.list); limDE builds nothing. It
-# must pass the same headless test with the rc.xml limDE installs. Older than
-# LABWC_MIN_VERSION, it gets the standard-touchpad variant (labwc_rcxml), and a later
-# ./install after pacman brings a newer labwc switches to the curves by itself. The stamp
-# keeps the version and variant that passed, so the test runs again only after a change.
+# Arch: labwc is Arch's own package (packages/arch/runtime.list) when it is
+# LABWC_MIN_VERSION or newer. Older, limDE builds the pinned release (pins/labwc) as a local
+# package of the same name (labwc_build_arch), so the touchpad curves and the fixes
+# limDE relies on are there; Arch's first release of that version replaces it on a
+# `pacman -Syu`. Either way the labwc in use must pass the same headless test with limDE's
+# rc.xml. The stamp keeps the version that passed, so the test runs again only after a
+# change.
 step_labwc_arch() {
-  local version log=$STATE_DIR/labwc-check.log tmp
+  local version log=$STATE_DIR/labwc-check.log
   version=$(pacman -Q labwc 2>/dev/null | awk '{print $2}')
   [[ -n $version ]] || die "Arch's labwc package is not installed"
-  local bare=${version#*:}; bare=${bare%-*}
-  LABWC_CURVES=yes
-  if [[ $(printf '%s\n' "$LABWC_MIN_VERSION" "$bare" | sort -V | head -1) != "$LABWC_MIN_VERSION" ]]; then
-    LABWC_CURVES=no
-    note "labwc $bare: standard touchpad feel until $LABWC_MIN_VERSION"
+  if ! labwc_at_least "$LABWC_MIN_VERSION" "$version"; then
+    labwc_build_arch "$version"
+    return
   fi
-  local want="arch $version curves=$LABWC_CURVES"
+  local want="arch $version"
   if [[ -f $LABWC_STAMP && $(cat "$LABWC_STAMP") == "$want" ]]; then
-    ok "Arch's labwc $version works with limDE's rc.xml"
+    ok "labwc $version works with limDE's rc.xml"
     return
   fi
   mkdir -p "$STATE_DIR"; : > "$log"
-  tmp=$(mktemp) || die "could not prepare the labwc test"
-  labwc_rcxml "$LIMDE_ROOT/config/labwc/rc.xml" > "$tmp"
-  if ! labwc_headless_test /usr/bin/labwc "$tmp" "$log"; then
-    rm -f "$tmp"
-    die "Arch's labwc $version failed the headless test with limDE's rc.xml (log: $log)"
-  fi
-  rm -f "$tmp"
+  labwc_headless_test /usr/bin/labwc "$LIMDE_ROOT/config/labwc/rc.xml" "$log" \
+    || die "labwc $version failed the headless test with limDE's rc.xml (log: $log)"
   echo "$want" | sudo install -D -m 644 /dev/stdin "$LABWC_STAMP"
-  changed "Arch's labwc $version passed the headless test with limDE's rc.xml"
+  changed "labwc $version passed the headless test with limDE's rc.xml"
+}
+
+# Is pacman version $2 (epoch:version-pkgrel) at least version $1?
+labwc_at_least() {
+  local bare=${2#*:}; bare=${bare%-*}
+  [[ $(printf '%s\n' "$1" "$bare" | sort -V | head -1) == "$1" ]]
+}
+
+# Build labwc from pins/labwc as a local Arch package with components/labwc/arch/PKGBUILD,
+# test the built program headless, then install it with pacman -U. $1: the older version
+# installed now.
+labwc_build_arch() {
+  # shellcheck source=/dev/null
+  . "$LIMDE_ROOT/pins/labwc"
+  labwc_at_least "$LABWC_MIN_VERSION" "$LABWC_TAG" \
+    || die "pins/labwc ($LABWC_TAG) is older than LABWC_MIN_VERSION ($LABWC_MIN_VERSION)"
+  local work=${XDG_CACHE_HOME:-$HOME/.cache}/limde/build/labwc-arch
+  local log=$STATE_DIR/labwc-build.log pkg
+  mkdir -p "$STATE_DIR" "$work"; : > "$log"
+  cp "$LIMDE_ROOT/components/labwc/arch/PKGBUILD" "$work/"
+  note "Arch's labwc $1 is older than $LABWC_MIN_VERSION: building labwc $LABWC_TAG as a local package (a few minutes; log: $log)"
+  (
+    cd "$work"
+    export LIMDE_LABWC_URL=$LABWC_URL LIMDE_LABWC_COMMIT=$LABWC_COMMIT LIMDE_LABWC_TAG=$LABWC_TAG
+    # --nodeps: the build packages are in packages/arch/build.list, installed already.
+    makepkg --force --cleanbuild --nodeps --noconfirm
+  ) >>"$log" 2>&1 || { tail -n 20 "$log" >&2; die "labwc did not build (log: $log)"; }
+  pkg=$(find "$work" -maxdepth 1 -name "labwc-$LABWC_TAG-0.1-*.pkg.tar*" | head -1)
+  [[ -n $pkg ]] || die "makepkg made no package (log: $log)"
+  note "testing the new build headless with limde's rc.xml"
+  labwc_headless_test "$work/pkg/labwc/usr/bin/labwc" "$LIMDE_ROOT/config/labwc/rc.xml" "$log" \
+    || die "the new labwc build failed its headless test, so it was not installed (log: $log)"
+  sudo pacman -U --noconfirm "$pkg" >>"$log" 2>&1 || die "labwc did not install (log: $log)"
+  local version; version=$(pacman -Q labwc | awk '{print $2}')
+  echo "arch $version" | sudo install -D -m 644 /dev/stdin "$LABWC_STAMP"
+  changed "installed labwc $version (local package; Arch's own replaces it once it reaches $LABWC_TAG)"
 }
 
 step_labwc() {

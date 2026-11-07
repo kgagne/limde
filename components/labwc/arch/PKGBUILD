@@ -1,0 +1,32 @@
+# labwc from limDE's pin (pins/labwc) as a local Arch package, built by
+# lib/install/60-labwc.sh::labwc_build_arch while Arch's own labwc is older than
+# LABWC_MIN_VERSION. It replaces Arch's package under the same name, built the way Arch's
+# own PKGBUILD builds it (arch-meson, Arch's wlroots0.20 library rather than the copy built
+# into the Ubuntu build). pkgrel 0.1 keeps it below Arch's first release of the same
+# version (pkgrel 1), so a `pacman -Syu` replaces it with Arch's own once that ships.
+# The installer copies this file into the build folder and sets:
+#   LIMDE_LABWC_URL, LIMDE_LABWC_COMMIT, LIMDE_LABWC_TAG.
+pkgname=labwc
+pkgver=${LIMDE_LABWC_TAG:-0.20.3}
+pkgrel=0.1
+pkgdesc="stacking wayland compositor with look and feel from openbox (limDE's build of the pinned release)"
+arch=(x86_64)
+url=https://github.com/labwc/labwc
+license=(GPL-2.0-only)
+depends=(cairo glib2 glibc libinput libpng librsvg libsfdo libwlroots-0.20.so libxcb
+         libxkbcommon libxml2 pango pixman seatd ttf-font wayland)
+makedepends=(git meson scdoc wayland-protocols xorg-xwayland)
+optdepends=("xorg-xwayland: X11 application support")
+source=("labwc::git+${LIMDE_LABWC_URL:-https://github.com/labwc/labwc.git}#commit=${LIMDE_LABWC_COMMIT:-}")
+# The commit pins the source.
+sha256sums=(SKIP)
+options=(!debug)
+
+build() {
+  arch-meson -Dman-pages=enabled labwc build
+  meson compile -C build
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+}

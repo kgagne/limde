@@ -51,10 +51,9 @@ is shared. limDE's installer does not support Arch yet, so only `base`, `up`, `s
   logins off), rsync and git (for `vm copy`, `vm sync` and the install record), en_US.UTF-8,
   UTC, no swap. Packages come from the Arch Linux Archive's copy of the repositories on
   2026-11-01, so a base built later installs the same versions. That day's labwc is 0.20.2,
-  older than the 0.20.3 limDE's touchpad curves need (in `extra-testing` from 2026-10-31),
-  so these VMs test the fallback: `./install` says "labwc 0.20.2: standard touchpad feel
-  until 0.20.3" and installs rc.xml with libinput's standard motion (`lib/install/60-labwc.sh::labwc_rcxml`).
-  The pin moves to the first day 0.20.3 is in stable `extra` (then the curves are tested),
+  older than the 0.20.3 limDE needs (in `extra-testing` from 2026-10-31), so these VMs test
+  limDE's local build of its pin (`lib/install/60-labwc.sh::labwc_build_arch`). The pin
+  moves to the first day 0.20.3 is in stable `extra` (then Arch's own package is tested),
   never to the testing repositories.
 - The same test-only user as Ubuntu: `tester`/`tester` in `wheel`, passwordless sudo, tty1
   autologin, key login over SSH. limDE never sets these up.
@@ -67,9 +66,9 @@ is shared. limDE's installer does not support Arch yet, so only `base`, `up`, `s
 
 - `test-install NAME --distro arch [-- --with=GROUPS]` runs the same install test on an Arch
   VM. Every Ubuntu check stays as it is; where Arch differs it checks Arch's way instead:
-  Arch's `/usr/bin/labwc` (owned by pacman's labwc) with either the touchpad curves (0.20.3
-  or newer) or the "standard touchpad feel" message and the standard rc.xml (older), the
-  recorded labwc version and rc.xml form, PCManFM from the local package `limde-pcmanfm`,
+  `/usr/bin/labwc` owned by pacman's labwc, 0.20.3 or newer (the pinned release as
+  `TAG-0.1` when the install built it), rc.xml with the touchpad curves, the recorded labwc
+  version, PCManFM from the local package `limde-pcmanfm`,
   the keyring line in `/etc/pam.d/passwd`, PipeWire's user units on for every user, and with
   `--with=printing` the nss-mdns line in `/etc/nsswitch.conf`. No AppArmor or
   unattended-upgrades checks.

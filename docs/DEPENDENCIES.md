@@ -10,8 +10,9 @@ those packages strictly need, and nothing else.
 
 **On Arch Linux** the lists are in `packages/arch/` instead, with the same groups and reasons
 (`./install --plan` prints them). They differ where Arch's packaging does: labwc is Arch's own
-package (0.20.3 or newer), so the build list keeps only the tools for Tinybar's helpers and the
-PCManFM package; headers come with the libraries; and a few things Ubuntu brings in by itself
+package when it is 0.20.3 or newer (older, limDE builds its pin as a local package, against
+Arch's wlroots), so the build list keeps only the tools for Tinybar's helpers, that labwc
+package and the PCManFM package; headers come with the libraries; and a few things Ubuntu brings in by itself
 are listed: `sof-firmware` (Intel laptop audio), `polkit`, `gsettings-desktop-schemas`,
 `bluez-utils` (bluetoothctl) and `pipewire-audio` (Bluetooth sound). Arch turns on no
 services, so the installer enables BlueZ, CUPS, Avahi and PipeWire's user units itself, and

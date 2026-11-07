@@ -11,8 +11,10 @@ ADMIN_GROUP=wheel
 # Resolved before anything changes, and again after the network switch.
 MIRROR_HOST=archlinux.org
 PACKAGE_DIR=$LIMDE_ROOT/packages/arch
-# limDE's rc.xml uses labwc's custom acceleration and scroll curves, new in 0.20.3; an older
-# labwc gets libinput's standard motion instead (lib/install/60-labwc.sh::labwc_rcxml).
+# The oldest labwc limDE takes from Arch: 0.20.3 brought the custom acceleration and scroll
+# curves limDE's rc.xml uses, and a keyboard grab that ends when the lock screen takes focus
+# (with 0.20.2 an open popup could keep the keys from swaylock). Older, limDE builds its pin
+# (lib/install/60-labwc.sh::labwc_build_arch).
 LABWC_MIN_VERSION=0.20.3
 
 # Arch is a rolling release: any up-to-date x86_64 install.

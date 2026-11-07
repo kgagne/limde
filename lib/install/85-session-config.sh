@@ -7,16 +7,6 @@ step_session_config() {
   heading "Session configuration"
   local cfg=$LIMDE_ROOT/config n=0 f dest
   for f in rc.xml autostart environment; do
-    if [[ $f == rc.xml && ${LABWC_CURVES:-yes} == no ]]; then
-      # Arch with a labwc older than 0.20.3: the standard-touchpad variant (60-labwc.sh).
-      local rc; rc=$(mktemp)
-      labwc_rcxml "$cfg/labwc/rc.xml" > "$rc"
-      if ! cmp -s "$rc" /etc/xdg/labwc/rc.xml; then
-        sudo install -D -m 644 "$rc" /etc/xdg/labwc/rc.xml; n=$((n + 1))
-      fi
-      rm -f "$rc"
-      continue
-    fi
     if ! cmp -s "$cfg/labwc/$f" "/etc/xdg/labwc/$f"; then
       sudo install -D -m 644 "$cfg/labwc/$f" "/etc/xdg/labwc/$f"; n=$((n + 1))
     fi
