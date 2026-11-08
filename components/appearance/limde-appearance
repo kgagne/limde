@@ -261,6 +261,9 @@ def main():
 if __name__ == '__main__':
     try:
         main()
+    except KeyError as error:
+        # A setting a template or the renderer needs is missing from appearance.toml.
+        raise SystemExit(f'limde-appearance: missing setting {error}')
     except (OSError, ValueError) as error:
         # OSError: an unreadable user file or a folder it cannot write to.
         raise SystemExit(f'limde-appearance: {error}')

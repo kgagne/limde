@@ -203,6 +203,17 @@ class AppearanceTests(unittest.TestCase):
         self.assertTrue(result.stderr.startswith("limde-appearance: "), result.stderr)
         self.assertEqual(len(result.stderr.splitlines()), 1, result.stderr)
 
+    def test_a_missing_default_setting_is_a_one_line_error(self):
+        defaults = self.root / "defaults"
+        shutil.copytree(HERE, defaults, ignore=shutil.ignore_patterns("tests", "__pycache__"))
+        shipped = (defaults / "appearance.toml").read_text()
+        self.assertIn('document = "Open Sans 12"\n', shipped)
+        (defaults / "appearance.toml").write_text(shipped.replace('document = "Open Sans 12"\n', ""))
+        result = self.run_tool("--check", "--defaults", str(defaults))
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stderr, "limde-appearance: missing setting 'document'\n")
+        self.assertEqual(list(self.home.iterdir()), [])
+
     def test_mode_switch_is_kept_in_the_mode_file(self):
         self.assertEqual(self.run_tool("--mode", "light").returncode, 2)  # needs --apply
         self.apply()
