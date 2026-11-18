@@ -22,7 +22,8 @@ these; your changes would be lost at the next install or update:
   tmux and foot settings and setup walkthrough).
 - `/usr/local/share/icons/limde` and `/usr/local/share/icons/limde-light`: the icon
   themes.
-- `/usr/local/share/themes/limde/labwc/`: the shapes of the window title-bar buttons.
+- `/usr/local/share/themes/limde/labwc/`: fallback shapes for the window title-bar
+  buttons (the ones you see are rendered into your home).
 - `/usr/local/bin/`: limDE's commands, and labwc, PCManFM, Walker and Elephant (PCManFM's
   program is in `/usr/local/libexec/limde/`; the `pcmanfm` command starts it).
 - `~/.local/opt/firefox/distribution/policies.json`: Firefox's policies (it doesn't ask
@@ -247,15 +248,17 @@ Reopen other apps, and log out and back in for the panel and the launcher.
 The icon themes are built by `./install`, not by `limde-appearance`. If you change icon
 settings, run `./install` from your clone afterwards.
 
-The window title-bar buttons (close, minimise, maximise) are 14-pixel rounded squares;
+The window title-bar buttons (close, minimise, maximise) are 12-pixel rounded squares;
 pointing at one shows a cut-out ×, − or + in it, so the button reads without its colour.
-Each is a one-bit mask that labwc fills with the mode's `button_close`,
-`button_iconify`, `button_maximize` or, on inactive windows, `button_inactive` colour.
-To draw your own shapes, put XBM files with the same names (`close.xbm`, `iconify.xbm`,
-`max.xbm`, `max_toggled.xbm` for a maximised window, and `_hover` versions such as
-`close_hover.xbm` for the pointed-at look) in
-`~/.local/share/themes/limde/labwc/`. labwc looks there first. Keep them within 20 by 20
-pixels, the size of a button: larger ones are scaled down and look blurred.
+`limde-appearance` draws them as SVG files in `~/.local/share/themes/limde/labwc/`, in
+the mode's `button_close`, `button_iconify`, `button_maximize` or, on inactive windows,
+`button_inactive` colour, so their edges stay smooth at any screen scale. Each button has
+an `-active.svg` and an `-inactive.svg` (`close-active.svg`, `iconify-inactive.svg`;
+`max_toggled` is a maximised window, and the `_hover` versions such as
+`close_hover-active.svg` are the pointed-at look). Don't edit those: the next apply
+replaces them. To draw your own, put PNG files with the same names (`close-active.png`)
+in that folder: labwc takes a PNG before an SVG. Draw them 20 by 20 pixels, the size of a
+button. A PNG has fixed colours, so a light/dark switch leaves it as it is.
 
 `scripts/check` holds limDE's own palettes to WCAG 2.2's contrast minimums. It does not
 check your file, so keep text at 4.5:1 and icons and control edges at 3:1 against their

@@ -51,3 +51,87 @@ destination = ".local/share/themes/LimDE/gtk-3.0/gtk-dark.css"
 [[files]]
 template = "gtk-dark.css.in"
 destination = ".local/share/themes/LimDE/gtk-4.0/gtk-dark.css"
+
+# Title-bar buttons: labwc takes NAME-active.svg and NAME-inactive.svg before the
+# one-bit .xbm masks in /usr/local/share/themes/limde/labwc, which stay as the fallback.
+# fill names the palette colour each file is drawn in (the template's ${fill}).
+
+[[files]]
+template = "labwc-button.svg.in"
+destination = ".local/share/themes/limde/labwc/close-active.svg"
+fill = "button_close"
+
+[[files]]
+template = "labwc-button-close.svg.in"
+destination = ".local/share/themes/limde/labwc/close_hover-active.svg"
+fill = "button_close"
+
+[[files]]
+template = "labwc-button.svg.in"
+destination = ".local/share/themes/limde/labwc/close-inactive.svg"
+fill = "button_inactive"
+
+[[files]]
+template = "labwc-button-close.svg.in"
+destination = ".local/share/themes/limde/labwc/close_hover-inactive.svg"
+fill = "button_inactive"
+
+[[files]]
+template = "labwc-button.svg.in"
+destination = ".local/share/themes/limde/labwc/iconify-active.svg"
+fill = "button_iconify"
+
+[[files]]
+template = "labwc-button-iconify.svg.in"
+destination = ".local/share/themes/limde/labwc/iconify_hover-active.svg"
+fill = "button_iconify"
+
+[[files]]
+template = "labwc-button.svg.in"
+destination = ".local/share/themes/limde/labwc/iconify-inactive.svg"
+fill = "button_inactive"
+
+[[files]]
+template = "labwc-button-iconify.svg.in"
+destination = ".local/share/themes/limde/labwc/iconify_hover-inactive.svg"
+fill = "button_inactive"
+
+[[files]]
+template = "labwc-button.svg.in"
+destination = ".local/share/themes/limde/labwc/max-active.svg"
+fill = "button_maximize"
+
+[[files]]
+template = "labwc-button-max.svg.in"
+destination = ".local/share/themes/limde/labwc/max_hover-active.svg"
+fill = "button_maximize"
+
+[[files]]
+template = "labwc-button.svg.in"
+destination = ".local/share/themes/limde/labwc/max-inactive.svg"
+fill = "button_inactive"
+
+[[files]]
+template = "labwc-button-max.svg.in"
+destination = ".local/share/themes/limde/labwc/max_hover-inactive.svg"
+fill = "button_inactive"
+
+[[files]]
+template = "labwc-button.svg.in"
+destination = ".local/share/themes/limde/labwc/max_toggled-active.svg"
+fill = "button_maximize"
+
+[[files]]
+template = "labwc-button-max.svg.in"
+destination = ".local/share/themes/limde/labwc/max_toggled_hover-active.svg"
+fill = "button_maximize"
+
+[[files]]
+template = "labwc-button.svg.in"
+destination = ".local/share/themes/limde/labwc/max_toggled-inactive.svg"
+fill = "button_inactive"
+
+[[files]]
+template = "labwc-button-max.svg.in"
+destination = ".local/share/themes/limde/labwc/max_toggled_hover-inactive.svg"
+fill = "button_inactive"

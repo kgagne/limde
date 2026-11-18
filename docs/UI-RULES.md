@@ -100,10 +100,12 @@ their inner button, so the popover keeps the normal cursor).
 height for pills (the switch), `border_width` for every framed control. No other radius or
 border numbers.
 
-labwc's title-bar buttons are one-bit masks, so they cannot be anti-aliased. Their corners
-leave out 3, 1 and 1 pixels on the first three rows, which looks closest to
-`control_radius`. A 4-pixel arc drawn without anti-aliasing (2 and 1 pixels) looks like a
-square with chipped corners.
+labwc's title-bar buttons are SVGs: 12 px squares centred in 20 px slots, so their corners
+are anti-aliased. Their radius is 3.5, `control_radius` scaled to the smaller square (the
+one exception to the rule above). Keep the square an even size: an odd one cannot be
+centred in the slot without its straight edges and glyphs falling between pixels, which
+blurs them. The one-bit fallback masks cannot be anti-aliased and are only used where an
+SVG is missing.
 
 ## Known differences, not yet settled
 

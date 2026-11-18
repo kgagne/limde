@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+  <mask id="glyph">
+    <rect width="20" height="20" fill="#fff"/>
+    <path d="M7.5 7.5l5 5M12.5 7.5l-5 5" stroke="#000" stroke-width="2" stroke-linecap="round"/>
+  </mask>
+  <rect x="4" y="4" width="12" height="12" rx="3.5" fill="${fill}" mask="url(#glyph)"/>
+</svg>

@@ -28,9 +28,9 @@ step_appearance() {
   fi
   rm -rf "$stage"
 
-  # labwc looks for its title-bar buttons in every folder of the theme, your home first,
-  # and fills these 1-bit masks with the button colours of the themerc rendered below,
-  # so the shapes are shared and the colours follow the mode.
+  # labwc looks for its title-bar buttons in every folder of the theme, your home first.
+  # The smooth SVG buttons are rendered into your home below, in the mode's colours;
+  # these 1-bit masks, filled with the themerc's button colours, are the fallback.
   if diff -rq "$src/labwc-buttons" "$LABWC_BUTTONS" >/dev/null 2>&1; then
     ok "title-bar buttons are up to date"
   else
